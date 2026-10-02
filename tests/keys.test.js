@@ -162,3 +162,8 @@ test('the setup fields do not overlap, stay inside the panel and are hit-testabl
   }
   assert.equal(layout.hitSetup(5, 5), -1);
 });
+
+test('E switches calm mode on and off', () => {
+  assert.equal(keyToAction('e'), 'calm');
+  assert.equal(keyToAction('E'), 'calm');
+});

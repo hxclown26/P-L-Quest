@@ -1,12 +1,13 @@
 'use strict';
 
-// A 5x7 bitmap font drawn into a 6x9 cell: one column of spacing and two rows above the
-// letters, so accents never collide with a capital. The table is the classic 5x7 ASCII
-// set (one byte per column, bit 0 is the top row). Accented letters and the inverted
-// marks used by Spanish are built from it, so the whole game needs no font file.
+// A 5x7 bitmap font drawn into a 6x10 cell: one column of spacing, two rows above the
+// letters, so accents never collide with a capital, and one row below the baseline for the
+// tails of g, j, p, q and y. The table is the classic 5x7 ASCII set (one byte per column, bit 0
+// is the top row). Accented letters and the inverted marks used by Spanish are built from it, so
+// the whole game needs no font file.
 
 const CELL_W = 6;
-const CELL_H = 9;
+const CELL_H = 10;
 const LINE_H = 10;
 const FIRST = 32;
 const TOP = 2;
@@ -61,6 +62,21 @@ const MARKS = Object.freeze({
   tilde: [[1, 0], [2, 0], [0, 1], [3, 1], [4, 1]],
 });
 
+// The classic table squeezes g, j, p, q and y into the height of the other letters, so g reads as
+// 9 or s. These five are drawn row by row instead ('#' is a lit pixel, `top` the cell row of the
+// first one): the body sits on the baseline (row 8) like every other letter and the tail hangs
+// one row below it.
+const TAILED = Object.freeze({
+  g: { top: 4, rows: ['.####', '#...#', '#...#', '.####', '....#', '.###.'] },
+  j: { top: 2, rows: ['...#.', '.....', '..##.', '...#.', '...#.', '...#.', '...#.', '.##..'] },
+  p: { top: 4, rows: ['####.', '#...#', '#...#', '#...#', '####.', '#....'] },
+  q: { top: 4, rows: ['.####', '#...#', '#...#', '#...#', '.####', '....#'] },
+  y: { top: 4, rows: ['#...#', '#...#', '#...#', '.####', '....#', '.###.'] },
+});
+
+const tailedPixels = ({ top, rows }) =>
+  rows.flatMap((row, i) => [...row].flatMap((cell, x) => (cell === '#' ? [[x, top + i]] : [])));
+
 const ASCII = Array.from({ length: COLUMNS.length }, (_, i) => String.fromCharCode(FIRST + i)).join('');
 const SUPPORTED_CHARS = `${ASCII}${Object.keys(ACCENTED).join('')}¡¿`;
 
@@ -76,6 +92,7 @@ const bodyPixels = (cols) =>
     [0, 1, 2, 3, 4, 5, 6].filter((y) => (bits >> y) & 1).map((y) => [x, y + TOP]));
 
 function buildPixels(ch) {
+  if (TAILED[ch]) return tailedPixels(TAILED[ch]);
   if (ch === '¡') return bodyPixels(flipRows(columnsFor('!')));
   if (ch === '¿') return bodyPixels(flipRows(columnsFor('?')));
   const accented = ACCENTED[ch];

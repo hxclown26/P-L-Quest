@@ -1,18 +1,20 @@
 'use strict';
 
 // One palette for the whole game. Tone names (white, red, green...) double as keys, so a
-// message tagged tone: 'red' is drawn with PALETTE.red.
+// message tagged tone: 'red' is drawn with PALETTE.red. Every text tone reads on a window
+// (tests/palette.test.js measures it): dim is the quietest, still 3:1; red is never the only cue.
 module.exports = Object.freeze({
   ink: '#0c0c1c',
   white: '#f8f8f8',
   gray: '#a8b0c8',
-  dim: '#6a7290',
+  dim: '#868da8',
   gold: '#f8d048',
-  red: '#f05858',
+  red: '#ff6b6b',
   green: '#58e088',
   cyan: '#68d8f8',
   orange: '#f89848',
   ratio: '#86b4ff',
+  ratioLabel: '#94aee6',
   header: '#2e6fd8',
   winTop: '#2c40a8',
   winBottom: '#0c1452',
@@ -20,6 +22,47 @@ module.exports = Object.freeze({
   winShade: '#7284d8',
   selTop: '#5470e0',
   selBottom: '#1c2a80',
+  // Three tones per material for the pictures: [shadow, base, light]. Light falls from the top left, so
+  // every shape takes its light tone on its top and left edges and its shadow tone on the bottom and right.
+  ramp: Object.freeze({
+    wall: Object.freeze(['#34406e', '#4a5a8a', '#6074ac']),
+    floor: Object.freeze(['#161a36', '#222850', '#343c6c']),
+    wood: Object.freeze(['#5e4526', '#8a6a3a', '#b88e56']),
+    skin: Object.freeze(['#c8946a', '#f0c8a0', '#ffe4c8']),
+    hair: Object.freeze(['#2a1a10', '#4a2e1a', '#6e4a2c']),
+    suit: Object.freeze(['#1a2248', '#2a3a6a', '#42569a']),
+    shirt: Object.freeze(['#aab2d2', '#e6eaf8', '#ffffff']),
+    tie: Object.freeze(['#a02c34', '#d84848', '#f48080']),
+    glass: Object.freeze(['#6aa6d8', '#92d2f4', '#cdeeff']),
+    city: Object.freeze(['#344b80', '#4f6ca8', '#7494cc']),
+    leaf: Object.freeze(['#276a3c', '#44a868', '#7ad896']),
+    clay: Object.freeze(['#76462e', '#a8683e', '#cc8c5a']),
+    metal: Object.freeze(['#566078', '#8890a8', '#bcc4d8']),
+    paper: Object.freeze(['#c4c8d8', '#eef0f8', '#ffffff']),
+    brick: Object.freeze(['#7a4838', '#b9805a', '#dca67e']),
+    roof: Object.freeze(['#3e3e50', '#5a5a6c', '#8a8a9e']),
+    asphalt: Object.freeze(['#1c1c2a', '#303044', '#4a4a62']),
+    stone: Object.freeze(['#8a8aa4', '#c4c4d8', '#f0f0fa']),
+    hazard: Object.freeze(['#a87410', '#f8d048', '#ffe88a']),
+    rock: Object.freeze(['#44546f', '#6f7f9f', '#9aaac8']),
+    snow: Object.freeze(['#a8b8d8', '#e0ecff', '#ffffff']),
+    cloud: Object.freeze(['#7a869c', '#aeb8cc', '#dfe5f0']),
+    sand: Object.freeze(['#6a4a2c', '#a07a4c', '#c89c68']),
+    water: Object.freeze(['#2a5eb0', '#3a8ae0', '#9fd0f8']),
+  }),
+  // The skies of the pictures, as [top, bottom] of a vertical gradient.
+  sky: Object.freeze({
+    day: Object.freeze(['#5f8fd0', '#c0def4']),
+    dusk: Object.freeze(['#4a5a8a', '#8e9ec4']),
+    night: Object.freeze(['#2a2a58', '#12122e']),
+    storm: Object.freeze(['#3e4c68', '#7a8aa0']),
+    hot: Object.freeze(['#8a6a40', '#c8a066']),
+    cold: Object.freeze(['#6a7aa0', '#c4d4ec']),
+    alarm: Object.freeze(['#4a1018', '#14040a']),
+    dark: Object.freeze(['#2a2a40', '#14142a']),
+    market: Object.freeze(['#1c3a4a', '#0c1c26']),
+    street: Object.freeze(['#58506a', '#2a2638']),
+  }),
   area: Object.freeze({
     sales: '#d85858',
     procurement: '#d8963c',

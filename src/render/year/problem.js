@@ -8,9 +8,11 @@ const engine = require('../../year/engine');
 const rules = require('../../year/rules');
 const view = require('../../ui/year-view');
 const anim = require('../../ui/anim');
+const screenFx = require('../../ui/screen-fx');
 const { tx, signed } = require('../../ui/tx');
 const P = require('../palette');
 const { rect } = require('../draw');
+const fxDraw = require('../fx');
 const ui = require('../ui');
 const { drawStatement } = require('../scenes/statement');
 const frame = require('./frame');
@@ -109,13 +111,19 @@ function drawDeltaStrip(ctx, app, x, y) {
   });
 }
 
+// The sparks or smoke rise from the foot of the picture, inside its window.
+const burstOrigin = () => ({ x: layout.ART.x + Math.floor(layout.ART.w / 2), y: layout.ART.y + layout.ART.h - 10 });
+
 function drawResult(ctx, app) {
   drawTop(ctx, app, { before: app.year.last.plBefore, delta: app.year.last.delta.oi });
+  const plan = screenFx.resultPlan(app);
+  if (plan) fxDraw.drawFlash(ctx, plan, app.phaseT);
   const d = layout.DIALOGUE;
   ui.windowBox(ctx, d.x, d.y, d.w, d.h);
   const rows = ui.wrapLines(view.resultLines(app), RESULT_WRAP).slice(0, MAX_RESULT_ROWS);
   ui.paragraph(ctx, rows, d.x + 8, d.y + 6, ROW_H);
   drawDeltaStrip(ctx, app, d.x + 8, d.y + d.h - 12);
+  if (plan) fxDraw.drawBurst(ctx, plan, app.phaseT, burstOrigin(), layout.ART);
 }
 
 module.exports = { drawProblem, drawResult, drawTop, WRAP, RESULT_WRAP, MAX_RESULT_ROWS };

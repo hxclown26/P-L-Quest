@@ -27,7 +27,6 @@ const HEADER_W = 44;
 const TOTAL_BAND = 'rgba(255,255,255,0.09)';
 // 38 columns from the label edge leave a margin before the border of the window.
 const NOTE_COLS = 38;
-const RATIO_LABEL = '#5f86d6';
 
 const VARIANCE_COLOR = Object.freeze({ '-1': P.red, 0: P.gray, 1: P.green });
 
@@ -49,7 +48,7 @@ function drawRow(ctx, app, row, y, box) {
   const total = row.kind === 'total';
   if (total) rect(ctx, box.x + 3, y - 1, box.w - 6, ROWS.pitch, TOTAL_BAND);
   const label = ratio ? tx(app, 'stmt.ratio') : tx(app, `line.short.${row.id}`);
-  const labelColor = ratio ? RATIO_LABEL : total ? P.white : P.gray;
+  const labelColor = ratio ? P.ratioLabel : total ? P.white : P.gray;
   ui.text(ctx, label, box.x + LABEL_X + (ratio ? RATIO_INDENT : 0), y, labelColor, { bold: total, slant: ratio });
   const realColor = ratio ? P.ratio : total ? P.white : P.gray;
   const [plan, real, variance] = COLUMNS.map((column) => box.x + column.right);

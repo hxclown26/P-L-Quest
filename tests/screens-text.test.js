@@ -27,11 +27,11 @@ test('the menu of a player lists the year, the half year and the tutorial, and n
   assert.doesNotMatch(text, /Taller/);
 });
 
-test('the menu names this build: Demo 4, in both modes of the menu', () => {
+test('the menu names this build: Demo 5, in both modes of the menu', () => {
   for (const creator of [false, true]) {
     const text = screenText(base({ scene: 'menu', creator }));
-    assert.match(text, /DEMO 4/);
-    assert.doesNotMatch(text, /DEMO 3/);
+    assert.match(text, /DEMO 5/);
+    assert.doesNotMatch(text, /DEMO [34]/);
   }
 });
 
@@ -102,4 +102,16 @@ test('the rules show the grades with their real thresholds, and the next page th
   assert.match(assumptions, /US\$ millones/);
   assert.match(assumptions, /El juego termina en el OI/, 'the page says where the game stops, and so what is left out');
   assert.match(assumptions, /\(2\/2\)/);
+});
+
+test('after E the footer names the effects for a moment, in both languages, and then gives its labels back', () => {
+  const footer = { x: 0, y: layout.FOOTER.y, w: layout.W, h: layout.FOOTER.h };
+  const footerText = (app) => textIn(draw(app).glyphs, footer).join('|');
+  const toast = (lang, calm) => base({ scene: 'menu', lang, calm, calmAt: 5, t: 5.5 });
+  assert.equal(footerText(toast('es', true)), 'Efectos suaves (E)');
+  assert.equal(footerText(toast('es', false)), 'Efectos completos (E)');
+  assert.equal(footerText(toast('en', true)), 'Calm effects (E)');
+  assert.equal(footerText(toast('en', false)), 'Full effects (E)');
+  assert.match(footerText({ ...toast('es', true), t: 5 + 3 }), /^Enter: elegir/, 'the labels are back after a moment');
+  assert.match(footerText(base({ scene: 'menu' })), /^Enter: elegir/, 'and a game that never pressed E never shows it');
 });

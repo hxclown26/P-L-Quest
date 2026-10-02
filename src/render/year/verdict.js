@@ -3,7 +3,9 @@
 // The end of the year: the verdict (page 1: the factory, the numbers and the OI bridge;
 // page 2: what happened and what to try next) and the GAME OVER screen that restarts the game.
 
+const anim = require('../../ui/anim');
 const layout = require('../../ui/layout');
+const screenFx = require('../../ui/screen-fx');
 const rules = require('../../year/rules');
 const view = require('../../ui/year-view');
 const { OVER_SECONDS } = require('../../ui/year-app');
@@ -11,6 +13,7 @@ const { tx } = require('../../ui/tx');
 const { formatCode } = require('../../rng');
 const P = require('../palette');
 const { rect } = require('../draw');
+const fxDraw = require('../fx');
 const ui = require('../ui');
 const hud = require('../scenes/hud');
 const { drawSky, drawFactory } = require('../factory');
@@ -25,6 +28,12 @@ const FEEDBACK_ROWS = 15;
 const GAUGE = Object.freeze({ x: 136, bar: 24, barW: 62, valueRight: 248, rowStep: 12 });
 const BRIDGE = Object.freeze({ x: 4, y: 98, w: 248, h: 128, axisX: 138, axisW: 100, axisMax: 35 });
 const BRIDGE_ROW = 10;
+// The bridge builds up one bar after another, each growing for BRIDGE_SECONDS (the figures are written from the start).
+const BRIDGE_DELAY = 0.25;
+const BRIDGE_STEP = 0.12;
+const BRIDGE_SECONDS = 0.3;
+// The factory of the first page: where the weather of the ending falls.
+const FACTORY_BOX = Object.freeze({ x: 4, y: 26, w: 120, h: 64 });
 const TITLE_BAND = 'rgba(12,12,28,0.62)';
 
 const tierColor = (v) => hud.TIER_COLOR[v.tier];
@@ -61,7 +70,8 @@ function drawNumbers(ctx, app, v) {
   });
 }
 
-function drawBridgeRow(ctx, row, y, last, color) {
+// `grown` (0 to 1) is how much of its bar is drawn: it grows from the value it starts at towards the value it ends at.
+function drawBridgeRow(ctx, row, y, last, color, grown = 1) {
   const scale = BRIDGE.axisW / BRIDGE.axisMax;
   const lo = Math.max(0, Math.min(row.from, row.to));
   const hi = Math.min(BRIDGE.axisMax, Math.max(0, Math.max(row.from, row.to)));
@@ -69,7 +79,8 @@ function drawBridgeRow(ctx, row, y, last, color) {
   const x1 = BRIDGE.x + BRIDGE.axisX + Math.round(hi * scale);
   ui.text(ctx, row.label, BRIDGE.x + 8, y, last ? P.white : P.gray);
   ui.textRight(ctx, row.text, BRIDGE.x + 132, y, color);
-  rect(ctx, x0, y + 1, Math.max(1, x1 - x0), 5, color);
+  const width = Math.max(1, Math.round((x1 - x0) * grown));
+  rect(ctx, row.to >= row.from ? x0 : x1 - width, y + 1, width, 5, color);
 }
 
 // Plan to real as floating bars: every P&L line that moved OI, in the order of the ladder.
@@ -84,7 +95,8 @@ function drawBridge(ctx, app, v) {
   rows.forEach((row, i) => {
     const last = i === rows.length - 1;
     const color = last ? tierColor(v) : P[row.tone];
-    drawBridgeRow(ctx, row, top + i * BRIDGE_ROW, last, color);
+    const grown = app.calm ? 1 : anim.grow(app.phaseT, BRIDGE_DELAY + i * BRIDGE_STEP, BRIDGE_SECONDS);
+    drawBridgeRow(ctx, row, top + i * BRIDGE_ROW, last, color, grown);
   });
   drawCodeTag(ctx, app, BRIDGE);
 }
@@ -93,6 +105,11 @@ function drawNumbersPage(ctx, app, v) {
   frame.drawBackdrop(ctx);
   drawSky(ctx, 0, 0, layout.W, SKY_H, v.tier, app.t);
   drawFactory(ctx, v.tier, 4, 26, app.t, 1);
+  const plan = screenFx.verdictPlan(app);
+  if (plan) {
+    fxDraw.drawAmbient(ctx, plan, app.t, FACTORY_BOX);
+    fxDraw.drawFlash(ctx, plan, app.phaseT, FACTORY_BOX);
+  }
   drawTitle(ctx, app, v);
   drawNumbers(ctx, app, v);
   drawBridge(ctx, app, v);

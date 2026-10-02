@@ -58,7 +58,7 @@ test('the scenes that move are not the same picture a second later', () => {
   const MOVING = ['client', 'plant', 'economy', 'rain', 'snow', 'politics', 'protest', 'truck', 'alert', 'strategy', 'safety', 'water'];
   assert.deepEqual([...THEMES].sort(), [...MOVING].sort(), 'every theme is listed here, so a new one is not forgotten');
   for (const theme of MOVING) {
-    const frames = [0.3, 0.9, 1.5, 2.1].map((t) => {
+    const frames = [0.2, 0.5, 1.0, 1.7].map((t) => {
       const { ctx, rects } = recorder();
       drawArt(ctx, theme, 0, 0, t);
       return JSON.stringify(rects);

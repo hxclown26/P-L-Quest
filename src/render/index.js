@@ -2,6 +2,7 @@
 
 const anim = require('../ui/anim');
 const layout = require('../ui/layout');
+const screenFx = require('../ui/screen-fx');
 const P = require('./palette');
 const hud = require('./scenes/hud');
 const { drawBattle } = require('./scenes/battle');
@@ -33,12 +34,20 @@ function drawVeil(ctx, app) {
   ctx.globalAlpha = 1;
 }
 
-// Draws one whole frame for the given app state.
+// Draws one whole frame for the given app state. A shake pushes the scene by whole pixels; the veil,
+// the overlays and the footer stay where they are.
 function drawFrame(ctx, app) {
   ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = P.ink;
   ctx.fillRect(0, 0, layout.W, layout.H);
+  const shake = screenFx.screenShake(app);
+  const shaken = shake.dx !== 0 || shake.dy !== 0;
+  if (shaken) {
+    ctx.save();
+    ctx.translate(shake.dx, shake.dy);
+  }
   drawScene(ctx, app);
+  if (shaken) ctx.restore();
   drawVeil(ctx, app);
   if (app.overlay) OVERLAYS[app.overlay](ctx, app);
   hud.drawFooter(ctx, app);

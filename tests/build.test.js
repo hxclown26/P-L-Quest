@@ -39,18 +39,18 @@ test('the placeholders in the template are all replaced', () => {
   assert.ok(!html.includes('/*STYLES*/') && !html.includes('/*SCRIPT*/'));
 });
 
-test('the default build writes the Demo 4 file and never overwrites the earlier demos', () => {
+test('the default build writes the Demo 5 file and never overwrites the earlier demos', () => {
   const { DEFAULT_OUT } = require('../build');
-  assert.equal(path.basename(DEFAULT_OUT), 'pl-quest-demo4.html');
-  for (const frozen of ['pl-quest.html', 'pl-quest-demo2.html', 'pl-quest-demo3.html']) {
+  assert.equal(path.basename(DEFAULT_OUT), 'pl-quest-demo5.html');
+  for (const frozen of ['pl-quest.html', 'pl-quest-demo2.html', 'pl-quest-demo3.html', 'pl-quest-demo4.html']) {
     assert.notEqual(path.basename(DEFAULT_OUT), frozen);
   }
 });
 
-test('the page says Demo 4', () => {
+test('the page says Demo 5', () => {
   const template = fs.readFileSync(path.join(__dirname, '..', 'src', 'template.html'), 'utf8');
-  assert.match(template, /<title>P&amp;L Quest - Demo 4<\/title>/);
-  assert.ok(!/Demo [23]/i.test(template));
+  assert.match(template, /<title>P&amp;L Quest - Demo 5<\/title>/);
+  assert.ok(!/Demo [234]/i.test(template));
 });
 
 // The landing page names the build that is published, which can lag the one being built.
@@ -63,12 +63,12 @@ test('the landing page of the published site opens a build that exists and keeps
   assert.match(html, /<title>P&amp;L Quest - Demo \d<\/title>/);
 });
 
-// Demo 4 is the published build now: the one link that gets shared must not open the demo before it.
-test('the landing page of the published site opens Demo 4 and says so in its title and its preview', () => {
+// Demo 5 is the published build now: the one link that gets shared must not open the demo before it.
+test('the landing page of the published site opens Demo 5 and says so in its title and its preview', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  assert.match(html, /location\.replace\('pl-quest-demo4\.html' \+ location\.search/);
-  assert.match(html, /<title>P&amp;L Quest - Demo 4<\/title>/);
-  assert.match(html, /<meta property="og:title" content="P&amp;L Quest - Demo 4">/);
+  assert.match(html, /location\.replace\('pl-quest-demo5\.html' \+ location\.search/);
+  assert.match(html, /<title>P&amp;L Quest - Demo 5<\/title>/);
+  assert.match(html, /<meta property="og:title" content="P&amp;L Quest - Demo 5">/);
 });
 
 test('the year mode modules are registered in the bundle', () => {

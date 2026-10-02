@@ -24,6 +24,8 @@ module.exports = Object.freeze({
   'ui.btn.note': 'N note',
   'ui.btn.sound': 'M sound',
   'ui.btn.lang': 'L ES/EN',
+  'ui.calm.on': 'Calm effects (E)',
+  'ui.calm.off': 'Full effects (E)',
   'ui.floor': 'FLOOR {n}',
   'ui.stage': 'Floor {f} - Turn {n}/3',
   'ui.prompt': 'Which card do you play?',

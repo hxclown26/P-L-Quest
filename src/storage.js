@@ -1,12 +1,13 @@
 'use strict';
 
-// Saves the language, the mute switch and the best stars. Storage can be blocked or
-// corrupt (private windows, file:// quirks), so every read is validated and every write
-// is allowed to fail: the game must work the same without it.
+// Saves the language, the mute switch, the calm-effects switch and the best stars. Storage can be
+// blocked or corrupt (private windows, file:// quirks), so every read is validated and every write
+// is allowed to fail: the game must work the same without it. `calm` is null until the player
+// chooses: then the game follows the system's reduced-motion preference.
 
 const KEY = 'plquest.v1';
 const LANGS = Object.freeze(['es', 'en']);
-const DEFAULTS = Object.freeze({ lang: null, muted: false, bestStars: 0, bestYear: 0 });
+const DEFAULTS = Object.freeze({ lang: null, muted: false, calm: null, bestStars: 0, bestYear: 0 });
 
 function sanitize(raw) {
   const source = raw && typeof raw === 'object' ? raw : {};
@@ -14,6 +15,7 @@ function sanitize(raw) {
   return {
     lang: LANGS.includes(source.lang) ? source.lang : null,
     muted: source.muted === true,
+    calm: typeof source.calm === 'boolean' ? source.calm : null,
     bestStars: clamp(source.bestStars, 3),
     bestYear: clamp(source.bestYear, 6),
   };

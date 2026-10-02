@@ -11,9 +11,15 @@ const CELL_W = 6;
 function recorder() {
   const glyphs = [];
   const fills = [];
-  const ctx = new Proxy({}, {
+  // save() and restore() keep the paint state, as a real canvas does, so an effect that sets its own alpha
+  // inside a save cannot leak it into what is drawn after.
+  const saved = [];
+  // A canvas starts opaque and black.
+  const ctx = new Proxy({ globalAlpha: 1, fillStyle: '#000000' }, {
     get(target, prop) {
       if (prop in target) return target[prop];
+      if (prop === 'save') return () => saved.push({ globalAlpha: target.globalAlpha, fillStyle: target.fillStyle });
+      if (prop === 'restore') return () => Object.assign(target, saved.pop());
       if (prop === 'fillRect') return (x, y, w, h) => fills.push({ x, y, w, h, alpha: target.globalAlpha, color: target.fillStyle });
       if (prop === 'drawImage') {
         return (...args) => {

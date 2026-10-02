@@ -3,6 +3,7 @@
 // The screens before play: the mode menu, the list of endings to watch and the introduction
 // of the year. They share the sky-and-factory header of the title screen.
 
+const anim = require('../../ui/anim');
 const layout = require('../../ui/layout');
 const view = require('../../ui/year-view');
 const { SHOWCASE } = require('../../year/showcase');
@@ -27,7 +28,7 @@ function drawHeader(ctx, app, tier) {
   ui.wrapLines([{ text: tx(app, 'ui.subtitle') }], 21).forEach((row, i) => {
     ui.text(ctx, row.text, 10, 38 + i * 10, P.white, { shadow: P.ink });
   });
-  ui.text(ctx, 'DEMO 4', 10, 64, P.orange, { shadow: P.ink });
+  ui.text(ctx, 'DEMO 5', 10, 64, P.orange, { shadow: P.ink });
 }
 
 // A row of a list of modes: its name, a line saying what it is and, on the full year, the best
@@ -39,13 +40,19 @@ function drawMenuRow(ctx, app, name, description, i, selected, extra = null, cou
   ui.text(ctx, name, r.x + 8, top, selected ? P.white : P.gray);
   if (extra) ui.textRight(ctx, extra, r.x + r.w - 8, top, P.gold);
   ui.text(ctx, description, r.x + 8, top + 10, selected ? P.gray : P.dim);
-  if (selected && blink(app)) ui.triangle(ctx, r.x + r.w - 12, top + 11, -1, P.gold);
+  if (selected) ui.triangle(ctx, r.x + r.w - 12, top + 11 + (app.calm ? 0 : anim.bob(app.t)), -1, P.gold);
 }
 
 function drawMenu(ctx, app) {
   drawHeader(ctx, app, 'normal');
   const p = layout.MENU.panel;
   const items = view.menuItems(app);
+  // The panel opens with a small bounce (calm mode opens it in place).
+  const pop = app.calm ? 0 : anim.popOffset(app.phaseT);
+  if (pop !== 0) {
+    ctx.save();
+    ctx.translate(0, pop);
+  }
   ui.windowBox(ctx, p.x, p.y, p.w, p.h);
   ui.textCenter(ctx, tx(app, 'menu.title'), 128, p.y + 7, P.gold);
   items.forEach((id, i) => {
@@ -53,6 +60,7 @@ function drawMenu(ctx, app) {
     drawMenuRow(ctx, app, tx(app, `menu.${id}`), tx(app, `menu.${id}.desc`), i, i === app.menuIdx, best, items.length);
   });
   if (items.length <= 3) ui.textCenter(ctx, tx(app, 'ui.fictional'), 128, p.y + p.h - 14, P.dim);
+  if (pop !== 0) ctx.restore();
 }
 
 // The factory behind the list shows the state the highlighted play style ends in.

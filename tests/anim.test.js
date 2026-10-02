@@ -70,3 +70,35 @@ test('a change in OI floats up from its row and fades out, then disappears', () 
   assert.ok(late.rise <= anim.FLOAT_RISE);
   assert.equal(anim.floatState(anim.FLOAT_DELAY + anim.FLOAT_SECONDS + 0.01), null);
 });
+
+test('a bar or a count grows from nothing once its delay has passed, easing out to exactly its value', () => {
+  assert.equal(anim.grow(0), 0, 'nothing grows while the screen has just opened');
+  assert.equal(anim.grow(anim.BAR_DELAY), 0);
+  const early = anim.grow(anim.BAR_DELAY + 0.1);
+  const late = anim.grow(anim.BAR_DELAY + 0.25);
+  assert.ok(early > 0 && early < late && late < 1, 'it grows');
+  assert.ok(early > 0.1 / anim.BAR_SECONDS, 'it starts fast and slows down');
+  assert.equal(anim.grow(anim.BAR_DELAY + anim.BAR_SECONDS), 1);
+  assert.equal(anim.grow(60), 1, 'and stays there');
+  assert.equal(anim.grow(-1), 0);
+  assert.equal(anim.grow(0.5, 0.5, 0.2), 0, 'a later delay and a different length are allowed');
+  assert.equal(anim.grow(0.7, 0.5, 0.2), 1);
+});
+
+test('a window that opens rises from a few pixels lower with a small bounce and settles exactly in place', () => {
+  assert.equal(anim.popOffset(0), anim.POP_RISE);
+  assert.equal(anim.popOffset(anim.POP_SECONDS), 0);
+  assert.equal(anim.popOffset(5), 0);
+  const steps = Array.from({ length: 37 }, (_, i) => anim.popOffset((i / 36) * anim.POP_SECONDS));
+  steps.forEach((px) => assert.ok(Number.isInteger(px) && !Object.is(px, -0), `whole pixels: ${px}`));
+  assert.ok(Math.min(...steps) === -1, 'it overshoots by one pixel');
+  assert.ok(Math.max(...steps) === anim.POP_RISE);
+  assert.equal(anim.popOffset(-1), anim.POP_RISE, 'a clock below zero is the start');
+});
+
+test('the cursor of a menu bobs between two frames, one pixel apart, a few times a second', () => {
+  assert.equal(anim.bob(0), 0);
+  assert.equal(anim.bob(anim.BOB_SECONDS), 1);
+  assert.equal(anim.bob(anim.BOB_SECONDS * 2), 0);
+  assert.ok(1 / anim.BOB_SECONDS <= 3, 'no more than three moves a second');
+});

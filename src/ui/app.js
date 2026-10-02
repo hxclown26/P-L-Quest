@@ -15,10 +15,12 @@ const year = require('./year-app');
 const workshop = require('./workshop-app');
 const { sfx, music, result, moved, leaveTo } = require('./shared');
 
-const createApp = ({ lang, muted, best, bestYear = 0, seed = 1, creator = false }) => ({
+const createApp = ({ lang, muted, calm = false, best, bestYear = 0, seed = 1, creator = false }) => ({
   scene: 'title',
   lang,
   muted,
+  calm,
+  calmAt: -10,
   best,
   bestYear,
   seed,
@@ -81,6 +83,12 @@ function toggleLang(app) {
   return result({ ...app, lang }, [{ type: 'save', patch: { lang } }]);
 }
 
+// Calm mode drops the shake, the flashes and the particles. `calmAt` lets the footer say so for a moment.
+function toggleCalm(app) {
+  const calm = !app.calm;
+  return result({ ...app, calm, calmAt: app.t }, [{ type: 'save', patch: { calm } }]);
+}
+
 // The reviewer sees every answer's hidden effect: it is the creator's tool, so a player's R does
 // nothing, and a workshop (where answers are the point) keeps it locked.
 const toggleReview = (app) => (app.creator && !app.workshop ? result({ ...app, review: !app.review }, [sfx('select')]) : result(app));
@@ -99,6 +107,7 @@ function onOverlayKey(app, pressed) {
 function onKey(app, pressed) {
   if (pressed === 'mute') return toggleMute(app);
   if (pressed === 'lang') return toggleLang(app);
+  if (pressed === 'calm') return toggleCalm(app);
   if (app.overlay) return onOverlayKey(app, pressed);
   if (pressed === 'review') return toggleReview(app);
   return HANDLERS[app.scene].key(app, pressed);

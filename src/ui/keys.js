@@ -29,6 +29,8 @@ const KEY_ACTIONS = Object.freeze({
   M: 'mute',
   l: 'lang',
   L: 'lang',
+  e: 'calm',
+  E: 'calm',
   r: 'review',
   R: 'review',
   c: 'copy',

@@ -40,6 +40,11 @@ function browserLang() {
   return String(navigator.language || 'es').toLowerCase().startsWith('en') ? 'en' : 'es';
 }
 
+// Until the player chooses with E, calm effects follow the system's reduced-motion preference.
+function prefersCalm() {
+  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 // Whole-number scaling keeps the pixels square; on very small screens it falls back to a
 // fractional scale so the picture still fits.
 function fitCanvas(canvas) {
@@ -77,6 +82,7 @@ function createRuntime(saved, audio, storage) {
   let app = createApp({
     lang: saved.lang || browserLang(),
     muted: saved.muted,
+    calm: saved.calm ?? prefersCalm(),
     best: saved.bestStars,
     bestYear: saved.bestYear,
     seed: randomSeed(),

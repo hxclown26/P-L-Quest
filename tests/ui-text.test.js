@@ -2,6 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { CELL_H } = require('../src/render/font');
 
 // A canvas that only remembers the letters drawn onto it.
 function recorder() {
@@ -38,7 +39,7 @@ test('slanted text draws each letter in two slices and the top slice leans one p
   const [top, bottom] = draws;
   assert.equal(top.sy, 0);
   assert.equal(bottom.sy, top.sh, 'the slices meet without a gap');
-  assert.equal(top.sh + bottom.sh, 9, 'together they are the whole letter cell');
+  assert.equal(top.sh + bottom.sh, CELL_H, 'together they are the whole letter cell, tail row included');
   assert.equal(top.dx, bottom.dx + 1);
   assert.equal(bottom.dy, top.dy + top.sh);
 });

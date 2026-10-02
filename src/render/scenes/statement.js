@@ -22,11 +22,13 @@ const RATIO_INDENT = 6;
 const BRACKET = 6;
 const TOTAL_BAND = 'rgba(255,255,255,0.09)';
 const FOCUS_BAND = 'rgba(248,208,72,0.28)';
-const RATIO_LABEL = '#5f86d6';
 const HEADER_MIN_W = 36;
 const NEGLIGIBLE = 0.05;
 // Where the floating change sits on the OI row: in the gap between its short label and its number.
 const FLOAT_X = 50;
+// A row that just moved carries a triangle in the free slot after its number (the slot a closing bracket
+// takes in a loss, which is why a loss has none): up when it helped the business, down when it hurt.
+const ARROW_GAP = 2;
 
 function drawHeader(ctx, app, { x, y, w }, columnKey) {
   const { header } = layout.STATEMENT_ROWS;
@@ -63,10 +65,13 @@ function drawRow(ctx, app, row, top, box, { tierColor, moves, focus }) {
   const ratio = row.kind === 'ratio';
   drawBand(ctx, row, top, box, focus);
   const label = ratio ? tx(app, 'stmt.ratio') : tx(app, `line.short.${row.id}`);
-  const labelColor = ratio ? RATIO_LABEL : row.kind === 'total' ? P.white : P.gray;
+  const labelColor = ratio ? P.ratioLabel : row.kind === 'total' ? P.white : P.gray;
   ui.text(ctx, label, box.x + PAD + (ratio ? RATIO_INDENT : 0), top, labelColor, { bold: row.kind === 'total', slant: ratio });
-  const edge = box.x + box.w - PAD - (statement.isNegative(row) ? 0 : BRACKET);
-  ui.textRight(ctx, statement.cellText(app, row), edge, top, valueColor(row, tierColor, moves.get(row.id)), { slant: ratio });
+  const negative = statement.isNegative(row);
+  const edge = box.x + box.w - PAD - (negative ? 0 : BRACKET);
+  const dir = moves.get(row.id);
+  ui.textRight(ctx, statement.cellText(app, row), edge, top, valueColor(row, tierColor, dir), { slant: ratio });
+  if (dir && !negative) ui.triangle(ctx, edge + ARROW_GAP, top + 2, dir, dir > 0 ? P.green : P.red);
 }
 
 // The change in OI (in points of margin) floats up from the OI row and fades out.
@@ -99,4 +104,4 @@ function drawStatement(ctx, app, {
   if (before && delta !== null) drawFloat(ctx, app, delta, at, rows.length);
 }
 
-module.exports = { drawStatement };
+module.exports = { drawStatement, ARROW_GAP };

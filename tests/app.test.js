@@ -179,3 +179,22 @@ test('back leaves the tutorial straight away from its final and game-over screen
   assert.equal(press(dead, 'back').app.scene, 'menu');
   assert.equal(press(intoPlay(), 'back').app.overlay, 'quit');
 });
+
+test('calm mode starts as given, flips with E at any moment and is saved', () => {
+  assert.equal(createApp({ lang: 'es', muted: false, best: 0 }).calm, false, 'full effects unless the system or the player asks otherwise');
+  assert.equal(createApp({ lang: 'es', muted: false, best: 0, calm: true }).calm, true);
+  const ticked = reduce(fresh(), { type: 'tick', dt: 2.5 }).app;
+  const calmed = press(ticked, 'calm');
+  assert.equal(calmed.app.calm, true);
+  assert.equal(calmed.app.calmAt, ticked.t, 'the moment is kept so the footer can say it for a moment');
+  assert.deepEqual(calmed.effects.find((e) => e.type === 'save').patch, { calm: true });
+  assert.equal(press(calmed.app, 'calm').app.calm, false);
+  assert.deepEqual(press(calmed.app, 'calm').effects.find((e) => e.type === 'save').patch, { calm: false });
+});
+
+test('calm mode works with the rules open and does not close them', () => {
+  const opened = { ...pressAll(fresh(), ['confirm', 'confirm']).app, overlay: 'rules' };
+  const calmed = press(opened, 'calm');
+  assert.equal(calmed.app.calm, true);
+  assert.equal(calmed.app.overlay, 'rules');
+});

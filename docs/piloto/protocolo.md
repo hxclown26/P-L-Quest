@@ -1,4 +1,4 @@
-# Protocolo del piloto de P&L Quest (Demo 4)
+# Protocolo del piloto de P&L Quest (Demo 5)
 
 **Qué se decide.** Si el juego enseña lo que dice enseñar y si un líder de finanzas lo acepta, con una
 sesión de 90 minutos para 12 a 15 personas. Si se cumplen las cuatro metas de la sección 6, se evalúa
@@ -10,13 +10,14 @@ no una prueba estadística.
 | Qué | Detalle |
 |---|---|
 | Participantes | 12 a 15, mezcla de comercial, operaciones y otras áreas, y al menos 3 de finanzas (la meta de «objeción al P&L» solo tiene sentido con ellos). Sin entrenamiento previo en el juego. |
-| Equipo | 1 facilitador y 1 observador. Una sala con proyector; un computador por persona con Chrome, Edge o Safari. El juego es un solo archivo, `pl-quest-demo4.html`, que no necesita internet; también abre en https://hxclown26.github.io/P-L-Quest/ (ahí sí hace falta internet). |
+| Equipo | 1 facilitador y 1 observador. Una sala con proyector; un computador por persona con Chrome, Edge o Safari. El juego es un solo archivo, `pl-quest-demo5.html`, que no necesita internet; también abre en https://hxclown26.github.io/P-L-Quest/ (ahí sí hace falta internet). |
 | Revisión previa | La ficha de dominio (`docs/revision/revision-dominio.xlsx`) revisada por 2 personas del negocio y el test de 5 preguntas (formas A y B) aprobado por ti. El test y su clave se guardan fuera del repositorio público (`docs/piloto/resultados/`, que git ignora) para que nadie vea las preguntas antes. |
 | Modo de juego | **Medio año** para todas las personas (unos 20 minutos). El año completo toma 35 a 50 minutos y no cabe en el bloque de 30. Todas teclean el mismo código de partida de 4 dígitos, así el debrief habla de los mismos 24 problemas. |
+| Efectos | Demo 5 sacude la escena, destella y lanza partículas un instante cuando una respuesta pesa mucho. La tecla **E** los apaga (modo calmo), y el juego ya parte calmo si el equipo tiene activado «reducir movimiento». Que todas las personas jueguen en el mismo modo (el de efectos completos, salvo quien pida el calmo por comodidad o salud) y anota quién usó el calmo. Reglas, números y problemas son idénticos en los dos modos. |
 | Formularios | Las formas A y B del test como cuestionarios con puntaje por pregunta (cada acierto vale 1). Las claves viven solo dentro del formulario. |
 | Grupos | Mitad hace A antes y B después (A→B), mitad al revés (B→A). Asigna alternando: IDs impares A→B, pares B→A. |
 | IDs | P01, P02, etc. No se registran nombres en ningún archivo de análisis. |
-| Prueba técnica | Un día antes, abre el archivo (o el enlace) en 2 equipos de los que se usarán: título, menú, un mes completo y el informe final, en español. |
+| Prueba técnica | Un día antes, abre el archivo (o el enlace) en 2 equipos de los que se usarán: título, menú, un mes completo y el informe final, en español. Prueba también la tecla E y que el texto con g, j, p, q, y se lea bien en el proyector. |
 
 ## 2. Agenda de 90 minutos
 
@@ -78,6 +79,9 @@ mirando también las observaciones de la sección 3.
   abiertas, y solo mientras la pestaña está a la vista: una pestaña en segundo plano acorta el tiempo.
 - **El medio año no es el año**: son 24 de los 42 problemas que caben en esos meses y cada decisión pesa el
   doble. Mide lo mismo que el año (las notas y los umbrales son los mismos), pero con menos situaciones.
+- **Aspecto distinto al de Demo 4**: Demo 5 cambia gráficos y efectos, no reglas, textos ni números; el
+  contenido que revisaron las dos personas del negocio es el mismo. Quien juegue en modo calmo ve menos
+  énfasis al responder, pero lee la misma información.
 - **Español solamente**: la versión en inglés no tiene revisión humana.
 - **Autoría**: las 48 situaciones, el test y las metas las escribí yo; la revisión de dominio y tu
   aprobación del test son las que les dan validez.

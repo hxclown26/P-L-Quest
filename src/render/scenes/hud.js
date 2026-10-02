@@ -74,11 +74,18 @@ const noteKey = (app) => (YEAR_SCENES.includes(app.scene) ? 'ui.btn.rules' : 'ui
 // Only the tutorial floors and the year screens have something behind the N key.
 const noteActive = (app) => NOTE_SCENES.includes(app.scene);
 
+// After E the strip says which effects are on, for a moment.
+const CALM_TOAST_SECONDS = 1.8;
+
 // Bottom strip: the action for the current screen plus the three global buttons.
 function drawFooter(ctx, app) {
   const f = layout.FOOTER;
   rect(ctx, 0, f.y, layout.W, f.h, P.ink);
   rect(ctx, 0, f.y, layout.W, 1, '#242844');
+  if (app.t - app.calmAt < CALM_TOAST_SECONDS) {
+    ui.textCenter(ctx, tx(app, app.calm ? 'ui.calm.on' : 'ui.calm.off'), layout.W / 2, f.y + 3, P.gold);
+    return;
+  }
   const [actionX, noteX, soundX, langX] = f.labelX;
   const items = [
     [tx(app, actionKey(app)), actionX, P.gold],

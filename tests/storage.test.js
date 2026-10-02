@@ -38,18 +38,18 @@ test('load returns defaults for corrupt JSON', () => {
 
 test('load sanitizes invalid values instead of trusting them', () => {
   const backend = memory({ [KEY]: JSON.stringify({ lang: 'fr', muted: 'yes', bestStars: 99 }) });
-  assert.deepEqual(createStorage(backend).load(), { lang: null, muted: false, bestStars: 3, bestYear: 0 });
+  assert.deepEqual(createStorage(backend).load(), { lang: null, muted: false, calm: null, bestStars: 3, bestYear: 0 });
   const odd = memory({ [KEY]: JSON.stringify({ lang: 'en', muted: true, bestStars: 1.5 }) });
-  assert.deepEqual(createStorage(odd).load(), { lang: 'en', muted: true, bestStars: 0, bestYear: 0 });
+  assert.deepEqual(createStorage(odd).load(), { lang: 'en', muted: true, calm: null, bestStars: 0, bestYear: 0 });
 });
 
 test('save merges with what is stored and keeps the best stars', () => {
   const backend = memory();
   const storage = createStorage(backend);
   const first = storage.save({ lang: 'en', bestStars: 2 });
-  assert.deepEqual(first, { lang: 'en', muted: false, bestStars: 2, bestYear: 0 });
+  assert.deepEqual(first, { lang: 'en', muted: false, calm: null, bestStars: 2, bestYear: 0 });
   const second = storage.save({ bestStars: 1, muted: true });
-  assert.deepEqual(second, { lang: 'en', muted: true, bestStars: 2, bestYear: 0 });
+  assert.deepEqual(second, { lang: 'en', muted: true, calm: null, bestStars: 2, bestYear: 0 });
   assert.deepEqual(storage.load(), second);
 });
 
@@ -73,4 +73,22 @@ test('the best year is kept as a rank from 0 to 6 and never goes down', () => {
   assert.equal(createStorage(wild).load().bestYear, 6);
   const odd = memory({ [KEY]: JSON.stringify({ bestYear: 'x' }) });
   assert.equal(createStorage(odd).load().bestYear, 0);
+});
+
+test('calm mode is unset until the player chooses, then remembers true or false', () => {
+  assert.equal(DEFAULTS.calm, null, 'unset means: follow the system preference');
+  const backend = memory();
+  const storage = createStorage(backend);
+  assert.equal(storage.load().calm, null);
+  assert.equal(storage.save({ calm: true }).calm, true);
+  assert.equal(createStorage(backend).load().calm, true);
+  assert.equal(storage.save({ calm: false }).calm, false, 'false is a choice too, not "unset"');
+  assert.equal(createStorage(backend).load().calm, false);
+});
+
+test('a calm value that is not a boolean is thrown away on load', () => {
+  const backend = memory({ [KEY]: JSON.stringify({ calm: 'yes', muted: true }) });
+  const loaded = createStorage(backend).load();
+  assert.equal(loaded.calm, null);
+  assert.equal(loaded.muted, true, 'and the rest of the saved settings survive');
 });

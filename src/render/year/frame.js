@@ -3,9 +3,12 @@
 // The furniture shared by the year screens: the background, the voice plate, the picture
 // window, the reviewer badge and the OI / meter gauges.
 
+const anim = require('../../ui/anim');
+const fx = require('../../ui/fx');
 const layout = require('../../ui/layout');
 const { operatingMargin } = require('../../model');
 const { tierFor } = require('../../tiers');
+const screenFx = require('../../ui/screen-fx');
 const rules = require('../../year/rules');
 const { tx } = require('../../ui/tx');
 const P = require('../palette');
@@ -20,8 +23,11 @@ const VOICE_AREA = Object.freeze({ cliente: 'sales', planta: 'ops', entorno: 'pr
 // The gauges window: four bars one under the other, then up to two rows of notes.
 const GAUGES = Object.freeze({ top: 6, pitch: 10, bar: Object.freeze({ x: 26, y: 1, w: 84, h: 5 }), notes: Object.freeze([46, 55]) });
 const OI_SCALE = 25;
-const CRISIS_TICK = '#f05858';
-const DRAG_TICK = '#f89848';
+// After an answer a gauge drains (or fills) over GAUGE_SECONDS and leaves a pale ghost of what it lost for GHOST_SECONDS.
+const GAUGE_DELAY = 0.15;
+const GAUGE_SECONDS = 0.4;
+const GHOST_SECONDS = 0.3;
+const GHOST_ALPHA = 0.45;
 
 const meterColor = (value) => {
   if (value >= rules.FLYWHEEL) return P.green;
@@ -47,7 +53,7 @@ const voiceColor = (voice) => P.area[VOICE_AREA[voice]];
 function drawArtWindow(ctx, app, theme) {
   const { x, y, w, h } = layout.ART;
   ui.windowBox(ctx, x, y, w, h);
-  drawArt(ctx, theme, x + Math.floor((w - ART_W) / 2), y + Math.floor((h - ART_H) / 2), app.t);
+  drawArt(ctx, theme, x + Math.floor((w - ART_W) / 2), y + Math.floor((h - ART_H) / 2), app.t, screenFx.sceneMood(app));
 }
 
 // "Month 3 - 2/4" in the corner of the picture.
@@ -67,12 +73,18 @@ function drawReviewBadge(ctx, app) {
   ui.text(ctx, values, x + 5, y + 14, P.white, { shadow: P.ink });
 }
 
-function drawGauge(ctx, row, label, fraction, color, marks, blink = false) {
+function drawGauge(ctx, row, label, fraction, color, marks, blink = false, ghost = null) {
   const { x, y } = layout.DASH;
   const top = y + GAUGES.top + row * GAUGES.pitch;
   const bx = x + GAUGES.bar.x;
   ui.text(ctx, label, x + 6, top, blink ? P.red : color === P.white ? P.gray : color);
   ui.bar(ctx, bx, top + GAUGES.bar.y, GAUGES.bar.w, GAUGES.bar.h, fraction, color);
+  if (ghost && ghost.alpha > 0 && ghost.from > fraction) {
+    const from = bx + Math.round(GAUGES.bar.w * fraction);
+    ctx.globalAlpha = ghost.alpha;
+    rect(ctx, from, top + GAUGES.bar.y, Math.round(GAUGES.bar.w * ghost.from) - Math.round(GAUGES.bar.w * fraction), GAUGES.bar.h, P.white);
+    ctx.globalAlpha = 1;
+  }
   marks.forEach(([at, tick]) => rect(ctx, bx + Math.round(GAUGES.bar.w * at), top, 1, 7, tick));
 }
 
@@ -89,13 +101,25 @@ function drawMeters(ctx, app, { notes = [], atStake = null } = {}) {
   const { x, y, w, h } = layout.DASH;
   const run = app.year;
   ui.windowBox(ctx, x, y, w, h, { alpha: 0.95 });
+  // On the result of an answer the gauges go from their old value to the new one (calm mode shows the new one).
+  const answered = run.phase === 'result' && run.last ? run.last : null;
+  const settling = answered !== null && !app.calm;
+  const k = settling ? anim.grow(app.phaseT, GAUGE_DELAY, GAUGE_SECONDS) : 1;
+  const fade = settling ? GHOST_ALPHA * (1 - anim.grow(app.phaseT, GAUGE_DELAY + GAUGE_SECONDS, GHOST_SECONDS)) : 0;
+  const ease = (was, now) => (settling ? was + (now - was) * k : now);
   const oi = operatingMargin(run.pl);
+  const oiWas = answered ? answered.oiBefore : oi;
   const oiMarks = [[rules.PLAN_OI / OI_SCALE, P.white], ...(run.rescued ? [[rules.RESCUE_GOAL / OI_SCALE, P.gold]] : [])];
-  drawGauge(ctx, 0, 'OI', Math.max(oi, 0) / OI_SCALE, TIER_COLOR[tierFor(oi)], oiMarks);
-  const meterMarks = [[rules.CRISIS / 100, CRISIS_TICK], [rules.DRAG_BELOW / 100, DRAG_TICK]];
+  const oiGhost = settling ? { from: Math.max(oiWas, 0) / OI_SCALE, alpha: fade } : null;
+  drawGauge(ctx, 0, 'OI', Math.max(ease(oiWas, oi), 0) / OI_SCALE, TIER_COLOR[tierFor(oi)], oiMarks, false, oiGhost);
+  const meterMarks = [[rules.CRISIS / 100, P.red], [rules.DRAG_BELOW / 100, P.orange]];
   ['C', 'P', 'E'].forEach((key, i) => {
-    const blink = key === atStake && Math.floor(app.t * 3) % 2 === 0;
-    drawGauge(ctx, i + 1, tx(app, `year.meterTag.${key}`), run.meters[key] / 100, meterColor(run.meters[key]), meterMarks, blink);
+    const now = run.meters[key];
+    const was = answered ? now - answered.delta[key] : now;
+    const crossed = settling && fx.crossedDown(was, now, [rules.DRAG_BELOW, rules.CRISIS]) && fx.pulseOn(app.phaseT);
+    const blink = (key === atStake && Math.floor(app.t * 3) % 2 === 0) || crossed;
+    const ghost = settling ? { from: was / 100, alpha: fade } : null;
+    drawGauge(ctx, i + 1, tx(app, `year.meterTag.${key}`), ease(was, now) / 100, meterColor(now), meterMarks, blink, ghost);
   });
   drawNotes(ctx, notes);
 }

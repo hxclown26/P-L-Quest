@@ -4,6 +4,7 @@
 // meters) and the rescue screen that follows a zero.
 
 const anim = require('../../ui/anim');
+const screenFx = require('../../ui/screen-fx');
 const layout = require('../../ui/layout');
 const rules = require('../../year/rules');
 const view = require('../../ui/year-view');
@@ -11,6 +12,7 @@ const { toneOf } = require('../../ui/view');
 const { tx, num, signed } = require('../../ui/tx');
 const P = require('../palette');
 const { rect } = require('../draw');
+const fxDraw = require('../fx');
 const ui = require('../ui');
 const { drawStatement } = require('../scenes/statement');
 const frame = require('./frame');
@@ -24,6 +26,9 @@ const TEXT_WRAP = 40;
 const RESCUE_ROWS = 9;
 const ROW_H = 9;
 const RESCUE_SKY = Object.freeze(['#4a1018', '#14040a']);
+// The OI of the close counts up for this long; the smoke of a hard close rises from the foot of the chart.
+const COUNT_SECONDS = 0.6;
+const burstOrigin = (box) => ({ x: box.x + Math.floor(box.w / 2), y: box.y + box.h - 14 });
 
 const oiColor = (oi) => {
   if (oi >= rules.PLAN_OI) return P.green;
@@ -59,8 +64,10 @@ function drawChart(ctx, app) {
     const current = month === run.monthIdx + 1;
     ui.textRight(ctx, String(month), c.x + CHART.labelRight, y, current ? P.white : P.dim);
     if (oi === null) return;
-    rect(ctx, left, barTop, barWidth(oi), barH, oiColor(oi));
-    if (current) rect(ctx, left + barWidth(oi), barTop - 1, 2, barH + 2, P.white);
+    // The bar of the month that just closed grows to its length (calm mode shows it grown).
+    const width = current && !app.calm ? Math.max(1, Math.round(barWidth(oi) * anim.grow(app.phaseT))) : barWidth(oi);
+    rect(ctx, left, barTop, width, barH, oiColor(oi));
+    if (current) rect(ctx, left + width, barTop - 1, 2, barH + 2, P.white);
   });
 }
 
@@ -69,7 +76,8 @@ function drawReadout(ctx, app, d) {
   const { closes, lastClose } = app.year;
   const previous = closes.length > 1 ? closes[closes.length - 2].oi : rules.PLAN_OI;
   const change = lastClose.oi - previous;
-  const head = `OI ${num(app, lastClose.oi)}%`;
+  const shown = previous + change * (app.calm ? 1 : anim.grow(app.phaseT, 0, COUNT_SECONDS));
+  const head = `OI ${num(app, shown)}%`;
   ui.text(ctx, head, d.x + 8, d.y + READOUT_Y, oiColor(lastClose.oi));
   ui.text(ctx, `(${signed(app, change)} pp)`, d.x + 8 + ui.textWidth(head) + 6, d.y + READOUT_Y, P[toneOf(change)]);
 }
@@ -89,12 +97,15 @@ function drawClose(ctx, app) {
   drawStatement(ctx, app, { pl: run.pl, before: run.lastClose.plBefore, progress: anim.rollProgress(app.phaseT) });
   frame.drawPlate(ctx, tx(app, 'year.close.title', { m: run.monthIdx + 1 }), P.area.finance);
   drawChart(ctx, app);
+  const plan = screenFx.closePlan(app);
+  if (plan) fxDraw.drawFlash(ctx, plan, app.phaseT, layout.SIDE);
   const d = layout.DIALOGUE;
   ui.windowBox(ctx, d.x, d.y, d.w, d.h);
   drawReadout(ctx, app, d);
   rect(ctx, d.x + 4, d.y + TEXT_TOP - 4, d.w - 8, 1, P.winShade);
   const rows = fitRows(ui.wrapLines(orderedLines(view.closeLines(app)), TEXT_WRAP), TEXT_ROWS);
   ui.paragraph(ctx, rows, d.x + 6, d.y + TEXT_TOP, ROW_H);
+  if (plan) fxDraw.drawBurst(ctx, plan, app.phaseT, burstOrigin(layout.SIDE), layout.SIDE);
 }
 
 function drawRescue(ctx, app) {
@@ -103,11 +114,14 @@ function drawRescue(ctx, app) {
   drawStatement(ctx, app, { pl: run.pl });
   frame.drawPlate(ctx, tx(app, 'year.rescue.title'), P.red);
   frame.drawArtWindow(ctx, app, 'alert');
+  const plan = screenFx.rescuePlan(app);
+  if (plan) fxDraw.drawFlash(ctx, plan, app.phaseT, layout.ART);
   frame.drawReviewBadge(ctx, app);
   frame.drawMeters(ctx, app);
   const d = layout.DIALOGUE;
   ui.windowBox(ctx, d.x, d.y, d.w, d.h);
   ui.paragraph(ctx, ui.wrapLines(view.rescueLines(app), TEXT_WRAP).slice(0, RESCUE_ROWS), d.x + 6, d.y + 6, ROW_H);
+  if (plan) fxDraw.drawBurst(ctx, plan, app.phaseT, burstOrigin(layout.ART), layout.ART);
 }
 
 module.exports = { drawClose, drawRescue, TEXT_ROWS, TEXT_WRAP, RESCUE_ROWS, orderedLines, fitRows };
