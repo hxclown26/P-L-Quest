@@ -14,7 +14,7 @@ const names = (result) => result.effects.map((e) => e.name || e.mode || e.type);
 
 const CREATOR = { creator: true };
 const intoMenu = (extra = {}) => press(fresh(extra), 'confirm').app;
-const intoEndings = () => pressAll(fresh(CREATOR), ['confirm', 'down', 'down', 'confirm']).app;
+const intoEndings = () => pressAll(fresh(CREATOR), ['confirm', 'down', 'down', 'down', 'confirm']).app;
 
 test('the title leads to the mode menu and starts the title music', () => {
   const result = press(fresh(), 'confirm');
@@ -27,8 +27,8 @@ test('a tap on the title also opens the menu', () => {
   assert.equal(reduce(fresh(), { type: 'tap', x: 100, y: 100 }).app.scene, 'menu');
 });
 
-test('a player sees two modes, the year and the tutorial, and the list stops at its ends', () => {
-  assert.deepEqual(menuItems(fresh()), ['year', 'tutorial']);
+test('a player sees three modes, the year, the half year and the tutorial, and the list stops at its ends', () => {
+  assert.deepEqual(menuItems(fresh()), ['year', 'half', 'tutorial']);
   let state = { app: intoMenu(), effects: [] };
   state = press(state.app, 'up');
   assert.equal(state.app.menuIdx, 0);
@@ -37,13 +37,13 @@ test('a player sees two modes, the year and the tutorial, and the list stops at 
   assert.equal(state.app.menuIdx, 1);
   assert.ok(names(state).includes('select'));
   state = pressAll(state.app, ['down', 'down', 'down', 'down']);
-  assert.equal(state.app.menuIdx, 1, 'there is nothing after the tutorial');
+  assert.equal(state.app.menuIdx, 2, 'there is nothing after the tutorial');
 });
 
 test('the creator mode adds the endings and the workshop to the menu', () => {
-  assert.deepEqual(menuItems(fresh(CREATOR)), ['year', 'tutorial', 'endings', 'workshop']);
+  assert.deepEqual(menuItems(fresh(CREATOR)), ['year', 'half', 'tutorial', 'endings', 'workshop']);
   const state = pressAll(intoMenu(CREATOR), ['down', 'down', 'down', 'down']);
-  assert.equal(state.app.menuIdx, 3);
+  assert.equal(state.app.menuIdx, 4);
   assert.equal(press(state.app, 'confirm').app.scene, 'workshop');
 });
 
@@ -52,18 +52,46 @@ test('a player cannot reach the endings or the workshop with taps or the pointer
     const first = reduce(intoMenu(), { type: 'tap', x: 40, y }).app;
     const tapped = first.scene === 'menu' ? reduce(first, { type: 'tap', x: 40, y }).app : first;
     assert.ok(['menu', 'yearIntro', 'intro'].includes(tapped.scene), `tapping y=${y} twice opened ${tapped.scene}`);
-    assert.ok(reduce(intoMenu(), { type: 'hover', x: 40, y }).app.menuIdx <= 1, `hovering y=${y}`);
+    assert.ok(reduce(intoMenu(), { type: 'hover', x: 40, y }).app.menuIdx <= 2, `hovering y=${y}`);
   }
 });
 
-test('the full year and the tutorial are each one confirm away, and the endings in creator mode', () => {
+test('the full year, the half year and the tutorial are each one confirm away, and the endings in creator mode', () => {
   assert.equal(press(intoMenu(), 'confirm').app.scene, 'yearIntro');
-  assert.equal(pressAll(fresh(), ['confirm', 'down', 'confirm']).app.scene, 'intro');
+  assert.equal(pressAll(fresh(), ['confirm', 'down', 'confirm']).app.scene, 'yearIntro');
+  assert.equal(pressAll(fresh(), ['confirm', 'down', 'down', 'confirm']).app.scene, 'intro');
   assert.equal(intoEndings().scene, 'endings');
 });
 
+const intoHalfIntro = (extra = {}) => pressAll(fresh(extra), ['confirm', 'down', 'confirm']).app;
+
+test('the half year opens its own intro, and the full year the one of 12 months', () => {
+  assert.equal(intoHalfIntro().months, 6);
+  assert.equal(press(intoMenu(), 'confirm').app.months, 12);
+});
+
+test('the half year starts a six-month year at double pace with the game code typed', () => {
+  const typed = pressAll(intoHalfIntro(), [...'4821'].map((digit) => `digit${digit}`)).app;
+  const start = press(typed, 'confirm');
+  assert.equal(start.app.scene, 'year');
+  assert.equal(start.app.year.months, 6);
+  assert.equal(start.app.year.pace, 2);
+  assert.equal(start.app.year.seed, 4821);
+  assert.equal(start.app.year.schedule.order.length, 24);
+  assert.equal(start.app.yearT, 0, 'the play clock starts at zero');
+  assert.ok(names(start).includes('play'));
+});
+
+test('the full year still starts twelve months after a half year was opened and left', () => {
+  const back = press(intoHalfIntro(), 'back').app;
+  assert.equal(back.scene, 'menu');
+  const full = press(press(back, 'up').app, 'confirm').app;
+  assert.equal(full.months, 12);
+  assert.equal(press(full, 'confirm').app.year.months, 12);
+});
+
 test('the tutorial still runs from the menu: intro, then the first floor', () => {
-  const intro = pressAll(fresh(), ['confirm', 'down', 'confirm']).app;
+  const intro = pressAll(fresh(), ['confirm', 'down', 'down', 'confirm']).app;
   const play = press(intro, 'confirm');
   assert.equal(play.app.scene, 'play');
   assert.equal(play.app.run.phase, 'floorIntro');
@@ -136,7 +164,7 @@ test('the year intro starts a fresh year and the play music', () => {
 test('back steps out one level: year intro, endings and tutorial intro return to the menu, the menu to the title', () => {
   assert.equal(press(press(intoMenu(), 'confirm').app, 'back').app.scene, 'menu');
   assert.equal(press(intoEndings(), 'back').app.scene, 'menu');
-  const tutorialIntro = pressAll(fresh(), ['confirm', 'down', 'confirm']).app;
+  const tutorialIntro = pressAll(fresh(), ['confirm', 'down', 'down', 'confirm']).app;
   assert.equal(press(tutorialIntro, 'back').app.scene, 'menu');
   assert.equal(press(intoMenu(), 'back').app.scene, 'title');
   assert.equal(press(fresh(), 'back').app.scene, 'title');
@@ -165,16 +193,16 @@ test('choosing a play style shows its verdict as a simulated year without saving
 
 test('taps on a menu row select it first and open it on the second tap', () => {
   const menu = intoMenu();
-  const row = layout.menuRowRect(1, 2);
+  const row = layout.menuRowRect(2, 3);
   const select = reduce(menu, { type: 'tap', x: row.x + 5, y: row.y + 5 });
-  assert.equal(select.app.menuIdx, 1);
+  assert.equal(select.app.menuIdx, 2);
   assert.equal(select.app.scene, 'menu');
   const open = reduce(select.app, { type: 'tap', x: row.x + 5, y: row.y + 5 });
   assert.equal(open.app.scene, 'intro');
 });
 
 test('hovering a menu row or a play style selects it', () => {
-  const row = layout.menuRowRect(2);
+  const row = layout.menuRowRect(2, 5);
   assert.equal(reduce(intoMenu(CREATOR), { type: 'hover', x: row.x + 3, y: row.y + 3 }).app.menuIdx, 2);
   const profile = layout.profileRowRect(5);
   assert.equal(reduce(intoEndings(), { type: 'hover', x: profile.x + 3, y: profile.y + 2 }).app.profileIdx, 5);
@@ -213,14 +241,14 @@ test('every new year gets its own order: the app hands the engine a fresh seed e
 
 test('the tutorial also starts with a seed of its own', () => {
   const app = createApp({ lang: 'es', muted: false, best: 0, bestYear: 0, seed: 77 });
-  const play = pressAll(app, ['confirm', 'down', 'confirm', 'confirm']).app;
+  const play = pressAll(app, ['confirm', 'down', 'down', 'confirm', 'confirm']).app;
   assert.equal(play.run.seed, 77);
   assert.notEqual(play.seed, 77);
 });
 
 test('the simulated endings never use or burn the seed', () => {
   const app = createApp({ lang: 'es', muted: false, best: 0, bestYear: 0, seed: 55, creator: true });
-  const shown = pressAll(app, ['confirm', 'down', 'down', 'confirm', 'confirm']).app;
+  const shown = pressAll(app, ['confirm', 'down', 'down', 'down', 'confirm', 'confirm']).app;
   assert.equal(shown.sim, true);
   assert.equal(shown.seed, 55);
 });

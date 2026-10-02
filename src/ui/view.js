@@ -108,7 +108,8 @@ const plBefore = (run) => ({
   sales: run.pl.sales - run.last.delta.sales,
   incentives: run.pl.incentives - run.last.delta.incentives,
   cost: run.pl.cost - run.last.delta.cost,
-  serve: run.pl.serve - run.last.delta.serve,
+  freight: run.pl.freight - run.last.delta.freight,
+  direct: run.pl.direct - run.last.delta.direct,
   sga: run.pl.sga - run.last.delta.sga,
 });
 

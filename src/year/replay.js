@@ -64,11 +64,9 @@ const currentParts = () => ({
   rules: Object.fromEntries(RULE_NAMES.map((name) => [name, rules[name]])),
 });
 
-// One byte that changes whenever the rules, the problems or the shuffling change. It hashes the
-// data above, the order of a fixed year and how two canned players (a good and a reckless one) fare
-// in it, so a change in either the numbers or the logic shows. Codes carry it, so a result made
-// with another build is recognised instead of misread.
-function fingerprintFor(parts) {
+// The 32-bit hash of the data above, the order of a fixed year and how two canned players (a good
+// and a reckless one) fare in it, so a change in either the numbers or the logic shows.
+function hashFor(parts) {
   const schedule = buildSchedule(FINGERPRINT_CODE);
   const years = ['expert', 'short'].map((name) => simulate(PROFILES[name], FINGERPRINT_CODE, engine.newYear(FINGERPRINT_CODE)));
   const text = [
@@ -77,11 +75,18 @@ function fingerprintFor(parts) {
     schedule.perms.map((perm) => perm.join('')).join(),
     ...years.map(trail),
   ].join('|');
-  const h = hash32(text);
-  return (h ^ (h >>> 8) ^ (h >>> 16) ^ (h >>> 24)) & 0xff;
+  return hash32(text);
 }
+
+// One byte that changes whenever the rules, the problems or the shuffling change. Codes carry it,
+// so a result made with another build is recognised instead of misread. One byte can collide by
+// chance (1 in 256), so a test that needs to tell two data sets apart compares `hashFor` instead.
+const fingerprintFor = (parts) => {
+  const h = hashFor(parts);
+  return (h ^ (h >>> 8) ^ (h >>> 16) ^ (h >>> 24)) & 0xff;
+};
 
 const FINGERPRINT = fingerprintFor(currentParts());
 const fingerprint = () => FINGERPRINT;
 
-module.exports = { ANSWERS, isAnswer, decisionsOf, replay, fingerprint, fingerprintFor, currentParts };
+module.exports = { ANSWERS, isAnswer, decisionsOf, replay, fingerprint, fingerprintFor, hashFor, currentParts };

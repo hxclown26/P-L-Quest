@@ -1,20 +1,22 @@
 'use strict';
 
 // The P&L as a finance report lays it out: every line in money with its ratio (a percentage of
-// the sales) on the row below, deductions as positive amounts, results as totals and negative
+// the net sales) on the row below, deductions as positive amounts, results as totals and negative
 // numbers between brackets. Pure: it turns a P&L into rows and rows into text; nothing is drawn.
 
-const { contributionMargin, grossProfit, operatingIncome, ratioOf } = require('../model');
+const { netSales, contributionMargin, grossProfit, operatingIncome, ratioOf } = require('../model');
 const { num } = require('./tx');
 
 // `good` is +1 when a bigger number is better for the business (sales, results) and -1 when it is
 // worse (a deduction), so a change can be coloured without knowing which line it is.
 const LINES = Object.freeze([
-  { id: 'sales', kind: 'total', good: 1, ratio: false, amount: (pl) => pl.sales },
+  { id: 'sales', kind: 'line', good: 1, ratio: false, amount: (pl) => pl.sales },
   { id: 'incentives', kind: 'line', good: -1, ratio: false, amount: (pl) => pl.incentives },
+  { id: 'net', kind: 'total', good: 1, ratio: false, amount: netSales },
   { id: 'cost', kind: 'line', good: -1, ratio: true, amount: (pl) => pl.cost },
   { id: 'cm', kind: 'total', good: 1, ratio: true, amount: contributionMargin },
-  { id: 'serve', kind: 'line', good: -1, ratio: true, amount: (pl) => pl.serve },
+  { id: 'freight', kind: 'line', good: -1, ratio: true, amount: (pl) => pl.freight },
+  { id: 'direct', kind: 'line', good: -1, ratio: false, amount: (pl) => pl.direct },
   { id: 'gp', kind: 'total', good: 1, ratio: true, amount: grossProfit },
   { id: 'sga', kind: 'line', good: -1, ratio: true, amount: (pl) => pl.sga },
   { id: 'oi', kind: 'total', good: 1, ratio: true, amount: operatingIncome },
@@ -57,7 +59,8 @@ function cellText(app, row) {
   return isNegative(row) ? `(${body})` : body;
 }
 
-const isFocused = (row, line) => line !== null && (row.id === line || row.of === line);
+// `focus` is one line, several (a floor of the tutorial covers freight and direct charges) or none.
+const isFocused = (row, focus) => [focus].flat().some((line) => typeof line === 'string' && (row.id === line || row.of === line));
 
 // One row of the report that sets the real year against the plan. The variance is read the way a
 // report reads it: positive when it is good for the business, whichever way the number moved, and

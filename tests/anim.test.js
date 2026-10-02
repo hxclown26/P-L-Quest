@@ -21,10 +21,10 @@ test('blendPl sits between two P&Ls, line by line, and never changes its inputs'
   const before = model.BASE_PL;
   const after = model.applyOp(before, { op: 'add', line: 'cost', pts: 4 });
   const frozen = JSON.stringify(before);
-  near(anim.blendPl(before, after, 0).cost, 53);
-  near(anim.blendPl(before, after, 1).cost, 57);
-  near(anim.blendPl(before, after, 0.5).cost, 55);
-  near(anim.blendPl(before, after, 0.5).sales, 100, 1e-9);
+  near(anim.blendPl(before, after, 0).cost, 55);
+  near(anim.blendPl(before, after, 1).cost, 59);
+  near(anim.blendPl(before, after, 0.5).cost, 57);
+  near(anim.blendPl(before, after, 0.5).sales, 102, 1e-9);
   assert.deepEqual(Object.keys(anim.blendPl(before, after, 0.3)).sort(), Object.keys(before).sort());
   assert.equal(JSON.stringify(before), frozen);
 });
@@ -34,7 +34,7 @@ test('a blended P&L is still a P&L: its results foot at every moment of the roll
   const after = model.applyOp(model.applyOp(before, { op: 'volume', pct: -6 }), { op: 'add', line: 'sga', pts: 2 });
   for (const k of [0, 0.2, 0.55, 0.9, 1]) {
     const pl = anim.blendPl(before, after, k);
-    near(model.operatingIncome(pl), pl.sales - pl.incentives - pl.cost - pl.serve - pl.sga);
+    near(model.operatingIncome(pl), pl.sales - pl.incentives - pl.cost - pl.freight - pl.direct - pl.sga);
   }
 });
 

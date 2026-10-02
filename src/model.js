@@ -1,27 +1,31 @@
 'use strict';
 
-// The P&L model. Amounts are "points per 100 of plan sales" (sales start at 100). The numbers
-// the game plays for are ratios: every line divided by the current net sales, in percent, so
-// "OI 15" is a 15% margin and moves with the sales it is measured against.
+// The P&L model. Amounts are "points per 100 of plan net sales": the plan has sales 102 and
+// incentives 2, so net sales start at 100. The numbers the game plays for are ratios: every line
+// divided by the current net sales, in percent, so "OI 15" is a 15% margin and moves with the net
+// sales it is measured against.
 // All functions are pure: they return new objects and never touch their input.
 
+// Freight and direct charges, the cost of serving the client, follow the volume only in part.
 const SERVE_VARIABLE_SHARE = 0.6;
-const DEDUCTION_LINES = Object.freeze(['incentives', 'cost', 'serve', 'sga']);
+const DEDUCTION_LINES = Object.freeze(['incentives', 'cost', 'freight', 'direct', 'sga']);
 
 const BASE_PL = Object.freeze({
-  sales: 100,
+  sales: 102,
   incentives: 2,
-  cost: 53,
-  serve: 14,
+  cost: 55,
+  freight: 8,
+  direct: 6,
   sga: 16,
 });
 
-const contributionMargin = (pl) => pl.sales - pl.incentives - pl.cost;
-const grossProfit = (pl) => contributionMargin(pl) - pl.serve;
+const netSales = (pl) => pl.sales - pl.incentives;
+const contributionMargin = (pl) => netSales(pl) - pl.cost;
+const grossProfit = (pl) => contributionMargin(pl) - pl.freight - pl.direct;
 const operatingIncome = (pl) => grossProfit(pl) - pl.sga;
 
-// A line as a percentage of net sales (0 when there are no sales, instead of dividing by zero).
-const ratioOf = (pl, amount) => (pl.sales > 0 ? (100 * amount) / pl.sales : 0);
+// A line as a percentage of net sales (0 when there are none, instead of dividing by zero).
+const ratioOf = (pl, amount) => (netSales(pl) > 0 ? (100 * amount) / netSales(pl) : 0);
 const operatingMargin = (pl) => ratioOf(pl, operatingIncome(pl));
 
 function assertNumber(value, name) {
@@ -42,12 +46,14 @@ function scaleVolume(pl, pct) {
   assertNumber(pct, 'pct');
   if (pct <= -100) throw new Error(`Invalid pct: ${pct}`);
   const k = 1 + pct / 100;
+  const delivery = 1 + (k - 1) * SERVE_VARIABLE_SHARE;
   return {
     ...pl,
     sales: pl.sales * k,
     incentives: pl.incentives * k,
     cost: pl.cost * k,
-    serve: pl.serve * (1 + (k - 1) * SERVE_VARIABLE_SHARE),
+    freight: pl.freight * delivery,
+    direct: pl.direct * delivery,
   };
 }
 
@@ -87,7 +93,8 @@ const delta = (before, after) => ({
   sales: after.sales - before.sales,
   incentives: after.incentives - before.incentives,
   cost: after.cost - before.cost,
-  serve: after.serve - before.serve,
+  freight: after.freight - before.freight,
+  direct: after.direct - before.direct,
   sga: after.sga - before.sga,
   oi: operatingMargin(after) - operatingMargin(before),
 });
@@ -96,6 +103,7 @@ module.exports = {
   BASE_PL,
   SERVE_VARIABLE_SHARE,
   DEDUCTION_LINES,
+  netSales,
   contributionMargin,
   grossProfit,
   operatingIncome,

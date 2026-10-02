@@ -92,3 +92,22 @@ test('the effect moves the stated P&L line by exactly the OI points', () => {
   const cost = effectOf(problem, option('plac', 'incentives'), state());
   assert.deepEqual(cost.ops, [{ op: 'oi', line: 'incentives', pts: -0.375 }]);
 });
+
+test('at double pace every effect doubles and a shortcut bills its second half a month later', () => {
+  const { delayMonths } = require('../src/year/archetypes');
+  for (const a of IDS) {
+    const normal = effectOf(problem, option(a), state());
+    const fast = effectOf(problem, option(a), state({ pace: 2 }));
+    near(fast.oi, 2 * normal.oi);
+    for (const key of ['C', 'P', 'E']) near(fast.meters[key], 2 * normal.meters[key]);
+    if (normal.delayed) for (const key of ['C', 'P', 'E']) near(fast.delayed[key], 2 * normal.delayed[key]);
+  }
+  assert.equal(delayMonths(1), 2);
+  assert.equal(delayMonths(2), 1);
+});
+
+test('the value-measured bonus doubles at double pace too', () => {
+  const measured = state({ flags: { valueMeasured: true }, pace: 2 });
+  const plain = state({ pace: 2 });
+  near(effectOf(problem, option('smart'), measured).oi - effectOf(problem, option('smart'), plain).oi, 0.4);
+});

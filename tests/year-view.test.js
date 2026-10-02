@@ -7,6 +7,7 @@ const engine = require('../src/year/engine');
 const rules = require('../src/year/rules');
 const sim = require('../src/year/simulate');
 const model = require('../src/model');
+const { PROBLEMS } = require('../src/year/problems');
 
 const app = (year, lang = 'es', extra = {}) => ({ lang, year, bestYear: 0, ...extra });
 const pick = (run, a) => engine.options(run).findIndex((o) => o.a === a);
@@ -19,16 +20,25 @@ test('yearCards lists the four answers with text keys and a P&L chip, never the 
   const byA = Object.fromEntries(cards.map((c) => [c.a, c]));
   assert.equal(byA.smart.nameKey, 'year.m01c.smart.name');
   assert.equal(byA.temp.descKey, 'year.m01c.temp.desc');
-  assert.deepEqual(byA.smart.chip, { key: 'line.short.sales', dir: 1 });
-  assert.deepEqual(byA.plac.chip, { key: 'line.short.incentives', dir: 1 });
-  assert.deepEqual(byA.ign.chip, { key: 'line.short.sales', dir: -1 });
+  assert.deepEqual(byA.smart.chip, { key: 'line.short.incentives' });
+  assert.deepEqual(byA.temp.chip, { key: 'line.short.sales' });
+  assert.deepEqual(byA.plac.chip, { key: 'line.short.incentives' });
+  assert.deepEqual(byA.ign.chip, { key: 'line.short.sales' });
   for (const card of cards) assert.ok(!('meters' in card));
 });
 
-test('a cost line that falls shows a downward arrow because it helps OI', () => {
+test('the chip names the line an answer moves and never the way it goes, which would tell good from bad', () => {
   const plant = { ...engine.newYear(), problemIdx: 1 };
   const smart = view.yearCards(app(plant)).find((c) => c.a === 'smart');
-  assert.deepEqual(smart.chip, { key: 'line.short.cost', dir: -1 });
+  assert.deepEqual(smart.chip, { key: 'line.short.cost' });
+  PROBLEMS.forEach((problem, n) => {
+    const year = { ...engine.newYear(), monthIdx: Math.floor(n / 4), problemIdx: n % 4 };
+    const cards = view.yearCards(app(year));
+    for (const option of problem.options) {
+      const chip = cards.find((card) => card.a === option.a).chip;
+      assert.deepEqual(chip, { key: `line.short.${option.line}` }, `${problem.id} ${option.a}`);
+    }
+  });
 });
 
 test('crisisMeter names the meter at stake only when it is below 32', () => {
@@ -226,8 +236,8 @@ test('walkRows lay the OI bridge out as floating bars from plan to real', () => 
 test('walkRows skip lines that did not move and colour a fall red', () => {
   const quiet = view.walkRows(app(engine.newYear()), { start: 15, steps: [{ id: 'sales', pts: 0.01 }, { id: 'cost', pts: 2 }], end: 17.01 });
   assert.deepEqual(quiet.map((r) => r.label), ['Plan', 'Costo', 'Real']);
-  const worse = view.walkRows(app(engine.newYear(), 'en'), { start: 15, steps: [{ id: 'serve', pts: -3 }], end: 12 });
-  assert.deepEqual(worse.map((r) => r.label), ['Plan', 'Serve cost', 'Real']);
+  const worse = view.walkRows(app(engine.newYear(), 'en'), { start: 15, steps: [{ id: 'freight', pts: -3 }], end: 12 });
+  assert.deepEqual(worse.map((r) => r.label), ['Plan', 'Freight', 'Real']);
   assert.equal(worse[1].text, '-3.0');
   assert.equal(worse[1].tone, 'red');
 });
@@ -282,10 +292,71 @@ test('codeLines put the team name and the code on their own rows so nothing brea
 test('the verdict carries the P&L report: the plan against the P&L the year ended with', () => {
   const run = sim.simulate(sim.PROFILES.expert, 1);
   const { report } = view.verdict(app(run));
-  assert.equal(report.length, 14);
+  assert.equal(report.length, 16);
   const byId = Object.fromEntries(report.map((row) => [row.id, row]));
-  assert.equal(byId.oi.plan.value, rules.START_PL.sales - rules.START_PL.incentives - rules.START_PL.cost - rules.START_PL.serve - rules.START_PL.sga);
+  assert.equal(byId.net.plan.value, rules.START_PL.sales - rules.START_PL.incentives, 'the report opens on the plan net sales');
+  assert.equal(byId.oi.plan.value, rules.START_PL.sales - rules.START_PL.incentives - rules.START_PL.cost - rules.START_PL.freight - rules.START_PL.direct - rules.START_PL.sga);
   assert.ok(Math.abs(byId['oi.ratio'].real.value - engine.oiOf(run)) < 1e-9, 'the real OI ratio is the OI of the year');
   assert.ok(Math.abs(byId['oi.ratio'].plan.value - rules.PLAN_OI) < 1e-9, 'and the plan is the 15% of the rules');
   assert.equal(byId.oi.favorable, Math.sign(Math.round(byId['oi'].real.value * 10) - Math.round(byId['oi'].plan.value * 10)));
+});
+
+// ---- the half year and the play time
+test('the menu of a player lists the year, the half year and the tutorial; the creator adds the endings and the workshop', () => {
+  assert.deepEqual(view.menuItems({ creator: false }), ['year', 'half', 'tutorial']);
+  assert.deepEqual(view.menuItems({ creator: true }), ['year', 'half', 'tutorial', 'endings', 'workshop']);
+});
+
+test('the chart has one slot per month of the year being played', () => {
+  assert.equal(view.chartBars(engine.newYear()).length, 12);
+  assert.equal(view.chartBars(engine.newYear(null, 6)).length, 6);
+});
+
+test('the rules say what changes in a half year: the wear of the meters and the last month of the rescue', () => {
+  const expected = {
+    es: { full: [/casi 2 por mes/, /mes 9/], half: [/casi 4 por mes/, /mes 4/] },
+    en: { full: [/almost 2 a month/, /month 9/], half: [/almost 4 a month/, /month 4/] },
+  };
+  for (const lang of ['es', 'en']) {
+    for (const [mode, run] of [['full', engine.newYear()], ['half', engine.newYear(null, 6)]]) {
+      const lines = view.rulesLines(app(run, lang));
+      assert.match(lines[1], expected[lang][mode][0], `${lang} ${mode}`);
+      assert.match(lines[3], expected[lang][mode][1], `${lang} ${mode}`);
+      assert.equal(lines.length, 5);
+    }
+    // before the year starts the mode is the one chosen on the menu
+    assert.match(view.rulesLines({ lang, year: null, months: 6 })[1], expected[lang].half[0]);
+    assert.match(view.rulesLines({ lang, year: null, months: 12 })[1], expected[lang].full[0]);
+    assert.match(view.rulesLines({ lang })[1], expected[lang].full[0], 'no mode chosen means the full year');
+  }
+});
+
+test('the assumptions of a half year say that every answer weighs twice as much', () => {
+  const half = view.assumptionLines(app(engine.newYear(null, 6), 'es'));
+  const full = view.assumptionLines(app(engine.newYear(), 'es'));
+  assert.match(half[2], /doble/);
+  assert.doesNotMatch(full[2], /doble/);
+  assert.match(view.assumptionLines(app(engine.newYear(null, 6), 'en'))[2], /twice|double/);
+  assert.equal(half.length, 5);
+});
+
+test('the month close names the wear of the meters at the pace of the year', () => {
+  const closed = (run) => {
+    let r = run;
+    while (r.phase !== 'monthClose') r = r.phase === 'problem' ? engine.choose(r, 0) : engine.next(r);
+    return r;
+  };
+  assert.match(view.closeLines(app(closed(engine.newYear())))[0].text, /1,8/);
+  assert.match(view.closeLines(app(closed(engine.newYear(null, 6))))[0].text, /3,6/);
+  assert.match(view.closeLines(app(closed(engine.newYear(null, 6)), 'en'))[0].text, /3\.6/);
+});
+
+test('the verdict carries the play time as minutes and seconds, but only for a game that was played', () => {
+  const final = sim.simulate(sim.PROFILES.expert, 4);
+  assert.equal(view.verdict(app(final, 'es', { yearT: 1300 })).timeText, '21:40 min');
+  assert.equal(view.verdict(app(final, 'en', { yearT: 59 })).timeText, '00:59 min');
+  assert.equal(view.verdict(app(final, 'es', { yearT: 3725 })).timeText, '62:05 min');
+  assert.equal(view.verdict(app(final, 'es', { yearT: 0 })).timeText, null);
+  assert.equal(view.verdict(app(final, 'es', { yearT: 1300, sim: true })).timeText, null, 'a simulated year was not played');
+  assert.equal(view.verdict(app(final)).timeText, null, 'no clock at all');
 });

@@ -4,9 +4,9 @@
 // renderer and by the reducer so a tap lands on exactly what the player sees.
 
 const W = 256;
-const H = 240;
+const H = 256;
 // Everything above the footer strip.
-const PLAY_H = 228;
+const PLAY_H = 244;
 
 // Where the tutorial's boss stands, in the picture column.
 const BOSS_CENTER = Object.freeze({ x: 193, y: 41 });
@@ -28,24 +28,26 @@ const FOOTER = Object.freeze({
 // The decision screens of both modes. The P&L is a tall column at the left, like a report, with
 // the picture and the gauges in a column at the right; one dialogue window below holds the
 // situation, the answers as a list and the detail of the highlighted answer.
-const STATEMENT = Object.freeze({ x: 4, y: 3, w: 124, h: 126 });
+const STATEMENT = Object.freeze({ x: 4, y: 3, w: 124, h: 142 });
 const STATEMENT_ROWS = Object.freeze({ top: 13, pitch: 8, header: Object.freeze({ y: 3, h: 9 }) });
 const PLATE = Object.freeze({ x: 134, y: 3, w: 118, h: 14 });
 const ART = Object.freeze({ x: 134, y: 19, w: 118, h: 44 });
-const DASH = Object.freeze({ x: 134, y: 65, w: 118, h: 64 });
+const DASH = Object.freeze({ x: 134, y: 65, w: 118, h: 80 });
 // The picture and the gauges as one tall window, for screens that have a chart instead.
-const SIDE = Object.freeze({ x: 134, y: 19, w: 118, h: 110 });
+const SIDE = Object.freeze({ x: 134, y: 19, w: 118, h: 126 });
 const DIALOGUE = Object.freeze({
-  x: 4, y: 131, w: 248, h: 95, titleY: 4, sceneY: 13, firstRule: 32, answersY: 35, answerPitch: 9, secondRule: 72, detailY: 75,
+  x: 4, y: 147, w: 248, h: 95, titleY: 4, sceneY: 13, firstRule: 32, answersY: 35, answerPitch: 9, secondRule: 72, detailY: 75,
 });
 
-// Mode menu: three tall rows (name + description) and, on the endings screen, a list of
-// one-line play styles.
+// Mode menu: tall rows (name + description) and, on the endings screen, a list of one-line play
+// styles. The fewer the modes the taller the rows: two, three, four (the endings of a creator
+// without the half year) or the five of a creator.
 const MENU = Object.freeze({
   panel: Object.freeze({ x: 4, y: 84, w: 248, h: 140 }),
   row: Object.freeze({ x: 8, y: 104, w: 240, h: 26, step: 29 }),
-  // The two modes of a player get taller rows than the creator's four.
   rowFew: Object.freeze({ x: 8, y: 116, w: 240, h: 34, step: 42 }),
+  rowThree: Object.freeze({ x: 8, y: 104, w: 240, h: 30, step: 34 }),
+  rowFive: Object.freeze({ x: 8, y: 102, w: 240, h: 22, step: 23 }),
   profile: Object.freeze({ x: 8, y: 105, w: 240, h: 11, step: 11 }),
 });
 
@@ -60,7 +62,7 @@ const inside = (rect, x, y) => x >= rect.x && x < rect.x + rect.w && y >= rect.y
 
 const FEW_ROWS = 2;
 const menuRowRect = (i, count = 4) => {
-  const row = count <= FEW_ROWS ? MENU.rowFew : MENU.row;
+  const row = count <= FEW_ROWS ? MENU.rowFew : count === 3 ? MENU.rowThree : count >= 5 ? MENU.rowFive : MENU.row;
   return { x: row.x, y: row.y + i * row.step, w: row.w, h: row.h };
 };
 

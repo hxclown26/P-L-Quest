@@ -63,7 +63,9 @@ test('a smart answer moves OI and the meters as the rules say, and shows its res
   assert.equal(run.last.a, 'smart');
   near(run.last.delta.oi, (15.1 / 100.1) * 100 - 15);
   assert.equal(run.last.problemId, 'm01c');
-  near(run.pl.sales, 100.1);
+  // The balanced answer of month 1's renewal saves on incentives: the rebate ends up below the ask.
+  near(run.pl.incentives, 1.9);
+  near(run.pl.sales, 102);
 });
 
 test('each month has four problems, then the month closes with decay and meter effects', () => {
@@ -296,4 +298,65 @@ test('the content of a problem follows the problem, not the month it landed in',
 test('shuffled years never mutate their input either', () => {
   const run = deepFreeze(engine.newYear(11));
   assert.doesNotThrow(() => engine.next(engine.choose(run, 1)));
+});
+
+// ---- the half year: six months at double pace
+const atHalf = (monthIdx, problemIdx, patch = {}) => ({ ...engine.newYear(null, 6), monthIdx, problemIdx, ...patch });
+
+test('a year is 12 months at normal pace unless it is asked to be a half year', () => {
+  const full = engine.newYear(5);
+  assert.equal(full.months, 12);
+  assert.equal(full.pace, 1);
+  const half = engine.newYear(5, 6);
+  assert.equal(half.months, 6);
+  assert.equal(half.pace, 2);
+  assert.equal(half.schedule.order.length, 24);
+  assert.equal(engine.newYear(null, 6).schedule.order.length, 24);
+});
+
+test('a half year has six months of four problems and then the verdict', () => {
+  let run = engine.newYear(null, 6);
+  for (let guard = 0; guard < 400 && run.phase !== 'final'; guard += 1) {
+    run = run.phase === 'problem' ? choose(run, 'smart') : engine.next(run);
+  }
+  assert.equal(run.phase, 'final');
+  assert.equal(run.closes.length, 6);
+  assert.equal(run.history.length, 24);
+  assert.equal(run.outcome, 'excellent');
+});
+
+test('at double pace every answer weighs twice as much on OI and the meters', () => {
+  const normal = engine.preview(engine.newYear(), pick(engine.newYear(), 'smart'));
+  const half = engine.newYear(null, 6);
+  const fast = engine.preview(half, pick(half, 'smart'));
+  near(fast.oi, 2 * normal.oi);
+  near(fast.meters.C, 2 * normal.meters.C);
+});
+
+test('at double pace the month end wears the meters 3.6 and a shortcut bills its second half a month later', () => {
+  const half = engine.newYear(null, 6);
+  const chosen = choose(half, 'temp');
+  assert.equal(chosen.pending.length, 1);
+  assert.equal(chosen.pending[0].dueMonth, 1);
+  let r = engine.next(chosen);
+  r = step(step(step(r, 'ign'), 'ign'), 'ign');
+  while (r.phase !== 'monthClose') r = engine.next(r);
+  assert.ok(r.lastClose.meters.P < 60 - 3.6 - 3, 'the bill landed with the first close of the next month or earlier');
+  const closed = engine.next(r);
+  assert.equal(closed.phase, 'problem');
+  let later = closed;
+  for (let i = 0; i < 4; i += 1) later = step(later, 'ign');
+  while (later.phase !== 'monthClose') later = engine.next(later);
+  assert.ok(later.lastClose.delayedApplied.some((d) => d.because === 'm01c'));
+});
+
+test('a half year can rescue a zero up to month 4; later it is bankruptcy', () => {
+  const thin = model.applyOp(model.BASE_PL, { op: 'oi', line: 'sales', pts: -14.8 });
+  const early = engine.next(choose(atHalf(3, 0, { pl: thin }), 'ign'));
+  assert.equal(early.phase, 'rescue');
+  assert.equal(early.rescueMonth, 4);
+  const late = engine.next(choose(atHalf(4, 0, { pl: thin }), 'ign'));
+  assert.equal(late.phase, 'final');
+  assert.equal(late.outcome, 'bankrupt');
+  assert.equal(late.bankruptMonth, 5);
 });

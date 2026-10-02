@@ -57,11 +57,11 @@ function createEnvironment({ lang = 'es-CL', blockStorage = false, preload = {},
 
   const canvas = {
     width: 256,
-    height: 240,
+    height: 256,
     style: {},
     getContext: () => ctx,
     addEventListener: (type, fn) => { canvasHandlers[type] = fn; },
-    getBoundingClientRect: () => ({ left: 0, top: 0, width: 512, height: 480 }),
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 512, height: 512 }),
   };
   const storage = blockStorage ? null : {
     getItem: (k) => (k in store ? store[k] : null),
@@ -218,7 +218,7 @@ test('the tutorial still plays from the mode menu, in both languages', () => {
   for (const lang of ['es-CL', 'en-US']) {
     const env = createEnvironment({ lang });
     env.frame(3);
-    pressAll(env, ['Enter', 'ArrowDown', 'Enter', 'Enter'], 2);
+    pressAll(env, ['Enter', 'ArrowDown', 'ArrowDown', 'Enter', 'Enter'], 2);
     playThrough(env, 400);
     assert.ok(env.counters.drawImage > 1000, lang);
   }
@@ -240,7 +240,7 @@ test('a whole year played with Enter ends, saves the best year and starts over f
 test('the endings list plays all eight simulated years without saving a best year', () => {
   const env = createEnvironment({ lang: 'en-US', creator: true });
   env.frame(3);
-  pressAll(env, ['Enter', 'ArrowDown', 'ArrowDown', 'Enter'], 2);
+  pressAll(env, ['Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter'], 2);
   for (let i = 0; i < 8; i += 1) {
     pressAll(env, ['Enter', 'Enter', 'Enter', 'Enter', 'ArrowDown'], 2);
   }
@@ -328,7 +328,7 @@ const typeText = (env, text) => [...text].forEach((ch) => {
 });
 
 // title -> menu -> workshop menu
-const intoWorkshop = (env) => pressAll(env, ['Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter'], 2);
+const intoWorkshop = (env) => pressAll(env, ['Enter', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'Enter'], 2);
 
 test('a team plays a whole workshop year and copies its result code from the last page', () => {
   const env = createEnvironment({ creator: true });

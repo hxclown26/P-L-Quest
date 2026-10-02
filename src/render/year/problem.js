@@ -62,13 +62,8 @@ function drawSituation(ctx, app, problem) {
   drawRule(ctx, d, d.firstRule);
 }
 
-// The P&L line an answer moves and which way the line goes; never the effect on the meters.
-function drawChip(ctx, app, chip, right, y) {
-  const label = tx(app, chip.key);
-  const x = right - ui.textWidth(label) - (chip.dir ? 7 : 0);
-  ui.text(ctx, label, x, y, P.gray);
-  if (chip.dir) ui.triangle(ctx, x + ui.textWidth(label) + 1, y + 1, chip.dir, P.white);
-}
+// The P&L line an answer moves; never which way it goes nor the effect on the meters.
+const drawChip = (ctx, app, chip, right, y) => ui.textRight(ctx, tx(app, chip.key), right, y, P.gray);
 
 function drawAnswer(ctx, app, card, i) {
   const r = layout.answerRect(i);

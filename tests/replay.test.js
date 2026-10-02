@@ -67,7 +67,7 @@ test('the fingerprint is a stable byte that identifies this build of the rules',
 });
 
 test('the fingerprint notices a change in the data the rules run on, not only in how a year plays out', () => {
-  const { fingerprintFor, currentParts } = require('../src/year/replay');
+  const { fingerprintFor, hashFor, currentParts } = require('../src/year/replay');
   const parts = currentParts();
   assert.equal(fingerprintFor(parts), fingerprint());
   const tweaks = {
@@ -76,7 +76,8 @@ test('the fingerprint notices a change in the data the rules run on, not only in
     base: { ...parts, base: { ...parts.base, cost: parts.base.cost + 1 } },
     grade: { ...parts, rules: { ...parts.rules, GRADES: [['excellent', 22, 55], ...parts.rules.GRADES.slice(1)] } },
   };
+  // The wide hash, not the byte: one byte collides by chance once in 256 changes.
   for (const [name, changed] of Object.entries(tweaks)) {
-    assert.notEqual(fingerprintFor(changed), fingerprint(), `${name} change goes unnoticed`);
+    assert.notEqual(hashFor(changed), hashFor(parts), `${name} change goes unnoticed`);
   }
 });

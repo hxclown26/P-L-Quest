@@ -166,7 +166,7 @@ test('the report note takes two rows at most, in both languages', () => {
 test('every label and number of the report fits its column, in both languages, even for a bankrupt year', () => {
   const { reportRows } = require('../src/ui/statement');
   const [planRight, realRight, varianceRight] = report.COLUMNS.map((column) => column.right);
-  const bankrupt = { sales: 62, incentives: 6.5, cost: 48, serve: 19, sga: 30 };
+  const bankrupt = { sales: 62, incentives: 6.5, cost: 48, freight: 11, direct: 8, sga: 30 };
   assert.ok(model.operatingMargin(bankrupt) < 0, 'the worst case is a loss');
   for (const lang of LANGS) {
     const app = { lang };
@@ -196,11 +196,13 @@ test('every label and number of the report fits its column, in both languages, e
 
 const overlays = require('../src/render/year/overlays');
 
-test('both pages of the rules fit above their hint, in both languages', () => {
+test('both pages of the rules fit above their hint, in both languages and in both lengths of year', () => {
   for (const lang of LANGS) {
-    for (const page of [0, 1]) {
-      const plan = overlays.planRules({ lang }, page);
-      assert.ok(plan.end <= overlays.RULES.hintY - 2, `${lang} page ${page + 1} ends at ${plan.end}, the hint is at ${overlays.RULES.hintY}`);
+    for (const months of [12, 6]) {
+      for (const page of [0, 1]) {
+        const plan = overlays.planRules({ lang, months }, page);
+        assert.ok(plan.end <= overlays.RULES.hintY - 2, `${lang} ${months} months page ${page + 1} ends at ${plan.end}, the hint is at ${overlays.RULES.hintY}`);
+      }
     }
   }
 });

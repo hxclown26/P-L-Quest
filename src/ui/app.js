@@ -22,6 +22,8 @@ const createApp = ({ lang, muted, best, bestYear = 0, seed = 1, creator = false 
   best,
   bestYear,
   seed,
+  months: 12,
+  yearT: 0,
   codeEntry: '',
   rulesPage: 0,
   creator,
@@ -112,8 +114,12 @@ function onTap(app, x, y) {
 
 const onHover = (app, x, y) => (app.overlay ? result(app) : HANDLERS[app.scene].hover(app, x, y));
 
+// The clock of a game runs from the first problem to the verdict (the rules read in between count).
+const PLAYED_PHASES = Object.freeze(['problem', 'result', 'monthClose', 'rescue']);
+const playing = (app) => app.scene === 'year' && !app.sim && app.year !== null && PLAYED_PHASES.includes(app.year.phase);
+
 function onTick(app, dt) {
-  const ticked = { ...app, t: app.t + dt, phaseT: app.phaseT + dt };
+  const ticked = { ...app, t: app.t + dt, phaseT: app.phaseT + dt, yearT: playing(app) ? app.yearT + dt : app.yearT };
   return app.overlay ? result(ticked) : HANDLERS[app.scene].tick(ticked);
 }
 

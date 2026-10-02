@@ -33,11 +33,12 @@ test('revealLines says what happened, in Spanish and in English', () => {
   const run = play(atFloor2(), 'give3');
   const es = view.revealLines({ lang: 'es', run });
   assert.match(es[0].text, /Dar el 3%/);
-  assert.match(es[1].text, /^OI \d+,\d% > \d+,\d% {2}\(-3,0 pp\)$/);
+  // The 3 points of rebate leave OI and the net sales it is measured against, so the margin falls 2.6.
+  assert.match(es[1].text, /^OI \d+,\d% > \d+,\d% {2}\(-2,6 pp\)$/);
   assert.equal(es[1].tone, 'red');
   const en = view.revealLines({ lang: 'en', run });
   assert.match(en[0].text, /Give the 3%/);
-  assert.match(en[1].text, /\(-3\.0 pp\)/);
+  assert.match(en[1].text, /\(-2\.6 pp\)/);
 });
 
 test('revealLines warns that free freight moves to floor 4 and that Scan opens a card', () => {
@@ -83,10 +84,10 @@ test('autopsyLines names the line and the costliest choice', () => {
   const run = {
     phase: 'dead',
     checkpoint: null,
-    autopsy: { biggestLine: 'serve', worst: { floor: 2, turn: 1, chosen: 'give3', best: 'scan' } },
+    autopsy: { biggestLine: 'delivery', worst: { floor: 2, turn: 1, chosen: 'give3', best: 'scan' } },
   };
   const lines = view.autopsyLines({ lang: 'es', run });
-  assert.ok(lines.some((l) => /Costo de servir/.test(l)));
+  assert.ok(lines.some((l) => /Flete y Direct/.test(l)));
   assert.ok(lines.some((l) => /Dar el 3%/.test(l) && /Scan: medir ahorro/.test(l)));
   assert.ok(lines.some((l) => /primer piso/.test(l)));
   const withRoom = view.autopsyLines({ lang: 'en', run: { ...run, checkpoint: {} } });
@@ -114,8 +115,8 @@ test('plBefore rebuilds the P&L as it was before the last card', () => {
 test('floorImpact adds the arrival shock to the cards played on the floor', () => {
   const opening = atFloor2();
   const toFloor3 = ['scan', 'measured', 'contract3y'].reduce(play, opening);
-  const sales = toFloor3.pl.sales;
-  assert.ok(Math.abs(view.floorImpact(toFloor3) - (-4 / sales) * 100) < 1e-9, 'only the cost shock so far');
+  const net = model.netSales(toFloor3.pl);
+  assert.ok(Math.abs(view.floorImpact(toFloor3) - (-4 / net) * 100) < 1e-9, 'only the cost shock so far');
   const played = engine.playCard(toFloor3, 'renegotiate');
-  assert.ok(Math.abs(view.floorImpact(played) - (-2.8 / sales) * 100) < 1e-9);
+  assert.ok(Math.abs(view.floorImpact(played) - (-2.8 / net) * 100) < 1e-9);
 });

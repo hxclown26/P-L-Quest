@@ -18,6 +18,8 @@ const ARCHETYPES = deepFreeze({
 
 const IDS = Object.freeze(Object.keys(ARCHETYPES));
 const DELAY_MONTHS = 2;
+// A shortcut sends the second half of its bill this many months later: fewer at a faster pace.
+const delayMonths = (pace = 1) => Math.max(1, Math.round(DELAY_MONTHS / pace));
 const VALUE_OI = 0.2;
 const VALUE_METER = 2;
 const DELAYED_SHARE = 0.5;
@@ -25,21 +27,23 @@ const DELAYED_SHARE = 0.5;
 const scaleMeters = (meters, factor) =>
   Object.fromEntries(rules.METER_KEYS.map((key) => [key, meters[key] * factor]));
 
-// What one answer does to a state. Pure: returns the effect, the caller applies it.
+// What one answer does to a state. Pure: returns the effect, the caller applies it. At double pace
+// (the half year) every effect is twice as big.
 function effectOf(problem, option, state) {
   const base = ARCHETYPES[option.a];
-  const k = problem.size * (option.k ?? 1);
+  const pace = state.pace ?? 1;
+  const k = problem.size * (option.k ?? 1) * pace;
   const smart = option.a === 'smart';
   const crisis = smart && state.meters[problem.focus] < rules.CRISIS;
   const recovery = smart && state.rescued && state.oi < rules.RECOVERY_UNTIL;
   const value = smart && problem.voice === 'cliente' && state.flags.valueMeasured === true;
 
-  const oi = base.oi * k * (recovery ? rules.RECOVERY_K : 1) + (value ? VALUE_OI : 0);
+  const oi = base.oi * k * (recovery ? rules.RECOVERY_K : 1) + (value ? VALUE_OI * pace : 0);
   const focusFactor = crisis ? rules.CRISIS_FACTOR : 1;
   const all = Object.fromEntries(rules.METER_KEYS.map((key) => [
     key,
     key === problem.focus
-      ? base.focus * k * focusFactor + (value ? VALUE_METER : 0)
+      ? base.focus * k * focusFactor + (value ? VALUE_METER * pace : 0)
       : base.side * k,
   ]));
   const deferred = option.a === 'temp';
@@ -52,4 +56,4 @@ function effectOf(problem, option, state) {
   };
 }
 
-module.exports = { ARCHETYPES, IDS, DELAY_MONTHS, effectOf };
+module.exports = { ARCHETYPES, IDS, DELAY_MONTHS, delayMonths, effectOf };

@@ -39,9 +39,9 @@ test('unknown keys map to nothing', () => {
   assert.equal(keyToAction(undefined), null);
 });
 
-test('toLogical converts client coordinates to the 256x240 screen', () => {
-  const rect = { left: 10, top: 20, width: 512, height: 480 };
-  assert.deepEqual(toLogical(266, 260, rect), { x: 128, y: 120 });
+test('toLogical converts client coordinates to the 256x256 screen', () => {
+  const rect = { left: 10, top: 20, width: 512, height: 512 };
+  assert.deepEqual(toLogical(266, 276, rect), { x: 128, y: 128 });
   assert.deepEqual(toLogical(10, 20, rect), { x: 0, y: 0 });
 });
 
@@ -132,7 +132,23 @@ test('the four mode rows and the two workshop rows tile the panel and are hit-te
   for (let i = 1; i < rows.length; i += 1) assert.ok(rows[i].y >= rows[i - 1].y + rows[i - 1].h, `menu row ${i}`);
   assert.ok(rows[3].y + rows[3].h <= layout.MENU.panel.y + layout.MENU.panel.h, 'the fourth row stays inside the panel');
   for (let i = 0; i < 4; i += 1) assert.equal(layout.hitMenuRow(20, rows[i].y + 3, 4), i);
-  assert.equal(layout.hitMenuRow(20, rows[3].y + 3, 3), -1, 'a list of three has no fourth row');
+});
+
+test('the three modes of a player and the five of the creator tile the panel and are hit-testable', () => {
+  for (const count of [3, 5]) {
+    const rows = Array.from({ length: count }, (_, i) => layout.menuRowRect(i, count));
+    for (let i = 1; i < rows.length; i += 1) assert.ok(rows[i].y >= rows[i - 1].y + rows[i - 1].h, `${count} rows: row ${i} overlaps the one above`);
+    rows.forEach((r, i) => {
+      assert.ok(r.y >= layout.MENU.panel.y + 14, `${count} rows: row ${i} runs into the panel title`);
+      assert.ok(r.y + r.h <= layout.MENU.panel.y + layout.MENU.panel.h - 6, `${count} rows: row ${i} leaves the panel`);
+      assert.ok(r.h >= 22, `${count} rows: row ${i} is too short for two lines of text`);
+      assert.equal(layout.hitMenuRow(r.x + 4, r.y + 2, count), i);
+    });
+    const last = rows[count - 1];
+    assert.equal(layout.hitMenuRow(20, last.y + last.h + 3, count), -1, `${count} rows: nothing below the last row`);
+  }
+  const three = layout.menuRowRect(2, 3);
+  assert.ok(three.y + three.h <= layout.MENU.panel.y + layout.MENU.panel.h - 20, 'three rows leave room for the fictional-data notice');
 });
 
 test('the setup fields do not overlap, stay inside the panel and are hit-testable', () => {

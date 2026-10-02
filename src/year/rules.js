@@ -4,6 +4,9 @@
 // OI: they decay every month, drag OI when low, and any of them reaching zero ends the
 // company unless a one-time rescue plan is still possible. The numbers were fitted on
 // thousands of simulated years: tests/year-balance.test.js keeps them honest.
+//
+// The half year (6 months) is the same year at double speed: `pace` is 2 and every monthly
+// effect is twice as big, so the grades and the rest of the numbers keep their meaning.
 
 const { BASE_PL, operatingMargin } = require('../model');
 
@@ -27,8 +30,8 @@ const FLYWHEEL_BONUS = 0.08;
 const CRISIS = 32;
 const CRISIS_FACTOR = 0.4;
 
-// A stressed P&L with OI 2: 100 - 3 - 56 - 17 - 22.
-const RESCUE_PL = Object.freeze({ sales: 100, incentives: 3, cost: 56, serve: 17, sga: 22 });
+// A stressed P&L with OI 2: net sales 100 (103 - 3), less 59, 10 + 7 and 22.
+const RESCUE_PL = Object.freeze({ sales: 103, incentives: 3, cost: 59, freight: 10, direct: 7, sga: 22 });
 const RESCUE_METER = 38;
 const RESCUE_LAST_MONTH = 9;
 const RESCUE_GOAL = 10;
@@ -48,18 +51,18 @@ const clampMeter = (value) => Math.max(0, Math.min(100, value));
 
 // Meters decay each month; unhealthy ones drag OI, strong ones lift it, and all three
 // healthy at once start a virtuous circle. Adjustments are computed before the decay.
-function monthEnd(meters) {
+function monthEnd(meters, pace = 1) {
   const adjustments = METER_KEYS.flatMap((key) => {
     const value = meters[key];
-    if (value < DRAG_BELOW) return [{ line: METER_LINE[key], pts: -(DRAG_BELOW - value) * DRAG_RATE, because: key }];
-    if (value > BONUS_ABOVE) return [{ line: METER_BONUS_LINE[key], pts: (value - BONUS_ABOVE) * BONUS_RATE, because: key }];
+    if (value < DRAG_BELOW) return [{ line: METER_LINE[key], pts: -(DRAG_BELOW - value) * DRAG_RATE * pace, because: key }];
+    if (value > BONUS_ABOVE) return [{ line: METER_BONUS_LINE[key], pts: (value - BONUS_ABOVE) * BONUS_RATE * pace, because: key }];
     return [];
   });
   const circle = METER_KEYS.every((key) => meters[key] >= FLYWHEEL)
-    ? [{ line: 'sales', pts: FLYWHEEL_BONUS, because: 'fly' }]
+    ? [{ line: 'sales', pts: FLYWHEEL_BONUS * pace, because: 'fly' }]
     : [];
   return {
-    meters: Object.fromEntries(METER_KEYS.map((key) => [key, clampMeter(meters[key] - DECAY)])),
+    meters: Object.fromEntries(METER_KEYS.map((key) => [key, clampMeter(meters[key] - DECAY * pace)])),
     adjustments: [...adjustments, ...circle],
   };
 }
@@ -86,7 +89,7 @@ const rescueState = (meters) => ({
   meters: Object.fromEntries(METER_KEYS.map((key) => [key, Math.max(meters[key], RESCUE_METER)])),
 });
 
-const canRescue = (month, alreadyRescued) => !alreadyRescued && month <= RESCUE_LAST_MONTH;
+const canRescue = (month, alreadyRescued, pace = 1) => !alreadyRescued && month <= Math.floor(RESCUE_LAST_MONTH / pace);
 
 const weakest = (meters) => METER_KEYS.reduce((low, key) => (meters[key] < meters[low] ? key : low), 'C');
 

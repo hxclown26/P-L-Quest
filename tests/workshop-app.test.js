@@ -23,7 +23,7 @@ const codeOf = (name, profile, seed = 3, code = CODE) => encode({
   choices: decisionsOf(sim.simulate(sim.PROFILES[profile], seed, engine.newYear(code))),
 });
 
-const intoWorkshop = () => pressAll(fresh(), ['confirm', 'down', 'down', 'down', 'confirm']).app;
+const intoWorkshop = () => pressAll(fresh(), ['confirm', 'down', 'down', 'down', 'down', 'confirm']).app;
 const intoSetup = () => press(intoWorkshop(), 'confirm').app;
 const intoRank = () => pressAll(intoWorkshop(), ['down', 'confirm']).app;
 
@@ -50,10 +50,10 @@ function playTeam(profile, seed = 3, name = 'Halcones') {
   return app;
 }
 
-test('the mode menu has a fourth entry that opens the workshop, with its own two rows', () => {
+test('the mode menu has a fifth entry that opens the workshop, with its own two rows', () => {
   const workshop = intoWorkshop();
   assert.equal(workshop.scene, 'workshop');
-  assert.equal(workshop.menuIdx, 3);
+  assert.equal(workshop.menuIdx, 4);
   assert.equal(pressAll(workshop, ['down', 'down']).app.workshopIdx, 1, 'the list stops at its last row');
   assert.equal(press(workshop, 'back').app.scene, 'menu');
   assert.equal(intoSetup().scene, 'setup');

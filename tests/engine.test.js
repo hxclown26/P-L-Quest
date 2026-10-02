@@ -103,14 +103,14 @@ test('engine functions never mutate their input', () => {
   assert.doesNotThrow(() => engine.next(played));
 });
 
-test('free freight comes back as cost to serve when floor 4 starts', () => {
+test('free freight comes back as freight when floor 4 starts', () => {
   const opening = ['listPrice', 'bundle', 'raise'].reduce(play, start());
   const floor2 = ['freight', 'giveHalf', 'hold'].reduce(play, opening);
   const floor3 = ['renegotiate', 'hedge', 'stockUp'].reduce(play, floor2);
   assert.equal(floor3.floorIdx, 3);
   assert.deepEqual(floor3.entry.fromCards, ['freight']);
-  // The bill is 2.5 points of cost to serve; as a margin it is 2.5 over the sales it lands on.
-  near(floor3.entry.deferredOi, (-2.5 / floor3.pl.sales) * 100);
+  // The bill is 2.5 points of freight; as a margin it is 2.5 over the net sales it lands on.
+  near(floor3.entry.deferredOi, (-2.5 / model.netSales(floor3.pl)) * 100);
 });
 
 test('a floor lasts three turns and then summarizes', () => {

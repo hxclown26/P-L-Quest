@@ -11,7 +11,7 @@ const press = (app, key) => reduce(app, { type: 'key', key });
 const pressAll = (app, keys) => keys.reduce((state, key) => press(state.app, key), { app, effects: [] });
 const names = (result) => result.effects.map((e) => e.name || e.mode || e.type);
 
-const intoTutorialIntro = () => pressAll(fresh(), ['confirm', 'down', 'confirm']).app;
+const intoTutorialIntro = () => pressAll(fresh(), ['confirm', 'down', 'down', 'confirm']).app;
 const intoPlay = () => press(intoTutorialIntro(), 'confirm').app;
 const intoTurn = () => press(intoPlay(), 'confirm').app;
 
@@ -45,7 +45,7 @@ test('title leads to the menu, the menu to the tutorial intro and the intro star
   const first = press(fresh(), 'confirm');
   assert.equal(first.app.scene, 'menu');
   assert.ok(names(first).includes('title'), 'title music starts on the first interaction');
-  const second = pressAll(first.app, ['down', 'confirm']);
+  const second = pressAll(first.app, ['down', 'down', 'confirm']);
   assert.equal(second.app.scene, 'intro');
   const third = press(second.app, 'confirm');
   assert.equal(third.app.scene, 'play');
@@ -112,7 +112,7 @@ test('a perfect run reaches the final screen and saves three stars', () => {
 
 test('dying silences the music and retrying brings it back', () => {
   const doomedRun = engine.enterFloor(
-    { ...engine.newRun(), pl: { sales: 100, incentives: 2, cost: 53, serve: 14, sga: 30 } },
+    { ...engine.newRun(), pl: { sales: 100, incentives: 2, cost: 53, freight: 8, direct: 6, sga: 30 } },
     2,
   );
   const dead = { ...intoPlay(), run: doomedRun };
@@ -172,7 +172,7 @@ test('back leaves the tutorial straight away from its final and game-over screen
   assert.equal(left.app.run, null);
   assert.ok(names(left).includes('title'));
   const doomedRun = engine.enterFloor(
-    { ...engine.newRun(), pl: { sales: 100, incentives: 2, cost: 53, serve: 14, sga: 30 } },
+    { ...engine.newRun(), pl: { sales: 100, incentives: 2, cost: 53, freight: 8, direct: 6, sga: 30 } },
     2,
   );
   const dead = { ...intoPlay(), run: doomedRun };

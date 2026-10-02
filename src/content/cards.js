@@ -22,14 +22,14 @@ const CARD_LIST = Object.freeze([
   define({ id: 'raise', floor: 1, area: 'sales', rating: 'good', ops: [price(1.5), volume(-1.5)] }),
   define({ id: 'listPrice', floor: 1, area: 'sales', rating: 'ok' }),
   define({ id: 'discount', floor: 1, area: 'sales', rating: 'bad', ops: [price(-3), volume(6)] }),
-  define({ id: 'chase', floor: 1, area: 'sales', rating: 'bad', ops: [volume(3), add('serve', 1.5)] }),
-  define({ id: 'bundle', floor: 1, area: 'sales', rating: 'good', ops: [price(1), add('serve', 0.5)] }),
-  define({ id: 'forecast', floor: 1, area: 'sales', rating: 'good', ops: [add('serve', -0.4)] }),
+  define({ id: 'chase', floor: 1, area: 'sales', rating: 'bad', ops: [volume(3), add('freight', 1.5)] }),
+  define({ id: 'bundle', floor: 1, area: 'sales', rating: 'good', ops: [price(1), add('direct', 0.5)] }),
+  define({ id: 'forecast', floor: 1, area: 'sales', rating: 'good', ops: [add('freight', -0.4)] }),
 
   // Floor 2: Incentives (the negotiation room)
   define({ id: 'give3', floor: 2, area: 'sales', rating: 'bad', ops: [add('incentives', 3)] }),
   define({ id: 'hold', floor: 2, area: 'sales', rating: 'ok', ops: [volume(-5)] }),
-  define({ id: 'freight', floor: 2, area: 'sales', rating: 'bad', later: [later(4, add('serve', 2.5))] }),
+  define({ id: 'freight', floor: 2, area: 'sales', rating: 'bad', later: [later(4, add('freight', 2.5))] }),
   define({ id: 'scan', floor: 2, area: 'finance', rating: 'good', grants: ['scanned'], worth: 2 }),
   define({
     id: 'measured',
@@ -56,17 +56,17 @@ const CARD_LIST = Object.freeze([
     area: 'procurement',
     rating: 'ok',
     ops: [add('cost', -1.5)],
-    later: [later(4, add('serve', 0.8))],
+    later: [later(4, add('direct', 0.8))],
   }),
   define({ id: 'stockUp', floor: 3, area: 'procurement', rating: 'ok', ops: [add('cost', -1)] }),
   define({ id: 'hedge', floor: 3, area: 'procurement', rating: 'ok', ops: [add('cost', -0.8)] }),
 
-  // Floor 4: Cost to serve (dispatch and field)
-  define({ id: 'acceptAll', floor: 4, area: 'sales', rating: 'bad', ops: [add('serve', 3.5)] }),
-  define({ id: 'routeOpt', floor: 4, area: 'ops', rating: 'good', ops: [add('serve', -0.8)] }),
-  define({ id: 'remote', floor: 4, area: 'ops', rating: 'good', ops: [add('serve', -1.2)] }),
+  // Floor 4: Freight and direct charges (dispatch and field)
+  define({ id: 'acceptAll', floor: 4, area: 'sales', rating: 'bad', ops: [add('freight', 1.5), add('direct', 2)] }),
+  define({ id: 'routeOpt', floor: 4, area: 'ops', rating: 'good', ops: [add('freight', -0.8)] }),
+  define({ id: 'remote', floor: 4, area: 'ops', rating: 'good', ops: [add('direct', -1.2)] }),
   define({ id: 'fee', floor: 4, area: 'finance', rating: 'good', requires: ['valueMeasured'], ops: [price(0.8)] }),
-  define({ id: 'comodatoReview', floor: 4, area: 'finance', rating: 'good', ops: [add('serve', -0.6)] }),
+  define({ id: 'comodatoReview', floor: 4, area: 'finance', rating: 'good', ops: [add('direct', -0.6)] }),
   define({ id: 'ignore', floor: 4, area: 'mgmt', rating: 'bad' }),
   define({ id: 'billExtras', floor: 4, area: 'sales', rating: 'ok', ops: [price(0.5)] }),
 

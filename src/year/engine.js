@@ -6,10 +6,13 @@
 // Phases: problem -> result -> (problem x4) -> monthClose -> (next month) ... -> final -> over.
 // A zero (OI or a meter) found at a result or a month close goes through 'rescue' once, up
 // to month 9; otherwise the company is bankrupt and the run jumps to 'final'.
+//
+// A run may also be a half year: 6 months at double pace (`run.months`, `run.pace`), the same
+// year at double speed: the rescue then lasts until month 4.
 
 const { applyOps, operatingMargin } = require('../model');
 const rules = require('./rules');
-const { effectOf, DELAY_MONTHS } = require('./archetypes');
+const { effectOf, delayMonths } = require('./archetypes');
 const { VOICES, PROBLEMS_BY_ID } = require('./problems');
 const { authoredSchedule, buildSchedule } = require('./schedule');
 
@@ -19,14 +22,17 @@ const PROBLEMS_PER_MONTH = VOICES.length;
 // OI is always the margin: operating income as a percentage of net sales.
 const oiOf = (run) => operatingMargin(run.pl);
 
-const AUTHORED = authoredSchedule();
+const AUTHORED = authoredSchedule(MONTHS);
 
 // Without a seed the year follows the authored calendar (tests and the simulations use it);
-// with one, the problems and the answers come in that seed's own order.
-const newYear = (seed = null) => ({
+// with one, the problems and the answers come in that seed's own order. `months` is 12, or 6 for
+// the half year.
+const newYear = (seed = null, months = MONTHS) => ({
   mode: 'year',
   seed,
-  schedule: seed === null ? AUTHORED : buildSchedule(seed),
+  months,
+  pace: MONTHS / months,
+  schedule: seed === null ? (months === MONTHS ? AUTHORED : authoredSchedule(months)) : buildSchedule(seed, months),
   phase: 'problem',
   monthIdx: 0,
   problemIdx: 0,
@@ -61,7 +67,7 @@ const addMeters = (meters, delta) =>
 function preview(run, index) {
   const option = options(run)[index];
   if (!option) throw new Error(`No option at index ${index}`);
-  const effect = effectOf(currentProblem(run), option, { meters: run.meters, oi: oiOf(run), rescued: run.rescued, flags: run.flags });
+  const effect = effectOf(currentProblem(run), option, { meters: run.meters, oi: oiOf(run), rescued: run.rescued, flags: run.flags, pace: run.pace });
   return { ...effect, pp: operatingMargin(applyOps(run.pl, effect.ops)) - oiOf(run) };
 }
 
@@ -88,7 +94,7 @@ function choose(run, index) {
     delayed: effect.delayed,
   };
   const pending = effect.delayed
-    ? [...run.pending, { dueMonth: Math.min(run.monthIdx + DELAY_MONTHS, MONTHS - 1), meters: effect.delayed, because: problem.id }]
+    ? [...run.pending, { dueMonth: Math.min(run.monthIdx + delayMonths(run.pace), run.months - 1), meters: effect.delayed, because: problem.id }]
     : run.pending;
   return {
     ...run,
@@ -108,7 +114,7 @@ function choose(run, index) {
 function closeMonth(run) {
   const due = run.pending.filter((p) => p.dueMonth <= run.monthIdx);
   const afterDue = due.reduce((meters, p) => addMeters(meters, p.meters), run.meters);
-  const { meters, adjustments } = rules.monthEnd(afterDue);
+  const { meters, adjustments } = rules.monthEnd(afterDue, run.pace);
   const pl = applyOps(run.pl, adjustments.map((a) => ({ op: 'oi', line: a.line, pts: a.pts })));
   const close = {
     monthIdx: run.monthIdx,
@@ -145,10 +151,10 @@ const finish = (run) => ({
   outcome: rules.classify(oiOf(run), run.meters, run.rescued),
 });
 
-// A zero: rescue once (up to month 9) or go bankrupt.
+// A zero: rescue once (up to month 9, month 4 in a half year) or go bankrupt.
 function handleZero(run, resume) {
   const month = run.monthIdx + 1;
-  if (!rules.canRescue(month, run.rescued)) return bankrupt(run);
+  if (!rules.canRescue(month, run.rescued, run.pace)) return bankrupt(run);
   const rescued = rules.rescueState(run.meters);
   return {
     ...run,
@@ -176,7 +182,7 @@ const afterResult = (run) => {
 };
 
 const afterClose = (run) => {
-  if (run.monthIdx >= MONTHS - 1) return finish(run);
+  if (run.monthIdx >= run.months - 1) return finish(run);
   return { ...run, phase: 'problem', monthIdx: run.monthIdx + 1, problemIdx: 0 };
 };
 

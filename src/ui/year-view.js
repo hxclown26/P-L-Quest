@@ -6,7 +6,6 @@
 const rules = require('../year/rules');
 const engine = require('../year/engine');
 const { walk, feedback } = require('../year/feedback');
-const { ARCHETYPES } = require('../year/archetypes');
 const { SHOWCASE } = require('../year/showcase');
 const { tx, num, signed } = require('./tx');
 const { toneOf } = require('./view');
@@ -16,34 +15,35 @@ const OUTCOME_TIER = Object.freeze({
   excellent: 'hightech', good: 'modern', fair: 'normal', bad: 'worn', terrible: 'edge', bankrupt: 'collapse',
 });
 const RANKS = Object.freeze(['', 'bankrupt', 'terrible', 'bad', 'fair', 'good', 'excellent']);
-const PLAYER_MENU = Object.freeze(['year', 'tutorial']);
+const PLAYER_MENU = Object.freeze(['year', 'half', 'tutorial']);
 const CREATOR_MENU = Object.freeze([...PLAYER_MENU, 'endings', 'workshop']);
 const PROFILE_ITEMS = Object.freeze(SHOWCASE.map((entry) => entry.profile));
 const WHY_TONE = Object.freeze({ smart: 'green', temp: 'orange', plac: 'cyan', ign: 'red' });
 const NEGLIGIBLE = 0.05;
 
 const rankOf = (outcome) => RANKS.indexOf(outcome);
-// The endings and the workshop are the creator's: a player's menu has the two ways to play.
+// The endings and the workshop are the creator's: a player's menu has the three ways to play.
 const menuItems = (app) => (app.creator ? CREATOR_MENU : PLAYER_MENU);
+// The months of the year being played, or of the one chosen on the menu before it starts.
+const monthsOf = (app) => (app.year ? app.year.months : app.months) ?? 12;
+const isHalfYear = (app) => monthsOf(app) === 6;
 const meterName = (app, key) => tx(app, `year.meterName.${key}`);
 const titleOf = (app, problemId) => tx(app, `year.${problemId}.title`);
 
-// The four answers of the current problem as cards: text keys and a P&L chip that shows which
-// line the answer moves and in which direction, but never the hidden effect on the meters.
+// The four answers of the current problem as cards: text keys and a P&L chip that names the line
+// the answer moves. The chip never says which way the line goes (that would tell the answers that
+// raise OI from the ones that lower it) nor what the answer does to the meters.
 function yearCards(app) {
   const problem = engine.currentProblem(app.year);
-  return engine.options(app.year).map((option, index) => {
-    const oiSign = Math.sign(ARCHETYPES[option.a].oi);
-    return {
-      index,
-      a: option.a,
-      line: option.line,
-      chip: { key: `line.short.${option.line}`, dir: option.line === 'sales' ? oiSign : -oiSign },
-      nameKey: `year.${problem.id}.${option.a}.name`,
-      descKey: `year.${problem.id}.${option.a}.desc`,
-      tagKey: `year.tag.${option.a}`,
-    };
-  });
+  return engine.options(app.year).map((option, index) => ({
+    index,
+    a: option.a,
+    line: option.line,
+    chip: { key: `line.short.${option.line}` },
+    nameKey: `year.${problem.id}.${option.a}.name`,
+    descKey: `year.${problem.id}.${option.a}.desc`,
+    tagKey: `year.tag.${option.a}`,
+  }));
 }
 
 // Reviewer mode: the hidden character and size of an answer (meters include the delayed bill),
@@ -103,11 +103,12 @@ function closeLines(app) {
       tone: 'orange',
     };
   });
-  return [{ text: tx(app, 'year.close.decay'), tone: 'gray' }, ...adjustments, ...bills];
+  const decay = num(app, rules.DECAY * app.year.pace);
+  return [{ text: tx(app, 'year.close.decay', { decay }), tone: 'gray' }, ...adjustments, ...bills];
 }
 
-// One slot per month; null until the month has closed.
-const chartBars = (run) => Array.from({ length: engine.MONTHS }, (_, i) => ({
+// One slot per month of the year being played; null until the month has closed.
+const chartBars = (run) => Array.from({ length: run.months }, (_, i) => ({
   month: i + 1,
   oi: run.closes[i] ? run.closes[i].oi : null,
 }));
@@ -137,10 +138,18 @@ function feedbackText(app, line) {
   return tx(app, line.key, params);
 }
 
+// Minutes and seconds of play, as "21:40", for a game that was really played.
+const clock = (seconds) => {
+  const whole = Math.floor(seconds);
+  return `${String(Math.floor(whole / 60)).padStart(2, '0')}:${String(whole % 60).padStart(2, '0')}`;
+};
+const timeText = (app) => (app.sim || !app.yearT ? null : tx(app, 'year.verdict.time', { time: clock(app.yearT) }));
+
 function verdict(app) {
   const run = app.year;
   const oi = engine.oiOf(run);
   return {
+    timeText: timeText(app),
     outcome: run.outcome,
     titleKey: `year.verdict.${run.outcome}`,
     tier: OUTCOME_TIER[run.outcome],
@@ -171,8 +180,10 @@ function walkRows(app, walk) {
   ];
 }
 
-// The five rules of the year as plain sentences; the grades have a table of their own.
-const rulesLines = (app) => [1, 2, 3, 4, 5].map((n) => tx(app, `year.rules.l${n}`));
+// The five rules of the year as plain sentences; the grades have a table of their own. The wear of
+// the meters (rule 2) and the last month of the rescue (rule 4) are the ones a half year changes.
+const HALF_RULES = Object.freeze([2, 4]);
+const rulesLines = (app) => [1, 2, 3, 4, 5].map((n) => tx(app, isHalfYear(app) && HALF_RULES.includes(n) ? `year.rules.l${n}.half` : `year.rules.l${n}`));
 
 // One row per grade, best first: its name, the least OI and the least weakest meter that earn it
 // and the colour of the factory it ends in. The last grade is whatever falls below the rest.
@@ -185,7 +196,7 @@ function gradeRows(app) {
 }
 
 // What the model rests on, for the page of the rules that a finance reader looks for.
-const assumptionLines = (app) => [1, 2, 3, 4, 5].map((n) => tx(app, `year.assump.a${n}`));
+const assumptionLines = (app) => [1, 2, 3, 4, 5].map((n) => tx(app, isHalfYear(app) && n === 3 ? 'year.assump.a3.half' : `year.assump.a${n}`));
 
 // A result code on screen: the team name and the code on their own rows, so nothing breaks in
 // the middle of the code.
@@ -200,6 +211,8 @@ module.exports = {
   OUTCOME_TIER,
   RANKS,
   menuItems,
+  monthsOf,
+  isHalfYear,
   PROFILE_ITEMS,
   rankOf,
   yearCards,

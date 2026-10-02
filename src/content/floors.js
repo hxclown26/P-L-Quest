@@ -49,7 +49,8 @@ const FLOORS = Object.freeze([
   }),
   floor({
     id: 4,
-    line: 'serve',
+    line: 'delivery',
+    focus: ['freight', 'direct'],
     boss: 'truck',
     turns: [
       ['acceptAll', 'routeOpt', 'remote', 'fee', 'comodatoReview', 'billExtras', 'ignore'],

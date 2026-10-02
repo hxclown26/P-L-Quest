@@ -141,7 +141,7 @@ function drawBattle(ctx, app) {
   const result = run.phase === 'turnResult';
   drawStatement(ctx, app, {
     before: result ? view.plBefore(run) : null,
-    focus: floor.line,
+    focus: floor.focus || floor.line,
     delta: result ? run.last.delta.oi : null,
     progress: anim.rollProgress(app.phaseT),
   });

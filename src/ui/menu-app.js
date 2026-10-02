@@ -11,7 +11,9 @@ const { menuItems, PROFILE_ITEMS } = require('./year-view');
 const { verdictEffects } = require('./year-app');
 const { sfx, music, result, moved, listMove, selectIndex } = require('./shared');
 
-const SCENE_FOR_MODE = Object.freeze({ year: 'yearIntro', tutorial: 'intro', endings: 'endings', workshop: 'workshop' });
+const SCENE_FOR_MODE = Object.freeze({ year: 'yearIntro', half: 'yearIntro', tutorial: 'intro', endings: 'endings', workshop: 'workshop' });
+const HALF_YEAR_MONTHS = 6;
+const FULL_YEAR_MONTHS = 12;
 const LISTS = Object.freeze({
   menu: { field: 'menuIdx', count: (app) => menuItems(app).length, hit: (app, x, y) => layout.hitMenuRow(x, y, menuItems(app).length) },
   endings: { field: 'profileIdx', count: () => PROFILE_ITEMS.length, hit: (app, x, y) => layout.hitProfileRow(x, y) },
@@ -22,13 +24,15 @@ const DIGIT = /^digit(\d)$/;
 
 const go = (app, scene) => result(moved(app, { scene, cursor: 0, codeEntry: '' }), [sfx('select')]);
 
-const openMode = (app) => result(
-  moved(app, { scene: SCENE_FOR_MODE[menuItems(app)[app.menuIdx]], cursor: 0 }),
-  [sfx('confirm')],
-);
+// The half year is the same intro and the same year, six months long.
+function openMode(app) {
+  const mode = menuItems(app)[app.menuIdx];
+  const months = mode === 'half' ? HALF_YEAR_MONTHS : FULL_YEAR_MONTHS;
+  return result(moved(app, { scene: SCENE_FOR_MODE[mode], cursor: 0, months }), [sfx('confirm')]);
+}
 
 const startYear = (app) => result(
-  moved(app, { scene: 'year', year: engine.newYear(app.seed), sim: false, cursor: 0, page: 0, codeEntry: '', seed: nextGameCode(app.seed) }),
+  moved(app, { scene: 'year', year: engine.newYear(app.seed, app.months), sim: false, yearT: 0, cursor: 0, page: 0, codeEntry: '', seed: nextGameCode(app.seed) }),
   [sfx('confirm'), music('play')],
 );
 

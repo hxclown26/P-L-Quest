@@ -10,7 +10,7 @@ const P = require('../palette');
 const { rect } = require('../draw');
 const ui = require('../ui');
 
-const WINDOW = Object.freeze({ x: 4, y: 30, w: 248, h: 196 });
+const WINDOW = Object.freeze({ x: 4, y: 30, w: 248, h: 208 });
 // Vertical positions, from the top of the window.
 const ROWS = Object.freeze({ titleY: 6, ruleY: 17, headerY: 21, top: 36, pitch: 9 });
 // The right edge of each number column, from the left of the window.

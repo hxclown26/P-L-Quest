@@ -14,53 +14,66 @@ const en = { lang: 'en' };
 test('the statement lists every line in money, with the ratio under the lines that have one', () => {
   const rows = statement.statementRows(model.BASE_PL);
   assert.deepEqual(rows.map((r) => r.id), [
-    'sales', 'incentives', 'cost', 'cost.ratio', 'cm', 'cm.ratio', 'serve', 'serve.ratio',
+    'sales', 'incentives', 'net', 'cost', 'cost.ratio', 'cm', 'cm.ratio', 'freight', 'freight.ratio', 'direct',
     'gp', 'gp.ratio', 'sga', 'sga.ratio', 'oi', 'oi.ratio',
   ]);
-  assert.deepEqual(rows.map((r) => r.value), [100, 2, 53, 53, 45, 45, 14, 14, 31, 31, 16, 16, 15, 15]);
+  assert.deepEqual(rows.map((r) => r.value), [102, 2, 100, 55, 55, 45, 45, 8, 8, 6, 31, 31, 16, 16, 15, 15]);
 });
 
 test('results are totals, deductions are plain lines and ratios hang from their line', () => {
   const rows = byId(model.BASE_PL);
-  for (const id of ['sales', 'cm', 'gp', 'oi']) assert.equal(rows[id].kind, 'total', id);
-  for (const id of ['incentives', 'cost', 'serve', 'sga']) assert.equal(rows[id].kind, 'line', id);
-  for (const id of ['cost', 'cm', 'serve', 'gp', 'sga', 'oi']) {
+  for (const id of ['net', 'cm', 'gp', 'oi']) assert.equal(rows[id].kind, 'total', id);
+  for (const id of ['sales', 'incentives', 'cost', 'freight', 'direct', 'sga']) assert.equal(rows[id].kind, 'line', id);
+  for (const id of ['cost', 'cm', 'freight', 'gp', 'sga', 'oi']) {
     assert.equal(rows[`${id}.ratio`].kind, 'ratio', id);
     assert.equal(rows[`${id}.ratio`].of, id);
     assert.equal(rows[`${id}.ratio`].unit, 'pct');
     assert.equal(rows[id].unit, 'money');
   }
   assert.equal(rows['incentives.ratio'], undefined, 'incentives have no ratio row, like a sub-line of sales');
-  assert.equal(rows['sales.ratio'], undefined, 'sales are the base of every ratio');
+  assert.equal(rows['sales.ratio'], undefined, 'gross sales have no ratio row');
+  assert.equal(rows['net.ratio'], undefined, 'net sales are the base of every ratio');
+  assert.equal(rows['direct.ratio'], undefined, 'direct charges carry no ratio row, like the report this follows');
+});
+
+test('net sales are the sales less the incentives, and a bigger number is better', () => {
+  const rows = byId(model.applyOp(model.BASE_PL, { op: 'add', line: 'incentives', pts: 3 }));
+  near(rows.net.value, rows.sales.value - rows.incentives.value);
+  assert.equal(rows.net.value, 97);
+  assert.equal(rows.net.good, 1);
+  assert.equal(rows.sales.good, 1);
 });
 
 test('deductions are positive amounts and every result is the line above minus the deduction', () => {
   const pl = model.applyOp(model.BASE_PL, { op: 'add', line: 'cost', pts: 4 });
   const r = byId(pl);
-  for (const id of ['incentives', 'cost', 'serve', 'sga']) assert.ok(r[id].value > 0, id);
-  near(r.cm.value, r.sales.value - r.incentives.value - r.cost.value);
-  near(r.gp.value, r.cm.value - r.serve.value);
+  for (const id of ['incentives', 'cost', 'freight', 'direct', 'sga']) assert.ok(r[id].value > 0, id);
+  near(r.net.value, r.sales.value - r.incentives.value);
+  near(r.cm.value, r.net.value - r.cost.value);
+  near(r.gp.value, r.cm.value - r.freight.value - r.direct.value);
   near(r.oi.value, r.gp.value - r.sga.value);
 });
 
-test('ratios are percentages of the current sales, so they move with the sales they are read against', () => {
+test('ratios are percentages of the net sales, so they move with the sales they are read against', () => {
   const bigger = model.applyOp(model.BASE_PL, { op: 'oi', line: 'sales', pts: 10 });
   const r = byId(bigger);
-  near(r.sales.value, 110);
-  near(r['cost.ratio'].value, (53 / 110) * 100);
-  near(r['cm.ratio'].value, ((110 - 2 - 53) / 110) * 100);
+  near(r.sales.value, 112);
+  near(r.net.value, 110);
+  near(r['cost.ratio'].value, (55 / 110) * 100);
+  near(r['cm.ratio'].value, ((110 - 55) / 110) * 100);
   near(r['oi.ratio'].value, (25 / 110) * 100);
 });
 
-test('every ratio row equals its money row over the sales, whatever the P&L', () => {
+test('every ratio row equals its money row over the net sales, whatever the P&L', () => {
   const pl = model.applyOp(model.BASE_PL, { op: 'volume', pct: -8 });
   const r = byId(pl);
-  for (const id of ['cost', 'cm', 'serve', 'gp', 'sga', 'oi']) near(r[`${id}.ratio`].value, (100 * r[id].value) / r.sales.value, 1e-9);
+  for (const id of ['cost', 'cm', 'freight', 'gp', 'sga', 'oi']) near(r[`${id}.ratio`].value, (100 * r[id].value) / r.net.value, 1e-9);
 });
 
 test('a loss reads as a negative result and a negative ratio', () => {
   const loss = model.applyOp(model.BASE_PL, { op: 'oi', line: 'sales', pts: -20 });
   const r = byId(loss);
+  near(r.net.value, 80);
   assert.ok(r.oi.value < 0 && r['oi.ratio'].value < 0);
   assert.equal(statement.cellText(es, r.oi), '(5,0)');
   assert.equal(statement.cellText(es, r['oi.ratio']), '(6,3%)');
@@ -70,8 +83,9 @@ test('rowChanges flags the rows whose printed number moved, ratios included, wit
   const after = model.applyOp(model.BASE_PL, { op: 'add', line: 'incentives', pts: 3 });
   const changes = Object.fromEntries(statement.rowChanges(model.BASE_PL, after).map((c) => [c.id, c.dir]));
   assert.equal(changes.incentives, -1, 'a bigger deduction is worse');
-  for (const id of ['cm', 'cm.ratio', 'gp', 'gp.ratio', 'oi', 'oi.ratio']) assert.equal(changes[id], -1, id);
+  for (const id of ['net', 'cm', 'cm.ratio', 'gp', 'gp.ratio', 'oi', 'oi.ratio']) assert.equal(changes[id], -1, id);
   assert.equal(changes.cost, undefined, 'a line that did not move is not flagged');
+  assert.equal(changes['cost.ratio'], -1, 'but its ratio does: the net sales it is read against fell');
   assert.deepEqual(statement.rowChanges(model.BASE_PL, model.BASE_PL), []);
 });
 
@@ -95,9 +109,10 @@ test('rowChanges flags a row only when the number you read changes', () => {
 
 test('cellText prints one decimal, the language decimal mark and brackets for negatives', () => {
   const r = byId(model.BASE_PL);
-  assert.equal(statement.cellText(es, r.sales), '100,0');
-  assert.equal(statement.cellText(en, r.sales), '100.0');
-  assert.equal(statement.cellText(es, r['cost.ratio']), '53,0%');
+  assert.equal(statement.cellText(es, r.sales), '102,0');
+  assert.equal(statement.cellText(en, r.sales), '102.0');
+  assert.equal(statement.cellText(es, r.net), '100,0');
+  assert.equal(statement.cellText(es, r['cost.ratio']), '55,0%');
   assert.equal(statement.cellText(en, r['oi.ratio']), '15.0%');
   assert.equal(statement.cellText(es, { value: -2.04, unit: 'money' }), '(2,0)');
   assert.equal(statement.cellText(en, { value: -3.46, unit: 'pct' }), '(3.5%)');
@@ -111,13 +126,21 @@ test('a value that rounds to zero is printed as zero, never as (0,0)', () => {
 });
 
 test('isFocused marks the line an answer moves and the ratio under it', () => {
-  const [sales, incentives, cost, costRatio, cm] = statement.statementRows(model.BASE_PL);
+  const [sales, incentives, , cost, costRatio, cm] = statement.statementRows(model.BASE_PL);
   assert.equal(statement.isFocused(cost, 'cost'), true);
   assert.equal(statement.isFocused(costRatio, 'cost'), true);
   assert.equal(statement.isFocused(cm, 'cost'), false);
   assert.equal(statement.isFocused(sales, 'sales'), true);
   assert.equal(statement.isFocused(incentives, 'cost'), false);
   assert.equal(statement.isFocused(cost, null), false);
+});
+
+test('a floor of the tutorial can mark several lines at once, like freight and direct charges', () => {
+  const rows = byId(model.BASE_PL);
+  const both = ['freight', 'direct'];
+  for (const id of ['freight', 'freight.ratio', 'direct']) assert.equal(statement.isFocused(rows[id], both), true, id);
+  for (const id of ['cost', 'cm', 'gp', 'sga']) assert.equal(statement.isFocused(rows[id], both), false, id);
+  assert.equal(statement.isFocused(rows.freight, []), false);
 });
 
 test('the rows are frozen so a screen cannot change the statement it draws', () => {
@@ -131,7 +154,7 @@ const asReport = (plan, real) => Object.fromEntries(statement.reportRows(plan, r
 
 test('a year that ends on plan has no variance anywhere', () => {
   const rows = statement.reportRows(model.BASE_PL, model.BASE_PL);
-  assert.equal(rows.length, 14);
+  assert.equal(rows.length, 16);
   for (const row of rows) {
     assert.equal(row.variance, 0, row.id);
     assert.equal(row.favorable, 0, row.id);
@@ -154,7 +177,7 @@ test('the variance is read as a report reads it: positive is good for the busine
 });
 
 test('the variance is the difference of the numbers you read, so the report foots', () => {
-  const real = model.applyOp(model.applyOp(model.BASE_PL, { op: 'volume', pct: -7 }), { op: 'add', line: 'serve', pts: 1.37 });
+  const real = model.applyOp(model.applyOp(model.BASE_PL, { op: 'volume', pct: -7 }), { op: 'add', line: 'freight', pts: 1.37 });
   for (const row of statement.reportRows(model.BASE_PL, real)) {
     const shown = (cell) => Math.sign(cell.value) * Math.round(Math.abs(cell.value) * 10);
     const read = (shown(row.real) - shown(row.plan)) * row.real.good || 0;

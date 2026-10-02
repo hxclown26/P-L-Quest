@@ -13,7 +13,8 @@ function requiredKeys() {
   const keys = ['menu.title', 'menu.best', 'menu.endings.title', 'ui.btn.rules', 'year.review.on', 'year.crisis.l1', 'year.crisis.l2', 'year.goal'];
   keys.push('year.intro.hint', 'year.intro.partial');
   keys.push('stmt.unit', 'stmt.col.real', 'stmt.col.plan', 'stmt.col.var', 'stmt.ratio', 'year.report.title', 'year.report.note');
-  for (const m of ['year', 'tutorial', 'endings']) keys.push(`menu.${m}`, `menu.${m}.desc`);
+  for (const m of ['year', 'half', 'tutorial', 'endings']) keys.push(`menu.${m}`, `menu.${m}.desc`);
+  keys.push('year.intro1.half', 'year.intro2.half', 'year.rules.l2.half', 'year.rules.l4.half', 'year.assump.a3.half', 'year.verdict.time');
   for (const p of SHOWCASE.map((entry) => entry.profile)) {
     keys.push(`profile.${p}`, `profile.${p}.desc`);
   }

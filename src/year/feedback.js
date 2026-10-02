@@ -8,7 +8,7 @@ const { operatingMargin } = require('../model');
 const rules = require('./rules');
 const { AUTHORING, PROBLEMS } = require('./problems');
 
-const WALK_LINES = Object.freeze(['sales', 'incentives', 'cost', 'serve', 'sga']);
+const WALK_LINES = Object.freeze(['sales', 'incentives', 'cost', 'freight', 'direct', 'sga']);
 const MISTAKES = Object.freeze(['temp', 'plac', 'ign']);
 const PATTERN_MIN = 3;
 const CLEAN_MIN = 40;

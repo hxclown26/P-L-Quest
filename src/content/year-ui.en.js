@@ -6,7 +6,9 @@ module.exports = Object.freeze({
   // Mode menu
   'menu.title': 'CHOOSE A MODE',
   'menu.year': 'Full year',
-  'menu.year.desc': '12 months of 4 problems. About 25 min.',
+  'menu.year.desc': '12 months of 4 problems. About 40 min.',
+  'menu.half': 'Half year',
+  'menu.half.desc': '6 months of 4 problems. About 20 min.',
   'menu.tutorial': '5-floor tutorial',
   'menu.tutorial.desc': 'How the P&L moves. About 10 min.',
   'menu.endings': 'See the 6 endings',
@@ -32,7 +34,9 @@ module.exports = Object.freeze({
 
   // Introduction
   'year.intro1': 'You run a business unit for 12 months. Each month brings 4 problems: client, plant, environment and strategy.',
-  'year.intro2': 'Your goal is the OI margin: operating income as a % of sales (plan 15%). Also watch three meters: Client, Plant and Strategy.',
+  'year.intro2': 'Your goal is the OI margin: operating income as a % of net sales (plan 15%). Also watch three meters: Client, Plant and Strategy.',
+  'year.intro1.half': 'You run a business unit for 6 months. Each month brings 4 problems (client, plant, environment and strategy) and every decision weighs twice as much.',
+  'year.intro2.half': 'Your goal is the OI margin: operating income as a % of net sales (plan 15%). Also watch the meters: Client, Plant and Strategy.',
   'year.intro.hint': 'Type 4 digits to choose the code.',
   'year.intro.partial': 'Digits missing. Erase with Backspace.',
   'year.intro3': 'Balance wins. A 0 brings a rescue plan; a second one, bankruptcy. N: rules.',
@@ -79,7 +83,7 @@ module.exports = Object.freeze({
 
   // Month close
   'year.close.title': 'MONTH {m} CLOSE',
-  'year.close.decay': 'All three meters drop 1.8 from the month\'s wear.',
+  'year.close.decay': 'All three meters drop {decay} from the month\'s wear.',
   'year.close.drag': '{meter} below 42: {line} {pts}',
   'year.close.bonus': '{meter} above 70: {line} {pts}',
   'year.close.fly': 'All three above 60: Sales {pts}',
@@ -102,9 +106,10 @@ module.exports = Object.freeze({
   'year.verdict.bankrupt': 'BANKRUPT',
   'year.verdict.oi': 'OI {oi}%',
   'year.verdict.plan': 'plan {plan}%',
+  'year.verdict.time': '{time} min',
   'year.walk.title': 'OI margin bridge (pp)',
   'year.report.title': 'INCOME STATEMENT',
-  'year.report.note': 'Annualized figures at year end. Var.: in brackets = unfavorable.',
+  'year.report.note': 'Annualized. Ratios on net sales. Var.: (brackets) = unfavorable.',
   'year.fb.title': 'WHAT HAPPENED',
   'year.walk.plan': 'Plan',
   'year.walk.real': 'Real',
@@ -138,10 +143,12 @@ module.exports = Object.freeze({
 
   // Rules overlay (N)
   'year.rules.title': 'RULES OF THE YEAR',
-  'year.rules.l1': 'OI = operating income / sales. Plan: 15%. pp = percentage points.',
+  'year.rules.l1': 'OI = operating income / net sales. Plan: 15%. pp = percentage points.',
   'year.rules.l2': 'Client, Plant and Strategy start at 60 and drop almost 2 a month.',
+  'year.rules.l2.half': 'Client, Plant and Strategy start at 60 and drop almost 4 a month: every decision weighs twice as much.',
   'year.rules.l3': 'Below 42 they cost OI; above 70 they add. Below 32: crisis, balanced answers reach 40%.',
   'year.rules.l4': 'A 0 in OI or a meter: rescue plan, once, up to month 9.',
+  'year.rules.l4.half': 'A 0 in OI or a meter: rescue plan, once, up to month 4.',
   'year.rules.l5': 'The result is the lower of the OI grade and the weakest-meter grade.',
   'year.rules.hNote': 'Grade',
   'year.rules.hOi': 'OI from',
@@ -154,9 +161,10 @@ module.exports = Object.freeze({
   'year.grade.terrible': 'Terrible',
   'year.rules.hint': '< > switch page ({n}/2)',
   'year.assump.title': 'MODEL ASSUMPTIONS',
-  'year.assump.a1': 'Everything is fictional. Figures in US$ millions; plan: sales 100 and OI 15%.',
-  'year.assump.a2': 'Sales - Incentives - Cost = Contribution margin. Less Cost to serve = Gross Profit. Less SG&A = OI.',
-  'year.assump.a3': 'Ratio = line / sales. Price moves sales and incentives; volume also moves cost and 60% of cost to serve. SG&A is fixed.',
-  'year.assump.a4': 'Figures are annualized at the close of each month, not cumulative.',
-  'year.assump.a5': 'Effects are game effects: they teach the logic, they do not predict any real company.',
+  'year.assump.a1': 'Everything is fictional. US$ millions, annualized at each month close. Plan: net sales 100, OI 15%.',
+  'year.assump.a2': 'Sales - Incentives = Net sales. Less Cost = Contribution margin; less Freight and Direct Chg = Gross Profit; less SG&A = OI.',
+  'year.assump.a3': 'Ratio = line / net sales. In the Full year each answer moves one line, by a fixed amount.',
+  'year.assump.a3.half': 'Ratio = line / net sales. Each answer moves one line by a fixed amount; in the half year, twice as much.',
+  'year.assump.a4': 'Only the Tutorial uses price and volume: volume also moves cost and 60% of freight and Direct Chg.',
+  'year.assump.a5': 'The game ends at OI: cash, working capital, debt, interest and taxes are left out. A game, not a forecast.',
 });

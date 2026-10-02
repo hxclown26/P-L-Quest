@@ -54,7 +54,7 @@ test('no line of the P&L ever goes negative in a simulated year, so the report a
       const rng = sim.mulberry32(seed);
       let run = engine.newYear((seed * 37) % 10000);
       for (let guard = 0; guard < 400 && !['final', 'over'].includes(run.phase); guard += 1) {
-        for (const line of ['incentives', 'cost', 'serve', 'sga']) {
+        for (const line of ['incentives', 'cost', 'freight', 'direct', 'sga']) {
           assert.ok(run.pl[line] >= 0, `${name} seed ${seed} month ${run.monthIdx + 1}: ${line} is ${run.pl[line]}`);
         }
         assert.ok(run.pl.sales > 0, `${name} seed ${seed}: sales ${run.pl.sales}`);
@@ -123,4 +123,29 @@ test('the thresholds the screens draw are exported as numbers', () => {
     assert.equal(typeof rules[name], 'number', name);
   }
   assert.ok(rules.CRISIS < rules.DRAG_BELOW && rules.DRAG_BELOW < rules.FLYWHEEL && rules.FLYWHEEL < rules.BONUS_ABOVE);
+});
+
+// The half year is the year at double speed: the same rules, every monthly effect twice as big.
+test('at double pace the meters wear twice as fast and every monthly adjustment doubles', () => {
+  const normal = rules.monthEnd({ C: 60, P: 50, E: 38 });
+  const fast = rules.monthEnd({ C: 60, P: 50, E: 38 }, 2);
+  near(fast.meters.C, 56.4);
+  near(fast.meters.P, 46.4);
+  near(fast.meters.E, 34.4);
+  const drag = (end) => end.adjustments.find((a) => a.because === 'E').pts;
+  near(drag(fast), 2 * drag(normal));
+});
+
+test('the virtuous circle and the bonus of a strong meter double at double pace', () => {
+  const normal = rules.monthEnd({ C: 80, P: 61, E: 61 });
+  const fast = rules.monthEnd({ C: 80, P: 61, E: 61 }, 2);
+  assert.equal(fast.adjustments.length, normal.adjustments.length);
+  fast.adjustments.forEach((adjustment, i) => near(adjustment.pts, 2 * normal.adjustments[i].pts));
+});
+
+test('a rescue is possible up to month 4 at double pace, and once only', () => {
+  assert.equal(rules.canRescue(4, false, 2), true);
+  assert.equal(rules.canRescue(5, false, 2), false);
+  assert.equal(rules.canRescue(3, true, 2), false);
+  assert.equal(rules.canRescue(9, false, 1), true);
 });

@@ -57,9 +57,9 @@ const inYear = (year, patch = {}) => base({ scene: 'year', year, ...patch });
 const pick = (run, a) => engine.options(run).findIndex((o) => o.a === a);
 
 // Plays until the month closes (answering as the policy says).
-function toMonthClose(policy = sim.PROFILES.expert) {
+function toMonthClose(policy = sim.PROFILES.expert, months = 12) {
   const rng = sim.mulberry32(3);
-  let run = engine.newYear();
+  let run = engine.newYear(null, months);
   while (run.phase !== 'monthClose') {
     run = run.phase === 'problem' ? engine.choose(run, policy(run, rng)) : engine.next(run);
   }
@@ -128,8 +128,14 @@ function allScreens() {
     ['title', base()],
     ['menu', base({ scene: 'menu' })],
     ['menu 3', base({ scene: 'menu', menuIdx: 2 })],
+    ['menu of a creator', base({ scene: 'menu', creator: true, menuIdx: 4 })],
     ['year intro', base({ scene: 'yearIntro' })],
+    ['half year intro', base({ scene: 'yearIntro', months: 6 })],
     ['rules overlay', base({ scene: 'yearIntro', overlay: 'rules' })],
+    ['half year rules overlay', base({ scene: 'yearIntro', months: 6, overlay: 'rules' })],
+    ['half year assumptions', base({ scene: 'yearIntro', months: 6, overlay: 'rules', rulesPage: 1 })],
+    ['half year month close', inYear(toMonthClose(sim.PROFILES.expert, 6))],
+    ['verdict with the play time', inYear(showcaseRun(0), { page: 0, yearT: 1300 })],
     ['quit overlay', inYear(engine.newYear(), { overlay: 'quit' })],
     ['month close', inYear(toMonthClose())],
     ['rescue', inYear(toRescue())],
@@ -273,6 +279,8 @@ test('the long texts of the year fit the windows they are drawn in, in both lang
     const rows = (text, cols) => wrapText(text, cols).length;
     const intro = [1, 2, 3].reduce((sum, n) => sum + rows(dicts[lang][`year.intro${n}`], 38), 2);
     assert.ok(intro <= 13, `${lang} year intro uses ${intro} rows of 13`);
+    const half = ['year.intro1.half', 'year.intro2.half', 'year.intro3'].reduce((sum, key) => sum + rows(dicts[lang][key], 38), 2);
+    assert.ok(half <= 13, `${lang} half-year intro uses ${half} rows of 13`);
     const rules = view.rulesLines(base({ lang })).reduce((sum, text) => sum + rows(text, 37), 0);
     assert.ok(rules <= 17, `${lang} rules use ${rules} rows of 17`);
     const rescue = view.rescueLines({ ...inYear(toRescue()), lang }).reduce((sum, line) => sum + rows(line.text, 38), 0);
@@ -288,4 +296,22 @@ test('the ranking palette has one colour for each team it can hold', () => {
   assert.equal(TEAM_COLORS.length, rankView.TEAM_COLORS);
   assert.equal(rankView.MAX_TEAMS, rankView.TEAM_COLORS);
   assert.equal(new Set(TEAM_COLORS).size, TEAM_COLORS.length, 'no two teams share a colour');
+});
+
+test('the month-close chart has a row for each month of the year: twelve, or six in a half year', () => {
+  const { textIn, draw } = require('./helpers/screen');
+  const labels = (app) => textIn(draw(app).glyphs, layout.SIDE).map((row) => row.trim()).filter((row) => /^\d{1,2}$/.test(row));
+  const full = labels(inYear(toMonthClose(sim.PROFILES.expert, 12)));
+  const half = labels(inYear(toMonthClose(sim.PROFILES.expert, 6)));
+  assert.deepEqual(full, Array.from({ length: 12 }, (_, i) => String(i + 1)));
+  assert.deepEqual(half, ['1', '2', '3', '4', '5', '6']);
+});
+
+test('the verdict shows how long the game took, and a simulated year shows nothing', () => {
+  const { textIn, draw } = require('./helpers/screen');
+  const SCREEN = { x: 0, y: 0, w: layout.W, h: layout.H };
+  const text = (app) => textIn(draw(app).glyphs, SCREEN).join('|');
+  assert.match(text(inYear(showcaseRun(0), { page: 0, yearT: 1300 })), /21:40 min/);
+  assert.doesNotMatch(text(inYear(showcaseRun(0), { page: 0, yearT: 1300, sim: true })), /min\b.*21:40|21:40 min/);
+  assert.doesNotMatch(text(inYear(showcaseRun(0), { page: 0, yearT: 0 })), /\d\d:\d\d min/);
 });

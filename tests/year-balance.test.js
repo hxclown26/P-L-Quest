@@ -136,3 +136,70 @@ test('a month-6 rescue still comes back to a double-digit OI margin on a shuffle
   assert.ok(reached(0.3) >= 0.6, 'a mediocre player still has a real chance');
   assert.ok(reached(1) <= 0.05, 'random play does not get there');
 });
+
+// ---- the half year: the same year at double speed must reward and punish the same styles of play
+const halfYears = (policy, n = 100) => Array.from({ length: n }, (_, i) => sim.simulate(policy, 100 + i, engine.newYear(1000 + i, 6)));
+
+test('in a half year an expert still closes an excellent year, whatever the calendar', () => {
+  assert.ok(halfYears(sim.PROFILES.expert, 150).every(isOutcome('excellent')));
+});
+
+test('in a half year 20% mistakes still give an excellent or good year, and mostly an excellent one', () => {
+  const list = halfYears(sim.PROFILES.careful, 150);
+  assert.ok(share(list, (r) => ['excellent', 'good'].includes(r.outcome)) >= 0.9);
+  assert.ok(share(list, isOutcome('excellent')) >= 0.6);
+});
+
+test('in a half year the shortcut ends in bankruptcy after burning the rescue, and so does doing nothing', () => {
+  const short = halfYears(sim.PROFILES.short, 60);
+  assert.ok(short.every(isOutcome('bankrupt')));
+  assert.ok(short.every((r) => r.rescued && r.rescueMonth < r.bankruptMonth), 'the rescue came first');
+  assert.ok(short.every((r) => r.bankruptMonth <= 5), `bankrupt at ${Math.max(...short.map((r) => r.bankruptMonth))}`);
+  assert.ok(halfYears(sim.PROFILES.passive, 60).every(isOutcome('bankrupt')));
+});
+
+test('in a half year pleasing everyone keeps the company alive but the result is terrible', () => {
+  assert.ok(halfYears(sim.PROFILES.pleaser, 60).every(isOutcome('terrible')));
+});
+
+test('in a half year half shortcuts are still deadly and half giving in stays in the middle', () => {
+  assert.ok(share(halfYears(sim.PROFILES.halfShort, 150), isOutcome('bankrupt')) >= 0.5);
+  assert.ok(share(halfYears(sim.PROFILES.halfPleaser, 150), (r) => ['good', 'fair'].includes(r.outcome)) >= 0.7);
+});
+
+test('in a half year random answers rarely go well: most years are terrible or end in bankruptcy', () => {
+  const list = halfYears(sim.PROFILES.random, 150);
+  assert.ok(share(list, (r) => ['terrible', 'bankrupt'].includes(r.outcome)) >= 0.75);
+  assert.ok(share(list, (r) => ['excellent', 'good'].includes(r.outcome)) <= 0.05);
+});
+
+test('in a half year all six outcomes are reachable', () => {
+  const seen = new Set();
+  for (const policy of Object.values(sim.PROFILES)) halfYears(policy, 80).forEach((r) => seen.add(r.outcome));
+  assert.deepEqual([...seen].sort(), [...rules.OUTCOMES].sort());
+});
+
+test('a half-year rescue at month 3 still comes back to a double-digit OI margin with good play', () => {
+  const startAt = (seed) => ({
+    ...engine.newYear(seed, 6),
+    monthIdx: 2,
+    pl: rules.RESCUE_PL,
+    meters: { C: 38, P: 38, E: 38 },
+    rescued: true,
+    rescueMonth: 3,
+  });
+  const reached = (eps, n = SEEDS) => share(
+    Array.from({ length: n }, (_, i) => sim.simulate(sim.noisy(eps, sim.expert), 500 + i, startAt(2000 + i))),
+    (r) => r.outcome !== 'bankrupt' && engine.oiOf(r) >= rules.RESCUE_GOAL,
+  );
+  assert.ok(reached(0) === 1, 'perfect play always gets there');
+  assert.ok(reached(0.15) >= 0.9, 'a careful player gets there almost always');
+  assert.ok(reached(0.3) >= 0.6, 'a mediocre player still has a real chance');
+  assert.ok(reached(1) <= 0.05, 'random play does not get there');
+});
+
+test('a company that went through a rescue in a half year never ends better than fair', () => {
+  const rescuedRuns = halfYears(sim.PROFILES.random, 400).filter((r) => r.rescued && r.outcome !== 'bankrupt');
+  assert.ok(rescuedRuns.length > 0, 'the sweep should include rescued companies');
+  assert.ok(rescuedRuns.every((r) => ['fair', 'bad', 'terrible'].includes(r.outcome)));
+});

@@ -6,7 +6,9 @@ module.exports = Object.freeze({
   // Mode menu
   'menu.title': 'ELIGE EL MODO',
   'menu.year': 'Año completo',
-  'menu.year.desc': '12 meses de 4 problemas. Unos 25 min.',
+  'menu.year.desc': '12 meses de 4 problemas. Unos 40 min.',
+  'menu.half': 'Medio año',
+  'menu.half.desc': '6 meses de 4 problemas. Unos 20 min.',
   'menu.tutorial': 'Tutorial de 5 pisos',
   'menu.tutorial.desc': 'Cómo se mueve el P&L. Unos 10 min.',
   'menu.endings': 'Ver los 6 finales',
@@ -32,7 +34,9 @@ module.exports = Object.freeze({
 
   // Introduction
   'year.intro1': 'Diriges una unidad de negocio durante 12 meses. Cada mes llegan 4 problemas: cliente, planta, entorno y estrategia.',
-  'year.intro2': 'Tu meta es el margen OI: la utilidad operacional como % de las ventas (plan 15%). Cuida también tres medidores: Cliente, Planta y Estrategia.',
+  'year.intro2': 'Tu meta es el margen OI: la utilidad operacional como % de las ventas netas (plan 15%). Cuida también tres medidores: Cliente, Planta y Estrategia.',
+  'year.intro1.half': 'Diriges una unidad de negocio durante 6 meses. Cada mes llegan 4 problemas y cada decisión pesa el doble.',
+  'year.intro2.half': 'Tu meta es el margen OI: utilidad operacional como % de las ventas netas (plan 15%). Cuida los medidores Cliente, Planta y Estrategia.',
   'year.intro.hint': 'Teclea 4 dígitos para elegir el código.',
   'year.intro.partial': 'Faltan dígitos. Borra con Retroceso.',
   'year.intro3': 'Gana quien equilibra. Un 0 trae un plan de rescate; otro, la quiebra. N: reglas.',
@@ -79,7 +83,7 @@ module.exports = Object.freeze({
 
   // Month close
   'year.close.title': 'CIERRE DEL MES {m}',
-  'year.close.decay': 'Los tres medidores bajan 1,8 por el desgaste del mes.',
+  'year.close.decay': 'Los tres medidores bajan {decay} por el desgaste del mes.',
   'year.close.drag': '{meter} bajo 42: {line} {pts}',
   'year.close.bonus': '{meter} sobre 70: {line} {pts}',
   'year.close.fly': 'Los tres sobre 60: Ventas {pts}',
@@ -102,9 +106,10 @@ module.exports = Object.freeze({
   'year.verdict.bankrupt': 'QUIEBRA',
   'year.verdict.oi': 'OI {oi}%',
   'year.verdict.plan': 'plan {plan}%',
+  'year.verdict.time': '{time} min',
   'year.walk.title': 'Puente del margen OI (pp)',
   'year.report.title': 'ESTADO DE RESULTADOS',
-  'year.report.note': 'Cifras anualizadas al cierre del año. Var.: entre paréntesis = desfavorable.',
+  'year.report.note': 'Anualizado. Ratios sobre ventas netas. Var.: (paréntesis) = desfavorable.',
   'year.fb.title': 'LO QUE PASÓ',
   'year.walk.plan': 'Plan',
   'year.walk.real': 'Real',
@@ -138,10 +143,12 @@ module.exports = Object.freeze({
 
   // Rules overlay (N)
   'year.rules.title': 'REGLAS DEL AÑO',
-  'year.rules.l1': 'OI = utilidad operacional / ventas. Plan: 15%. pp = puntos porcentuales.',
+  'year.rules.l1': 'OI = utilidad operacional / ventas netas. Plan: 15%. pp = puntos porcentuales.',
   'year.rules.l2': 'Cliente, Planta y Estrategia parten en 60 y bajan casi 2 por mes.',
+  'year.rules.l2.half': 'Los medidores parten en 60 y bajan casi 4 por mes: todo pesa el doble.',
   'year.rules.l3': 'Bajo 42 restan OI; sobre 70 suman. Bajo 32: crisis, lo equilibrado rinde 40%.',
   'year.rules.l4': 'Un 0 en OI o en un medidor: plan de rescate, una vez, hasta el mes 9.',
+  'year.rules.l4.half': 'Un 0 en OI o en un medidor: plan de rescate, una vez, hasta el mes 4.',
   'year.rules.l5': 'Vale la nota menor: la del OI o la del medidor más débil.',
   'year.rules.hNote': 'Nota',
   'year.rules.hOi': 'OI desde',
@@ -154,9 +161,10 @@ module.exports = Object.freeze({
   'year.grade.terrible': 'Muy malo',
   'year.rules.hint': '< > cambiar de página ({n}/2)',
   'year.assump.title': 'SUPUESTOS DEL MODELO',
-  'year.assump.a1': 'Todo es ficticio. Cifras en US$ millones; plan: ventas 100 y OI 15%.',
-  'year.assump.a2': 'Ventas - Incentivos - Costo = M. contribución. Menos Costo de servir = Gross Profit. Menos SG&A = OI.',
-  'year.assump.a3': 'Ratio = línea / ventas. El precio mueve ventas e incentivos; el volumen, además, el costo y 60% del costo de servir. El SG&A es fijo.',
-  'year.assump.a4': 'Las cifras son anualizadas al cierre de cada mes, no acumuladas.',
-  'year.assump.a5': 'Los efectos son de juego: enseñan la lógica, no predicen ninguna empresa real.',
+  'year.assump.a1': 'Todo es ficticio. US$ millones, anualizado al cierre de cada mes. Plan: ventas netas 100 y OI 15%.',
+  'year.assump.a2': 'Ventas - Incentivos = Ventas netas. Menos Costo = M. contribución; menos Flete y Direct Chg = Gross Profit; menos SG&A = OI.',
+  'year.assump.a3': 'Ratio = línea / ventas netas. En el Año completo cada respuesta mueve una línea, por un monto fijo.',
+  'year.assump.a3.half': 'Ratio = línea / ventas netas. Cada respuesta mueve una línea por un monto fijo, doble en el medio año.',
+  'year.assump.a4': 'Solo el Tutorial usa precio y volumen: el volumen mueve también el costo y 60% del flete y los Direct Chg.',
+  'year.assump.a5': 'El juego termina en el OI: caja, capital de trabajo, deuda, intereses e impuestos quedan fuera. Es un juego, no un pronóstico.',
 });

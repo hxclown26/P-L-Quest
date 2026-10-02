@@ -39,9 +39,12 @@ function drawLegend(ctx, app, c) {
   ui.textRight(ctx, label, c.x + c.w - 5, c.y + CHART.title, P.gold);
 }
 
-// Twelve rows, one per month; the month that just closed has a bright label and a cap on its bar.
+// One row per month (twelve, or six twice as tall in a half year); the month that just closed has a
+// bright label and a cap on its bar.
 function drawChart(ctx, app) {
   const run = app.year;
+  const pitch = Math.floor((CHART.pitch * 12) / run.months);
+  const barH = Math.min(9, pitch - 3);
   const c = layout.SIDE;
   ui.windowBox(ctx, c.x, c.y, c.w, c.h);
   ui.text(ctx, tx(app, 'year.close.chart'), c.x + 6, c.y + CHART.title, P.gray);
@@ -49,14 +52,15 @@ function drawChart(ctx, app) {
   const left = c.x + CHART.barX;
   const top = c.y + CHART.top;
   const planX = left + barWidth(rules.PLAN_OI);
-  for (let y = top - 2; y < top + 12 * CHART.pitch; y += 4) rect(ctx, planX, y, 1, 2, P.gold);
+  for (let y = top - 2; y < top + run.months * pitch; y += 4) rect(ctx, planX, y, 1, 2, P.gold);
   view.chartBars(run).forEach(({ month, oi }, i) => {
-    const y = top + i * CHART.pitch;
+    const y = top + i * pitch + Math.floor((pitch - 8) / 2);
+    const barTop = y + 3 - Math.floor(barH / 2);
     const current = month === run.monthIdx + 1;
     ui.textRight(ctx, String(month), c.x + CHART.labelRight, y, current ? P.white : P.dim);
     if (oi === null) return;
-    rect(ctx, left, y + 1, barWidth(oi), 5, oiColor(oi));
-    if (current) rect(ctx, left + barWidth(oi), y, 2, 7, P.white);
+    rect(ctx, left, barTop, barWidth(oi), barH, oiColor(oi));
+    if (current) rect(ctx, left + barWidth(oi), barTop - 1, 2, barH + 2, P.white);
   });
 }
 

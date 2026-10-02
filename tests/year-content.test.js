@@ -86,6 +86,20 @@ test('every problem has its title, scene and four answers in both languages', ()
   }
 });
 
+// A shuffled year can deal a problem in any month of its window, so only a problem tied to the
+// calendar (a window shorter than the year) may name a month or the year-end.
+test('only the problems tied to the calendar name a month or the year-end', () => {
+  const calendar = new RegExp([
+    '\\b(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)\\b',
+    '\\b(january|february|march|april|may|june|july|august|september|october|november|december)\\b',
+    'fin de año|cierre del año|year-end|year end',
+  ].join('|'), 'i');
+  const offenders = PROBLEMS.filter((p) => p.window[0] === 1 && p.window[1] === 12).flatMap((p) => LANGS.flatMap((lang) => Object.entries(DICTS[lang])
+    .filter(([key, text]) => key.startsWith(`year.${p.id}.`) && calendar.test(text))
+    .map(([key, text]) => `${lang} ${key}: ${text}`)));
+  assert.deepEqual(offenders, []);
+});
+
 test('titles, scenes, names and descriptions fit their boxes', () => {
   for (const lang of LANGS) {
     for (const problem of PROBLEMS) {

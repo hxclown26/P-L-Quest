@@ -77,9 +77,10 @@ function requiredKeys() {
     keys.push(`note.${floor.id}.title`, `note.${floor.id}.body`);
   }
   keys.push('floor.6.name', 'floor.6.place', 'note.6.title', 'note.6.body');
-  for (const line of ['sales', 'incentives', 'cost', 'cm', 'serve', 'gp', 'sga', 'oi']) {
+  for (const line of ['sales', 'incentives', 'cost', 'cm', 'freight', 'direct', 'gp', 'sga', 'oi']) {
     keys.push(`line.${line}`, `line.short.${line}`);
   }
+  keys.push('line.delivery');
   for (const area of AREAS) keys.push(`area.${area}`, `area.tag.${area}`);
   for (const tier of ['collapse', 'edge', 'worn', 'normal', 'modern', 'hightech']) keys.push(`tier.${tier}`);
   for (const room of ['cm', 'gp']) keys.push(`room.${room}.title`, `room.${room}.body`);
@@ -156,4 +157,15 @@ test('every static UI string key used in the code exists in both languages', () 
       }
     }
   }
+});
+
+// The P&L reads its ratios over net sales (sales less incentives): no text may define the margin as
+// a share of plain sales, or the screen would contradict the statement beside it. (A client that
+// weighs "14% of sales" is a different thing: its share of what you sell.)
+test('the margin is always defined over net sales, never over plain sales', () => {
+  const plainSales = /como % de las ventas(?! netas)|\/ ventas(?! netas)|as a % of sales|\/ sales\b/i;
+  const offenders = LANGS.flatMap((lang) => Object.entries(DICTS[lang])
+    .filter(([, text]) => typeof text === 'string' && plainSales.test(text))
+    .map(([key]) => `${lang} ${key}`));
+  assert.deepEqual(offenders, []);
 });

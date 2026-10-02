@@ -47,6 +47,7 @@ function drawNumbers(ctx, app, v) {
   ui.windowBox(ctx, x, y, w, h);
   ui.text(ctx, v.oiText, GAUGE.x, y + 6, tierColor(v));
   ui.text(ctx, v.planText, GAUGE.x, y + 16, P.gray);
+  if (v.timeText) ui.textRight(ctx, v.timeText, GAUGE.valueRight, y + 16, P.gray);
   rules.METER_KEYS.forEach((key, i) => {
     const top = y + 30 + i * GAUGE.rowStep;
     const value = v.meters[key];

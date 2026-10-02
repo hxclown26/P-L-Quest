@@ -27,7 +27,7 @@ test('the walk adds up from the plan to the final OI, whatever happened', () => 
 test('the walk swaps one P&L line at a time from the plan to the final P&L', () => {
   const run = year('expert');
   const w = walk(run);
-  assert.deepEqual(w.steps.map((s) => s.id), ['sales', 'incentives', 'cost', 'serve', 'sga']);
+  assert.deepEqual(w.steps.map((s) => s.id), ['sales', 'incentives', 'cost', 'freight', 'direct', 'sga']);
   const total = w.steps.reduce((sum, s) => sum + s.pts, 0);
   near(w.start + total, w.end, 1e-9);
 });
@@ -36,7 +36,7 @@ test('a plan that only changed one line shows only that step', () => {
   const costlier = { ...engine.newYear(), pl: model.applyOp(model.BASE_PL, { op: 'add', line: 'cost', pts: 3 }) };
   const w = walk(costlier);
   near(w.steps.find((s) => s.id === 'cost').pts, -3);
-  for (const id of ['sales', 'incentives', 'serve', 'sga']) near(w.steps.find((s) => s.id === id).pts, 0);
+  for (const id of ['sales', 'incentives', 'freight', 'direct', 'sga']) near(w.steps.find((s) => s.id === id).pts, 0);
 });
 
 test('the sales step carries the dilution: more sales over the same costs lifts the margin', () => {

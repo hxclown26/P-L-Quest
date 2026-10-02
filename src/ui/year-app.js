@@ -16,11 +16,12 @@ const ANSWERS = 4;
 const CELEBRATE_FROM = rankOf('fair');
 const ANSWER_SOUND = Object.freeze({ smart: 'good', temp: 'bad', plac: 'confirm', ign: 'bad' });
 
-// A simulated ending (from the endings list) or a workshop game never touches the saved best year.
+// A simulated ending (from the endings list), a workshop game or a half year never touches the saved
+// best year: it is the best full year.
 function verdictEffects(app, run) {
   const rank = rankOf(run.outcome);
   const celebrate = rank >= CELEBRATE_FROM;
-  const save = app.sim || app.workshop ? [] : [{ type: 'save', patch: { bestYear: rank } }];
+  const save = app.sim || app.workshop || run.months !== 12 ? [] : [{ type: 'save', patch: { bestYear: rank } }];
   return [...save, sfx(celebrate ? 'star' : 'death'), music(celebrate ? 'title' : 'off')];
 }
 

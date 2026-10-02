@@ -10,7 +10,7 @@ const P = require('../palette');
 const { rect } = require('../draw');
 const ui = require('../ui');
 
-const RULES = Object.freeze({ x: 10, y: 4, w: 236, h: 220, textX: 20, titleY: 14, ruleY: 26, textY: 32, rowH: 9, gap: 3, wrap: 37, hintY: 208 });
+const RULES = Object.freeze({ x: 10, y: 4, w: 236, h: 228, textX: 20, titleY: 14, ruleY: 26, textY: 32, rowH: 9, gap: 3, wrap: 37, hintY: 216 });
 // The grade table: the grade at the left, then the right edge of each of the two thresholds.
 const GRADES = Object.freeze({ nameX: 20, oiRight: 142, meterRight: 232, count: 5 });
 const QUIT_WRAP = 30;

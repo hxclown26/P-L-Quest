@@ -221,7 +221,7 @@ test('back on the verdict leaves straight away', () => {
 });
 
 test('the quit question also protects a tutorial run', () => {
-  const play = pressAll(fresh(), ['confirm', 'down', 'confirm', 'confirm']).app;
+  const play = pressAll(fresh(), ['confirm', 'down', 'down', 'confirm', 'confirm']).app;
   assert.equal(play.scene, 'play');
   const asked = press(play, 'back').app;
   assert.equal(asked.overlay, 'quit');
@@ -264,4 +264,35 @@ test('a played year never throws in any phase, whatever the answers', () => {
     const { app } = playYear(intoYear(), sim.PROFILES[name], 7);
     assert.ok(rules.OUTCOMES.includes(app.year.outcome), name);
   }
+});
+
+// ---- the play time and the best year of a half year
+test('the play time runs while the year is played, also behind the rules, and stops at the verdict', () => {
+  let app = intoYear();
+  assert.equal(app.yearT, 0);
+  app = tick(app, 2);
+  assert.equal(app.yearT, 2);
+  app = tick(press(app, 'note').app, 1.5);
+  assert.equal(app.yearT, 3.5, 'reading the rules is part of the game');
+  const result = tick(withYear({ ...engine.newYear(), phase: 'result' }, { yearT: 10 }), 1);
+  assert.equal(result.yearT, 11);
+  for (const phase of ['final', 'over']) {
+    assert.equal(tick(withYear({ ...engine.newYear(), phase }, { yearT: 10 }), 1).yearT, 10, phase);
+  }
+});
+
+test('a simulated year or a screen outside the year does not count play time', () => {
+  assert.equal(tick(withYear(engine.newYear(), { sim: true, yearT: 0 }), 3).yearT, 0);
+  assert.equal(tick(fresh(), 3).yearT, 0);
+  assert.equal(tick(pressAll(fresh(), ['confirm']).app, 3).yearT, 0, 'the menu');
+});
+
+test('the best year is saved for a full year, never for a half year or a simulated one', () => {
+  const { verdictEffects } = require('../src/ui/year-app');
+  const saved = (app, run) => verdictEffects(app, run).some((effect) => effect.type === 'save');
+  const full = { ...engine.newYear(), outcome: 'good', phase: 'final' };
+  const half = { ...engine.newYear(null, 6), outcome: 'good', phase: 'final' };
+  assert.equal(saved({ sim: false, workshop: null }, full), true);
+  assert.equal(saved({ sim: false, workshop: null }, half), false);
+  assert.equal(saved({ sim: true, workshop: null }, full), false);
 });

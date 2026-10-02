@@ -27,7 +27,7 @@ function drawHeader(ctx, app, tier) {
   ui.wrapLines([{ text: tx(app, 'ui.subtitle') }], 21).forEach((row, i) => {
     ui.text(ctx, row.text, 10, 38 + i * 10, P.white, { shadow: P.ink });
   });
-  ui.text(ctx, 'DEMO 3', 10, 64, P.orange, { shadow: P.ink });
+  ui.text(ctx, 'DEMO 4', 10, 64, P.orange, { shadow: P.ink });
 }
 
 // A row of a list of modes: its name, a line saying what it is and, on the full year, the best
@@ -52,7 +52,7 @@ function drawMenu(ctx, app) {
     const best = id === 'year' ? view.bestLabel(app) : null;
     drawMenuRow(ctx, app, tx(app, `menu.${id}`), tx(app, `menu.${id}.desc`), i, i === app.menuIdx, best, items.length);
   });
-  if (items.length <= 2) ui.textCenter(ctx, tx(app, 'ui.fictional'), 128, p.y + p.h - 14, P.dim);
+  if (items.length <= 3) ui.textCenter(ctx, tx(app, 'ui.fictional'), 128, p.y + p.h - 14, P.dim);
 }
 
 // The factory behind the list shows the state the highlighted play style ends in.
@@ -84,18 +84,19 @@ function codeText(app) {
 }
 
 function drawYearIntro(ctx, app) {
+  const half = view.isHalfYear(app);
   drawSky(ctx, 0, 0, layout.W, layout.PLAY_H, 'normal', app.t);
   drawFactory(ctx, 'normal', 150, -8, app.t, 1);
   ui.text(ctx, tx(app, 'ui.title'), 10, 10, P.gold, { scale: 2, shadow: '#7a4a10' });
-  ui.text(ctx, tx(app, 'menu.year'), 10, 32, P.white, { shadow: P.ink });
+  ui.text(ctx, tx(app, half ? 'menu.half' : 'menu.year'), 10, 32, P.white, { shadow: P.ink });
   const code = codeText(app);
   ui.text(ctx, code.text, 10, 44, code.typed ? P.gold : P.gray, { shadow: P.ink });
   drawHero(ctx, 226, 58, app.t);
   ui.windowBox(ctx, 4, 60, 248, 166);
   const rows = ui.wrapLines([
-    { text: tx(app, 'year.intro1') },
+    { text: tx(app, half ? 'year.intro1.half' : 'year.intro1') },
     { text: ' ' },
-    { text: tx(app, 'year.intro2') },
+    { text: tx(app, half ? 'year.intro2.half' : 'year.intro2') },
     { text: ' ' },
     { text: tx(app, 'year.intro3'), tone: 'gold' },
   ], INTRO_WRAP);
