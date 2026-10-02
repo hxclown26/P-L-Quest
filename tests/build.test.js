@@ -52,6 +52,15 @@ test('the page and the menu say Demo 3', () => {
   assert.ok(!/Demo 2/i.test(template));
 });
 
+test('the landing page of the published site opens the game and keeps what follows the address', () => {
+  const { DEFAULT_OUT } = require('../build');
+  const target = path.basename(DEFAULT_OUT);
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  assert.ok(html.includes(`'${target}' + location.search`), 'it jumps to the current build and keeps ?creator');
+  assert.ok(html.includes(`href="${target}"`), 'and offers a link in case the jump does not happen');
+  assert.match(html, /<title>P&amp;L Quest - Demo 3<\/title>/);
+});
+
 test('the year mode modules are registered in the bundle', () => {
   const code = bundle();
   for (const id of ['year/engine', 'year/showcase', 'ui/year-app', 'ui/menu-app', 'ui/demo-app', 'render/year/index']) {

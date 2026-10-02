@@ -3,6 +3,9 @@
 A 16-bit style game, in one HTML file, that teaches two things: who controls each line of
 the P&L, and how a decision ends up in OI. All data is fictional. Spanish and English.
 
+**Play it online:** https://hxclown26.github.io/P-L-Quest/ (the link opens the game). In creator mode:
+https://hxclown26.github.io/P-L-Quest/?creator
+
 | File | What it is |
 |---|---|
 | `pl-quest.html` | Demo 1: the 5-floor tutorial. A frozen copy, never rebuilt. |
