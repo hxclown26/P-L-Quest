@@ -1,0 +1,3069 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>P&amp;L Quest</title>
+<style>
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #05050c;
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #f8f8f8;
+  font-family: monospace;
+}
+
+#screen {
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  background: #000;
+  outline: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+</style>
+</head>
+<body>
+<canvas id="screen" width="256" height="224" tabindex="0"
+  aria-label="P&amp;L Quest: juego de cartas por el estado de resultados / a card game through the P&amp;L"></canvas>
+<noscript>P&amp;L Quest necesita JavaScript / needs JavaScript.</noscript>
+<script>
+(function () {
+
+var __defs = {}, __cache = {};
+function __d(id, fn) { __defs[id] = fn; }
+function __r(id) {
+  if (__cache[id]) return __cache[id].exports;
+  if (!__defs[id]) throw new Error('Missing module: ' + id);
+  var module = __cache[id] = { exports: {} };
+  __defs[id](module, module.exports, __r);
+  return module.exports;
+}
+
+__d("audio", function (module, exports, __r) {
+'use strict';
+
+// Chiptune made with the Web Audio API: square-wave lead, triangle bass and short effects.
+// Nothing is downloaded. Browsers only allow sound after a user gesture, so the context is
+// created on the first call to music() or sfx() (always triggered by a key press or tap).
+// The output and the music scheduler keep their timing state in closures; no game data is
+// touched.
+
+const NOTE = (semitonesFromA4) => 440 * 2 ** (semitonesFromA4 / 12);
+const STEP_SECONDS = 0.16;
+const LOOKAHEAD = 0.25;
+const MASTER_GAIN = 0.5;
+
+// Lead and bass patterns in semitones from A4; null is a rest.
+const THEMES = Object.freeze({
+  title: {
+    lead: [3, null, 7, null, 10, null, 7, null, 8, null, 12, null, 10, null, 7, null,
+      5, null, 8, null, 12, null, 8, null, 7, null, 10, null, 15, null, 12, null],
+    bass: [-21, null, null, null, -21, null, -14, null, -16, null, null, null, -16, null, -9, null,
+      -19, null, null, null, -19, null, -12, null, -14, null, null, null, -14, null, -7, null],
+  },
+  play: {
+    lead: [0, null, 3, 0, null, 5, null, 3, 7, null, 5, null, 3, null, 0, null,
+      -2, null, 3, -2, null, 5, null, 3, 8, null, 7, null, 5, null, 3, null],
+    bass: [-24, -24, null, -24, -24, null, -24, null, -22, -22, null, -22, -22, null, -22, null,
+      -26, -26, null, -26, -26, null, -26, null, -24, -24, null, -24, -24, null, -24, null],
+  },
+});
+
+const EFFECTS = Object.freeze({
+  select: [[880, 0.03, 'square']],
+  confirm: [[660, 0.04, 'square'], [880, 0.06, 'square']],
+  good: [[523, 0.06, 'square'], [659, 0.06, 'square'], [784, 0.12, 'square']],
+  bad: [[392, 0.08, 'square'], [294, 0.08, 'square'], [220, 0.16, 'sawtooth']],
+  tier: [[523, 0.05, 'triangle'], [659, 0.05, 'triangle'], [784, 0.05, 'triangle'], [1047, 0.18, 'triangle']],
+  star: [[523, 0.1, 'square'], [659, 0.1, 'square'], [784, 0.1, 'square'], [1047, 0.3, 'square']],
+  death: [[330, 0.12, 'sawtooth'], [262, 0.12, 'sawtooth'], [196, 0.12, 'sawtooth'], [110, 0.5, 'sawtooth']],
+});
+
+// Owns the AudioContext: created lazily, resumed on demand, silenced by the mute switch.
+function createOutput(AudioContextClass) {
+  let ctx = null;
+  let master = null;
+  let muted = false;
+
+  const ensure = () => {
+    if (!AudioContextClass) return false;
+    if (!ctx) {
+      try {
+        ctx = new AudioContextClass();
+        master = ctx.createGain();
+        master.gain.value = muted ? 0 : MASTER_GAIN;
+        master.connect(ctx.destination);
+      } catch {
+        ctx = null;
+        return false;
+      }
+    }
+    if (ctx.state === 'suspended') ctx.resume();
+    return true;
+  };
+
+  const tone = (freq, start, length, type, volume) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.setValueAtTime(volume, start);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + length);
+    osc.connect(gain);
+    gain.connect(master);
+    osc.start(start);
+    osc.stop(start + length + 0.02);
+  };
+
+  const setMuted = (value) => {
+    muted = value;
+    if (master) master.gain.value = muted ? 0 : MASTER_GAIN;
+  };
+
+  return { ensure, tone, setMuted, now: () => ctx.currentTime };
+}
+
+// Schedules the looping theme a quarter of a second ahead of the audio clock.
+function createMusic(output) {
+  let mode = 'off';
+  let timer = null;
+  let step = 0;
+  let nextTime = 0;
+
+  const schedule = () => {
+    const theme = THEMES[mode];
+    while (theme && nextTime < output.now() + LOOKAHEAD) {
+      const i = step % theme.lead.length;
+      if (theme.lead[i] !== null) output.tone(NOTE(theme.lead[i]), nextTime, STEP_SECONDS * 0.9, 'square', 0.05);
+      if (theme.bass[i] !== null) output.tone(NOTE(theme.bass[i]), nextTime, STEP_SECONDS * 1.6, 'triangle', 0.09);
+      nextTime += STEP_SECONDS;
+      step += 1;
+    }
+  };
+
+  return (next) => {
+    if (next === mode) return;
+    mode = next;
+    if (timer !== null) clearInterval(timer);
+    timer = null;
+    if (next === 'off' || !output.ensure()) return;
+    step = 0;
+    nextTime = output.now() + 0.05;
+    timer = setInterval(schedule, 40);
+  };
+}
+
+function createAudio(AudioContextClass) {
+  const output = createOutput(AudioContextClass);
+  const music = createMusic(output);
+
+  const sfx = (name) => {
+    const notes = EFFECTS[name];
+    if (!notes || !output.ensure()) return;
+    notes.reduce((start, [freq, length, type]) => {
+      output.tone(freq, start, length, type, 0.12);
+      return start + length;
+    }, output.now());
+  };
+
+  return { setMuted: output.setMuted, music, sfx };
+}
+
+module.exports = { createAudio };
+
+});
+__d("autopsy", function (module, exports, __r) {
+'use strict';
+
+const { BASE_PL, applyOps, operatingIncome } = __r("model");
+const { CARDS } = __r("content/cards");
+const { FLOORS } = __r("content/floors");
+
+const oiGain = (ops) => operatingIncome(applyOps(BASE_PL, ops)) - operatingIncome(BASE_PL);
+
+// What a card is worth over the whole run: its own effect plus the costs it defers.
+function cardWorth(card) {
+  if (typeof card.worth === 'number') return card.worth;
+  return oiGain(card.ops) + card.later.reduce((sum, l) => sum + oiGain(l.ops), 0);
+}
+
+// Net OI movement per floor: shocks, deferred bills and the cards played there.
+function floorImpacts(run) {
+  const events = [
+    ...run.entries.map((e) => ({ floorIdx: e.floorIdx, oi: e.deferredOi + e.shockOi })),
+    ...run.played.map((p) => ({ floorIdx: p.floorIdx, oi: p.delta.oi })),
+  ];
+  return events.reduce((acc, e) => ({ ...acc, [e.floorIdx]: (acc[e.floorIdx] || 0) + e.oi }), {});
+}
+
+function biggestBite(run) {
+  const impacts = Object.entries(floorImpacts(run)).map(([idx, oi]) => ({ floorIdx: Number(idx), oi }));
+  if (impacts.length === 0) return null;
+  return impacts.reduce((worst, next) => (next.oi < worst.oi ? next : worst));
+}
+
+function bestInHand(hand) {
+  return hand.reduce((best, id) => (cardWorth(CARDS[id]) > cardWorth(CARDS[best]) ? id : best), hand[0]);
+}
+
+function costliestChoice(run) {
+  const choices = run.played.map((p) => {
+    const best = bestInHand(p.hand);
+    return { entry: p, best, regret: cardWorth(CARDS[best]) - cardWorth(CARDS[p.cardId]) };
+  });
+  const worst = choices.reduce((acc, c) => (acc === null || c.regret > acc.regret ? c : acc), null);
+  if (!worst || worst.regret <= 0) return null;
+  return {
+    floor: FLOORS[worst.entry.floorIdx].id,
+    turn: worst.entry.turn + 1,
+    chosen: worst.entry.cardId,
+    best: worst.best,
+  };
+}
+
+function buildAutopsy(run) {
+  const bite = biggestBite(run);
+  return {
+    biggestLine: bite ? FLOORS[bite.floorIdx].line : null,
+    biggestFloor: bite ? FLOORS[bite.floorIdx].id : null,
+    worst: costliestChoice(run),
+  };
+}
+
+module.exports = { buildAutopsy, cardWorth };
+
+});
+__d("content/cards", function (module, exports, __r) {
+'use strict';
+
+const { deepFreeze } = __r("freeze");
+
+// Card data only: effects live here, wording lives in content/es.js and content/en.js.
+// "later" ops land when the named floor starts: the concession did not vanish, it moved.
+// "worth" overrides the computed value for cards whose payoff is unlocking other cards.
+
+const AREAS = Object.freeze(['sales', 'procurement', 'ops', 'finance', 'mgmt']);
+const FLAGS = Object.freeze(['scanned', 'valueMeasured']);
+
+const price = (pct) => ({ op: 'price', pct });
+const volume = (pct) => ({ op: 'volume', pct });
+const add = (line, pts) => ({ op: 'add', line, pts });
+const later = (floor, ...ops) => ({ floor, ops });
+
+const define = (def) =>
+  deepFreeze({ ops: [], later: [], grants: [], requires: [], excludes: [], ...def });
+
+const CARD_LIST = Object.freeze([
+  // Floor 1: Sales (the opening move)
+  define({ id: 'raise', floor: 1, area: 'sales', rating: 'good', ops: [price(1.5), volume(-1.5)] }),
+  define({ id: 'listPrice', floor: 1, area: 'sales', rating: 'ok' }),
+  define({ id: 'discount', floor: 1, area: 'sales', rating: 'bad', ops: [price(-3), volume(6)] }),
+  define({ id: 'chase', floor: 1, area: 'sales', rating: 'bad', ops: [volume(3), add('serve', 1.5)] }),
+  define({ id: 'bundle', floor: 1, area: 'sales', rating: 'good', ops: [price(1), add('serve', 0.5)] }),
+  define({ id: 'forecast', floor: 1, area: 'sales', rating: 'good', ops: [add('serve', -0.4)] }),
+
+  // Floor 2: Incentives (the negotiation room)
+  define({ id: 'give3', floor: 2, area: 'sales', rating: 'bad', ops: [add('incentives', 3)] }),
+  define({ id: 'hold', floor: 2, area: 'sales', rating: 'ok', ops: [volume(-5)] }),
+  define({ id: 'freight', floor: 2, area: 'sales', rating: 'bad', later: [later(4, add('serve', 2.5))] }),
+  define({ id: 'scan', floor: 2, area: 'finance', rating: 'good', grants: ['scanned'], worth: 2 }),
+  define({
+    id: 'measured',
+    floor: 2,
+    area: 'sales',
+    rating: 'good',
+    requires: ['scanned'],
+    grants: ['valueMeasured'],
+    ops: [add('incentives', 0.5)],
+    worth: 1.5,
+  }),
+  define({ id: 'giveHalf', floor: 2, area: 'sales', rating: 'bad', ops: [add('incentives', 1.5)] }),
+  define({ id: 'walkAway', floor: 2, area: 'mgmt', rating: 'bad', ops: [volume(-15)] }),
+  define({ id: 'contract3y', floor: 2, area: 'sales', rating: 'good', requires: ['valueMeasured'], ops: [price(1)] }),
+
+  // Floor 3: Cost (the supplier raised the input)
+  define({ id: 'absorb', floor: 3, area: 'procurement', rating: 'bad' }),
+  define({ id: 'passLight', floor: 3, area: 'sales', rating: 'ok', excludes: ['valueMeasured'], ops: [price(2.5), volume(-4)] }),
+  define({ id: 'passValue', floor: 3, area: 'sales', rating: 'good', requires: ['valueMeasured'], ops: [price(2.5), volume(-0.5)] }),
+  define({ id: 'renegotiate', floor: 3, area: 'procurement', rating: 'good', ops: [add('cost', -1.2)] }),
+  define({
+    id: 'swapInput',
+    floor: 3,
+    area: 'procurement',
+    rating: 'ok',
+    ops: [add('cost', -1.5)],
+    later: [later(4, add('serve', 0.8))],
+  }),
+  define({ id: 'stockUp', floor: 3, area: 'procurement', rating: 'ok', ops: [add('cost', -1)] }),
+  define({ id: 'hedge', floor: 3, area: 'procurement', rating: 'ok', ops: [add('cost', -0.8)] }),
+
+  // Floor 4: Cost to serve (dispatch and field)
+  define({ id: 'acceptAll', floor: 4, area: 'sales', rating: 'bad', ops: [add('serve', 3.5)] }),
+  define({ id: 'routeOpt', floor: 4, area: 'ops', rating: 'good', ops: [add('serve', -0.8)] }),
+  define({ id: 'remote', floor: 4, area: 'ops', rating: 'good', ops: [add('serve', -1.2)] }),
+  define({ id: 'fee', floor: 4, area: 'finance', rating: 'good', requires: ['valueMeasured'], ops: [price(0.8)] }),
+  define({ id: 'comodatoReview', floor: 4, area: 'finance', rating: 'good', ops: [add('serve', -0.6)] }),
+  define({ id: 'ignore', floor: 4, area: 'mgmt', rating: 'bad' }),
+  define({ id: 'billExtras', floor: 4, area: 'sales', rating: 'ok', ops: [price(0.5)] }),
+
+  // Floor 5: SG&A (offices)
+  define({ id: 'freeze', floor: 5, area: 'mgmt', rating: 'good', ops: [add('sga', -1.2)] }),
+  define({ id: 'trimTravel', floor: 5, area: 'finance', rating: 'good', ops: [add('sga', -0.8)] }),
+  define({ id: 'restructure', floor: 5, area: 'mgmt', rating: 'good', ops: [add('sga', -2.5), volume(-2)] }),
+  define({ id: 'hireGrowth', floor: 5, area: 'mgmt', rating: 'bad', ops: [add('sga', 2), volume(3)] }),
+  define({ id: 'keep', floor: 5, area: 'mgmt', rating: 'bad' }),
+  define({ id: 'priceSmall', floor: 5, area: 'sales', rating: 'ok', ops: [price(1), volume(-1)] }),
+]);
+
+const CARDS = Object.freeze(Object.fromEntries(CARD_LIST.map((card) => [card.id, card])));
+
+module.exports = { AREAS, FLAGS, CARD_LIST, CARDS };
+
+});
+__d("content/en", function (module, exports, __r) {
+'use strict';
+
+// English strings. Same keys, same order and same {placeholders} as es.js.
+
+module.exports = Object.freeze({
+  // Interface
+  'ui.title': 'P&L QUEST',
+  'ui.subtitle': 'A quest through the income statement',
+  'ui.press': 'Press Enter or tap the screen',
+  'ui.language': 'Language',
+  'lang.es': 'Español',
+  'lang.en': 'English',
+  'ui.best': 'Best: {n} of 3 stars',
+  'ui.fictional': '100% fictional data',
+  'ui.btn.start': 'Enter: start',
+  'ui.btn.pick': 'Enter: pick',
+  'ui.btn.next': 'Enter: next',
+  'ui.btn.close': 'Enter: close',
+  'ui.btn.again': 'Enter: again',
+  'ui.btn.note': 'N note',
+  'ui.btn.sound': 'M sound',
+  'ui.btn.lang': 'L language',
+  'ui.floor': 'FLOOR {n}',
+  'ui.stage': 'Floor {f} - Turn {n}/3',
+  'ui.prompt': 'Which card do you play?',
+  'ui.appears': '{boss} appears!',
+  'ui.played': 'You played: {card}',
+  'ui.oiChange': 'OI {from} > {to}  ({delta})',
+  'ui.noChange': 'OI does not change.',
+  'ui.shift': 'The cost does not vanish: it returns on floor {n}.',
+  'ui.scanDone': "You measured the client's savings. A new card is ready.",
+  'ui.measuredDone': 'Value measured! Your price cards improve.',
+  'ui.entryDeferred': 'The bill from earlier choices arrives: OI {delta}',
+  'ui.entryShock': 'Floor shock: OI {delta}',
+  'ui.tierUp': 'The plant is modernizing!',
+  'ui.tierDown': 'The plant is deteriorating...',
+  'ui.floorDone': 'Floor {n} complete',
+  'ui.floorImpact': 'OI impact: {delta}',
+  'ui.room': 'CONTROL ROOM',
+  'ui.saved': 'Game saved',
+  'ui.gameOver': 'GAME OVER',
+  'ui.autopsy': 'AUTOPSY',
+  'ui.autopsyBiggest': 'The line that bit you hardest: {line}.',
+  'ui.autopsyWorst': 'Floor {floor}, turn {turn}: you played {chosen}. You could have played {best}.',
+  'ui.retryRoom': 'You restart from the control room.',
+  'ui.retryStart': 'You restart from floor 1.',
+  'ui.result': 'RESULT',
+  'ui.finalOi': 'Final OI: {n}',
+  'ui.stars': '{n} of 3 stars',
+  'ui.star1': '1: you survive',
+  'ui.star2': '2: OI above the minimum ({n})',
+  'ui.star3': '3: goal ({n}) with Scan used',
+  'ui.intro1': 'You run a plant that sells to mining. Your life bar is OI: what is left of every 100 of sales.',
+  'ui.intro2': "Each floor is a P&L line that wants to bite your margin. Play cards, measure the client's value and keep the plant standing.",
+  'ui.oiBar': 'Projected OI',
+  'ui.goalMark': 'goal {n}',
+  'chip.price': 'Price',
+  'chip.volume': 'Volume',
+  'chip.unlock': 'Unlocks',
+  'chip.shift': 'Other floor',
+  'lesson.measured': "You measured the client's savings: you had a card to negotiate.",
+  'lesson.unmeasured': 'You did not measure the savings: what is not measured is not negotiated.',
+  'lesson.shifted': 'The free freight came back inside cost to serve.',
+  'lesson.cts': 'Contribution margin is not Gross Profit: cost to serve sits between them.',
+  'lesson.fixed': 'Fixed cost weighs more when volume falls.',
+
+  // P&L lines
+  'line.sales': 'Sales',
+  'line.incentives': 'Incentives',
+  'line.cost': 'Cost',
+  'line.cm': 'Contribution margin',
+  'line.serve': 'Cost to serve',
+  'line.gp': 'Gross Profit',
+  'line.sga': 'SG&A',
+  'line.oi': 'OI',
+  'line.short.sales': 'Sales',
+  'line.short.incentives': 'Incentives',
+  'line.short.cost': 'Cost',
+  'line.short.cm': 'Contrib. mgn',
+  'line.short.serve': 'Serve cost',
+  'line.short.gp': 'Gross Profit',
+  'line.short.sga': 'SG&A',
+  'line.short.oi': 'OI',
+
+  // Areas of the company
+  'area.sales': 'Sales',
+  'area.procurement': 'Procurement',
+  'area.ops': 'Operations',
+  'area.finance': 'Finance',
+  'area.mgmt': 'Management',
+  'area.tag.sales': 'SALES',
+  'area.tag.procurement': 'PROCURE',
+  'area.tag.ops': 'OPS',
+  'area.tag.finance': 'FINANCE',
+  'area.tag.mgmt': 'MGMT',
+
+  // Factory states
+  'tier.collapse': 'Collapse',
+  'tier.edge': 'On the brink',
+  'tier.worn': 'Run-down plant',
+  'tier.normal': 'Normal plant',
+  'tier.modern': 'Modern plant',
+  'tier.hightech': 'Cutting-edge plant',
+
+  // Floors, bosses and what the boss says each turn
+  'floor.1.name': 'SALES',
+  'floor.1.place': 'Order desk',
+  'floor.2.name': 'INCENTIVES',
+  'floor.2.place': 'Negotiation room',
+  'floor.3.name': 'COST',
+  'floor.3.place': 'Warehouse and line',
+  'floor.4.name': 'COST TO SERVE',
+  'floor.4.place': 'Dispatch and field',
+  'floor.5.name': 'SG&A',
+  'floor.5.place': 'Offices',
+  'floor.6.name': 'OI',
+  'floor.6.place': 'Boardroom',
+  'boss.order': 'THE ORDER',
+  'boss.rebate': 'THE REBATE',
+  'boss.cost': 'THE COST',
+  'boss.truck': 'THE TRUCK',
+  'boss.fixed': 'FIXED COST',
+  'floor.1.t1': "The mine's annual order arrives. How do you enter the room?",
+  'floor.1.t2': 'The client wants more volume for less.',
+  'floor.1.t3': 'Last tweak before the order is signed.',
+  'floor.2.t1': 'The mine demands a 3% rebate to renew.',
+  'floor.2.t2': 'They push back: the competition offers more.',
+  'floor.2.t3': 'They want to close today. The clock is ticking.',
+  'floor.3.t1': 'The supplier raises input cost 8% and sale price will not move by itself.',
+  'floor.3.t2': 'Sales cannot see cost. Procurement cannot see price.',
+  'floor.3.t3': 'The quarter is closing. What do you do about cost?',
+  'floor.4.t1': 'The client asks for weekly visits and loaned equipment.',
+  'floor.4.t2': 'The field team is stretched thin.',
+  'floor.4.t3': 'Month-end: what gets billed and what is given away?',
+  'floor.5.t1': 'Sales fall 8% and fixed cost stays put.',
+  'floor.5.t2': 'Management asks to trim the budget.',
+  'floor.5.t3': 'Last quarter of the year.',
+
+  // Technical notes (N key)
+  'note.1.title': 'Sales',
+  'note.1.body': 'The starting point: price x volume. Price falls almost entirely to OI; volume only adds its margin. Sales controls it.',
+  'note.2.title': 'Incentives (rebates)',
+  'note.2.body': 'Rebates and discounts deducted from sales. Sales decides with Finance. A concession without measured backing is paid in margin.',
+  'note.3.title': 'Cost (replacement cost)',
+  'note.3.body': 'Replacement cost of the product. Procurement and suppliers move it. If it rises and price does not, contribution margin shrinks.',
+  'note.4.title': 'Cost to serve',
+  'note.4.body': 'Freight + Direct Charges (loaned gear) + Service COGS. Operations controls it, but Sales promises trigger it. It sits between contribution margin and Gross Profit.',
+  'note.5.title': 'SG&A',
+  'note.5.body': 'Selling and administrative expense. Mostly fixed: if volume falls, it weighs more on every sale. Management controls it.',
+  'note.6.title': 'OI (Operating Income)',
+  'note.6.body': 'What is left after every line: Gross Profit minus SG&A. It is the health of the plant. Interest and taxes are outside the game.',
+  'room.cm.title': 'Contribution margin',
+  'room.cm.body': 'Sales - Incentives - Cost. It is what you see before serving the client.',
+  'room.gp.title': 'Gross Profit',
+  'room.gp.body': 'Contribution margin minus Cost to serve. The gap between them is what it costs to serve the client.',
+
+  // Cards: floor 1
+  'card.raise.name': 'Raise price 1.5%',
+  'card.raise.desc': 'More margin on every sale, but a client may leave.',
+  'card.listPrice.name': 'Hold list price',
+  'card.listPrice.desc': 'You change nothing. Safe, but no gain.',
+  'card.discount.name': 'Cut price 3%',
+  'card.discount.desc': 'You sell more, but each sale leaves less margin.',
+  'card.chase.name': 'Take every order',
+  'card.chase.desc': 'More volume, but every small shipment costs more.',
+  'card.bundle.name': 'Service bundle',
+  'card.bundle.desc': 'You sell more value per order; service costs a bit.',
+  'card.forecast.name': 'Plan with Ops',
+  'card.forecast.desc': 'Operations sees what is coming and avoids rush shipments.',
+
+  // Cards: floor 2
+  'card.give3.name': 'Give the 3%',
+  'card.give3.desc': 'You close today, but set a precedent.',
+  'card.hold.name': 'Hold the price',
+  'card.hold.desc': 'No rebate. The client may buy less.',
+  'card.freight.name': 'Free freight',
+  'card.freight.desc': 'No rebate today. Who pays the freight?',
+  'card.scan.name': 'Scan: find savings',
+  'card.scan.desc': "You spend the turn measuring the client's savings.",
+  'card.measured.name': 'Documented savings',
+  'card.measured.desc': 'US$400k a year in water. You trade the rebate for a 3-year contract.',
+  'card.giveHalf.name': 'Concede 1.5%',
+  'card.giveHalf.desc': 'Halfway: you lose margin without an argument.',
+  'card.walkAway.name': 'Walk away',
+  'card.walkAway.desc': 'You lose the client: volume collapses.',
+  'card.contract3y.name': '3-year contract',
+  'card.contract3y.desc': 'With savings on the table, you sign with an annual price step.',
+
+  // Cards: floor 3
+  'card.absorb.name': 'Absorb the hike',
+  'card.absorb.desc': 'You do nothing: the hike eats your margin.',
+  'card.passLight.name': 'Pass it on',
+  'card.passLight.desc': 'The client sees only the hike: some volume leaves.',
+  'card.passValue.name': 'Backed price rise',
+  'card.passValue.desc': 'You show the measured savings and the client accepts.',
+  'card.renegotiate.name': 'Renegotiate supply',
+  'card.renegotiate.desc': 'Procurement wins a partial volume discount.',
+  'card.swapInput.name': 'Swap the input',
+  'card.swapInput.desc': 'Cost drops, but service must validate the formula.',
+  'card.stockUp.name': 'Stock up early',
+  'card.stockUp.desc': 'Cost drops, but cash sits in the warehouse.',
+  'card.hedge.name': 'Long-term contract',
+  'card.hedge.desc': 'You lock the input price for 12 months.',
+
+  // Cards: floor 4
+  'card.acceptAll.name': 'Accept it all',
+  'card.acceptAll.desc': 'Weekly visits and loaned gear: service eats the margin.',
+  'card.routeOpt.name': 'Optimize routes',
+  'card.routeOpt.desc': 'Fewer trips, fuller trucks.',
+  'card.remote.name': 'Remote monitoring',
+  'card.remote.desc': 'Visits only when needed.',
+  'card.fee.name': 'Charge for service',
+  'card.fee.desc': 'With savings measured, the client agrees to pay a fee.',
+  'card.comodatoReview.name': 'Review loaned gear',
+  'card.comodatoReview.desc': 'Minimum term for loaned gear: less idle depreciation.',
+  'card.ignore.name': 'Cheer the margin',
+  'card.ignore.desc': 'Contribution margin looks fine. The service cost is still there.',
+  'card.billExtras.name': 'Bill the extras',
+  'card.billExtras.desc': 'You charge for out-of-contract visits.',
+
+  // Cards: floor 5
+  'card.freeze.name': 'Hiring freeze',
+  'card.freeze.desc': 'No new hires: fixed cost drops a bit.',
+  'card.trimTravel.name': 'Trim travel',
+  'card.trimTravel.desc': 'Fewer trips and outside consultants.',
+  'card.restructure.name': 'Restructure',
+  'card.restructure.desc': 'Big savings, but customer service suffers.',
+  'card.hireGrowth.name': 'Hire to grow',
+  'card.hireGrowth.desc': 'More people today; volume comes later, if it does.',
+  'card.keep.name': 'Keep it all',
+  'card.keep.desc': 'Fixed cost stays. So does the pressure on OI.',
+  'card.priceSmall.name': 'Raise small accts',
+  'card.priceSmall.desc': 'You adjust price on small accounts only.',
+});
+
+});
+__d("content/es", function (module, exports, __r) {
+'use strict';
+
+// Spanish strings. Keep both languages in the same order and with the same {placeholders};
+// tests/content.test.js checks parity, character support and line lengths.
+
+module.exports = Object.freeze({
+  // Interface
+  'ui.title': 'P&L QUEST',
+  'ui.subtitle': 'Una aventura por el estado de resultados',
+  'ui.press': 'Presiona Enter o toca la pantalla',
+  'ui.language': 'Idioma',
+  'lang.es': 'Español',
+  'lang.en': 'English',
+  'ui.best': 'Mejor: {n} de 3 estrellas',
+  'ui.fictional': 'Datos 100% ficticios',
+  'ui.btn.start': 'Enter: empezar',
+  'ui.btn.pick': 'Enter: elegir',
+  'ui.btn.next': 'Enter: seguir',
+  'ui.btn.close': 'Enter: cerrar',
+  'ui.btn.again': 'Enter: otra vez',
+  'ui.btn.note': 'N nota',
+  'ui.btn.sound': 'M sonido',
+  'ui.btn.lang': 'L idioma',
+  'ui.floor': 'PISO {n}',
+  'ui.stage': 'Piso {f} - Turno {n}/3',
+  'ui.prompt': '¿Qué carta juegas?',
+  'ui.appears': '¡Aparece {boss}!',
+  'ui.played': 'Jugaste: {card}',
+  'ui.oiChange': 'OI {from} > {to}  ({delta})',
+  'ui.noChange': 'El OI no cambia.',
+  'ui.shift': 'El costo no desaparece: reaparece en el piso {n}.',
+  'ui.scanDone': 'Mediste el ahorro del cliente. Hay una carta nueva.',
+  'ui.measuredDone': '¡Valor medido! Mejoran tus cartas de precio.',
+  'ui.entryDeferred': 'Llega la factura de decisiones anteriores: OI {delta}',
+  'ui.entryShock': 'Golpe del piso: OI {delta}',
+  'ui.tierUp': '¡La fábrica se moderniza!',
+  'ui.tierDown': 'La fábrica se deteriora...',
+  'ui.floorDone': 'Piso {n} completo',
+  'ui.floorImpact': 'Impacto en OI: {delta}',
+  'ui.room': 'SALA DE CONTROL',
+  'ui.saved': 'Partida guardada',
+  'ui.gameOver': 'GAME OVER',
+  'ui.autopsy': 'AUTOPSIA',
+  'ui.autopsyBiggest': 'La línea que más te mordió: {line}.',
+  'ui.autopsyWorst': 'Piso {floor}, turno {turn}: jugaste {chosen}. Pudiste jugar {best}.',
+  'ui.retryRoom': 'Reinicias desde la sala de control.',
+  'ui.retryStart': 'Reinicias desde el primer piso.',
+  'ui.result': 'RESULTADO',
+  'ui.finalOi': 'OI final: {n}',
+  'ui.stars': '{n} de 3 estrellas',
+  'ui.star1': '1: llegas con vida',
+  'ui.star2': '2: OI sobre el mínimo ({n})',
+  'ui.star3': '3: meta ({n}) con Scan usado',
+  'ui.intro1': 'Diriges una fábrica que le vende a la minería. Tu barra de vida es el OI: lo que queda de cada 100 de venta.',
+  'ui.intro2': 'Cada piso es una línea del P&L y quiere morder tu margen. Juega cartas, mide el valor del cliente y mantén la fábrica en pie.',
+  'ui.oiBar': 'OI proyectado',
+  'ui.goalMark': 'meta {n}',
+  'chip.price': 'Precio',
+  'chip.volume': 'Volumen',
+  'chip.unlock': 'Desbloquea',
+  'chip.shift': 'Otro piso',
+  'lesson.measured': 'Mediste el ahorro del cliente: tuviste carta para negociar.',
+  'lesson.unmeasured': 'No mediste el ahorro: lo que no se mide, no se negocia.',
+  'lesson.shifted': 'El flete incluido reapareció en el costo de servir.',
+  'lesson.cts': 'El margen de contribución no es el Gross Profit: los separa el costo de servir.',
+  'lesson.fixed': 'El gasto fijo pesa más cuando cae el volumen.',
+
+  // P&L lines
+  'line.sales': 'Ventas',
+  'line.incentives': 'Incentivos',
+  'line.cost': 'Costo',
+  'line.cm': 'Margen de contribución',
+  'line.serve': 'Costo de servir',
+  'line.gp': 'Gross Profit',
+  'line.sga': 'SG&A',
+  'line.oi': 'OI',
+  'line.short.sales': 'Ventas',
+  'line.short.incentives': 'Incentivos',
+  'line.short.cost': 'Costo',
+  'line.short.cm': 'M. contrib.',
+  'line.short.serve': 'C. de servir',
+  'line.short.gp': 'Gross Profit',
+  'line.short.sga': 'SG&A',
+  'line.short.oi': 'OI',
+
+  // Areas of the company
+  'area.sales': 'Comercial',
+  'area.procurement': 'Compras',
+  'area.ops': 'Operaciones',
+  'area.finance': 'Finanzas',
+  'area.mgmt': 'Gerencia',
+  'area.tag.sales': 'COMERCIAL',
+  'area.tag.procurement': 'COMPRAS',
+  'area.tag.ops': 'OPERAC.',
+  'area.tag.finance': 'FINANZAS',
+  'area.tag.mgmt': 'GERENCIA',
+
+  // Factory states
+  'tier.collapse': 'Colapso',
+  'tier.edge': 'Al borde del colapso',
+  'tier.worn': 'Fábrica deteriorada',
+  'tier.normal': 'Fábrica normal',
+  'tier.modern': 'Fábrica moderna',
+  'tier.hightech': 'Fábrica de punta',
+
+  // Floors, bosses and what the boss says each turn
+  'floor.1.name': 'VENTAS',
+  'floor.1.place': 'Recepción de pedidos',
+  'floor.2.name': 'INCENTIVOS',
+  'floor.2.place': 'Sala de negociación',
+  'floor.3.name': 'COSTO',
+  'floor.3.place': 'Almacén y línea',
+  'floor.4.name': 'COSTO DE SERVIR',
+  'floor.4.place': 'Despacho y terreno',
+  'floor.5.name': 'SG&A',
+  'floor.5.place': 'Oficinas',
+  'floor.6.name': 'OI',
+  'floor.6.place': 'Sala de directorio',
+  'boss.order': 'EL PEDIDO',
+  'boss.rebate': 'EL REBATE',
+  'boss.cost': 'EL COSTO',
+  'boss.truck': 'EL CAMIÓN',
+  'boss.fixed': 'EL GASTO FIJO',
+  'floor.1.t1': 'Llega el pedido anual de la minera. ¿Cómo entras a la mesa?',
+  'floor.1.t2': 'El cliente pide más volumen por menos.',
+  'floor.1.t3': 'Último ajuste antes de firmar el pedido.',
+  'floor.2.t1': 'La minera exige un rebate de 3% para renovar.',
+  'floor.2.t2': 'Insisten: la competencia ofrece más.',
+  'floor.2.t3': 'Quieren cerrar hoy. El reloj corre.',
+  'floor.3.t1': 'El proveedor sube el insumo 8% y el precio de venta no se mueve solo.',
+  'floor.3.t2': 'Comercial no ve el costo. Compras no ve el precio.',
+  'floor.3.t3': 'Cierra el trimestre. ¿Qué haces con el costo?',
+  'floor.4.t1': 'El cliente pide visitas semanales y equipo en comodato.',
+  'floor.4.t2': 'El equipo en terreno ya no da abasto.',
+  'floor.4.t3': 'Cierre de mes: ¿qué se factura y qué se regala?',
+  'floor.5.t1': 'Las ventas caen 8% y el gasto fijo sigue igual.',
+  'floor.5.t2': 'Gerencia pide ajustar el presupuesto.',
+  'floor.5.t3': 'Último trimestre del año.',
+
+  // Technical notes (N key)
+  'note.1.title': 'Ventas (Sales)',
+  'note.1.body': 'Es el punto de partida: precio x volumen. El precio cae casi entero al OI; el volumen solo aporta su margen. Lo controla Comercial.',
+  'note.2.title': 'Incentivos (rebates)',
+  'note.2.body': 'Rebates y descuentos que se restan de la venta. Los decide Comercial con Finanzas. Una concesión sin respaldo medido se paga en margen.',
+  'note.3.title': 'Costo (replacement cost)',
+  'note.3.body': 'Costo de reposición del producto. Lo mueven Compras y los proveedores. Si sube y el precio no, el margen de contribución se achica.',
+  'note.4.title': 'Costo de servir',
+  'note.4.body': 'Flete + Direct Charges (comodato) + Service COGS. Lo controla Operaciones, pero lo disparan las promesas de Comercial. Va entre el margen de contribución y el Gross Profit.',
+  'note.5.title': 'SG&A',
+  'note.5.body': 'Gasto de ventas y administración. Es mayormente fijo: si el volumen cae, pesa más sobre cada venta. Lo controla Gerencia.',
+  'note.6.title': 'OI (Operating Income)',
+  'note.6.body': 'Lo que queda tras todas las líneas: Gross Profit menos SG&A. Es la salud de la fábrica. Intereses e impuestos quedan fuera del juego.',
+  'room.cm.title': 'Margen de contribución',
+  'room.cm.body': 'Ventas - Incentivos - Costo. Es lo que ves antes de servir al cliente.',
+  'room.gp.title': 'Gross Profit',
+  'room.gp.body': 'Margen de contribución menos Costo de servir. La diferencia entre ambos es lo que cuesta atender al cliente.',
+
+  // Cards: floor 1
+  'card.raise.name': 'Subir precio 1,5%',
+  'card.raise.desc': 'Más margen en cada venta, pero algún cliente se va.',
+  'card.listPrice.name': 'Mantener lista',
+  'card.listPrice.desc': 'No tocas nada. Seguro, pero sin mejora.',
+  'card.discount.name': 'Rebajar precio 3%',
+  'card.discount.desc': 'Vendes más, pero cada venta deja menos margen.',
+  'card.chase.name': 'Aceptar todo pedido',
+  'card.chase.desc': 'Más volumen, pero cada despacho chico cuesta más.',
+  'card.bundle.name': 'Paquete + servicio',
+  'card.bundle.desc': 'Vendes más valor por pedido; el servicio cuesta algo.',
+  'card.forecast.name': 'Planificar con Ops',
+  'card.forecast.desc': 'Operaciones sabe qué viene y evita despachos de urgencia.',
+
+  // Cards: floor 2
+  'card.give3.name': 'Dar el 3%',
+  'card.give3.desc': 'Cierras hoy, pero sientas precedente.',
+  'card.hold.name': 'Mantener precio',
+  'card.hold.desc': 'Sin rebate. El cliente podría comprar menos.',
+  'card.freight.name': 'Flete incluido',
+  'card.freight.desc': 'Hoy no hay rebate. ¿Quién paga el flete?',
+  'card.scan.name': 'Scan: medir ahorro',
+  'card.scan.desc': 'Gastas el turno midiendo cuánto ahorra el cliente.',
+  'card.measured.name': 'Ahorro documentado',
+  'card.measured.desc': 'US$400 mil al año en agua. Cambias el rebate por un contrato a 3 años.',
+  'card.giveHalf.name': 'Ceder 1,5%',
+  'card.giveHalf.desc': 'Medio camino: pierdes margen sin tener un argumento.',
+  'card.walkAway.name': 'Dejar la mesa',
+  'card.walkAway.desc': 'Pierdes al cliente: el volumen se cae.',
+  'card.contract3y.name': 'Contrato a 3 años',
+  'card.contract3y.desc': 'Con el ahorro a la vista, firmas con ajuste anual de precio.',
+
+  // Cards: floor 3
+  'card.absorb.name': 'Absorber el alza',
+  'card.absorb.desc': 'No haces nada: el alza se come tu margen.',
+  'card.passLight.name': 'Subir el precio',
+  'card.passLight.desc': 'El cliente ve solo el alza: algo de volumen se va.',
+  'card.passValue.name': 'Alza con respaldo',
+  'card.passValue.desc': 'Muestras el ahorro medido y el cliente acepta el alza.',
+  'card.renegotiate.name': 'Renegociar compra',
+  'card.renegotiate.desc': 'Compras logra un descuento parcial por volumen.',
+  'card.swapInput.name': 'Sustituir insumo',
+  'card.swapInput.desc': 'Baja el costo, pero el servicio debe validar la fórmula.',
+  'card.stockUp.name': 'Comprar stock antes',
+  'card.stockUp.desc': 'Baja el costo, pero la caja queda en bodega.',
+  'card.hedge.name': 'Contrato largo',
+  'card.hedge.desc': 'Fijas el precio del insumo por 12 meses.',
+
+  // Cards: floor 4
+  'card.acceptAll.name': 'Aceptar todo',
+  'card.acceptAll.desc': 'Visitas semanales y comodato: el servicio se come el margen.',
+  'card.routeOpt.name': 'Optimizar rutas',
+  'card.routeOpt.desc': 'Menos despachos, más carga por camión.',
+  'card.remote.name': 'Monitoreo remoto',
+  'card.remote.desc': 'Visitas solo cuando hacen falta.',
+  'card.fee.name': 'Cobrar el servicio',
+  'card.fee.desc': 'Con el ahorro medido, el cliente acepta pagar un fee.',
+  'card.comodatoReview.name': 'Revisar comodato',
+  'card.comodatoReview.desc': 'Plazo mínimo para el equipo en comodato: menos depreciación sin uso.',
+  'card.ignore.name': 'Celebrar el margen',
+  'card.ignore.desc': 'El margen de contribución se ve bien. El servicio sigue ahí.',
+  'card.billExtras.name': 'Facturar extras',
+  'card.billExtras.desc': 'Cobras las visitas fuera de contrato.',
+
+  // Cards: floor 5
+  'card.freeze.name': 'Congelar dotación',
+  'card.freeze.desc': 'Nadie nuevo entra: el gasto fijo baja un poco.',
+  'card.trimTravel.name': 'Recortar viajes',
+  'card.trimTravel.desc': 'Menos viajes y consultores externos.',
+  'card.restructure.name': 'Reestructurar',
+  'card.restructure.desc': 'Gran ahorro, pero el servicio al cliente se resiente.',
+  'card.hireGrowth.name': 'Contratar y crecer',
+  'card.hireGrowth.desc': 'Más gente hoy; el volumen llega después, si llega.',
+  'card.keep.name': 'Mantener todo',
+  'card.keep.desc': 'El gasto fijo no se mueve. Tampoco la presión sobre el OI.',
+  'card.priceSmall.name': 'Subir precio chicos',
+  'card.priceSmall.desc': 'Ajustas precio solo en clientes pequeños.',
+});
+
+});
+__d("content/floors", function (module, exports, __r) {
+'use strict';
+
+const { deepFreeze } = __r("freeze");
+const { CARD_LIST } = __r("content/cards");
+
+// Each floor is one P&L line and one boss. "turns" lists candidate cards per turn in
+// display order; the engine deals the first four that are eligible, then falls back to the
+// rest of the pool. startOps is the shock that lands as the floor begins.
+
+const add = (line, pts) => ({ op: 'add', line, pts });
+const volume = (pct) => ({ op: 'volume', pct });
+
+const poolOf = (floorId) =>
+  Object.freeze(CARD_LIST.filter((card) => card.floor === floorId).map((card) => card.id));
+
+const floor = (def) => deepFreeze({ startOps: [], ...def, pool: poolOf(def.id) });
+
+const FLOORS = Object.freeze([
+  floor({
+    id: 1,
+    line: 'sales',
+    boss: 'order',
+    turns: [
+      ['raise', 'listPrice', 'discount', 'chase'],
+      ['discount', 'bundle', 'chase', 'forecast', 'listPrice', 'raise'],
+      ['chase', 'raise', 'forecast', 'discount', 'bundle', 'listPrice'],
+    ],
+  }),
+  floor({
+    id: 2,
+    line: 'incentives',
+    boss: 'rebate',
+    turns: [
+      ['give3', 'hold', 'freight', 'scan'],
+      ['measured', 'giveHalf', 'walkAway', 'scan', 'give3', 'hold', 'freight'],
+      ['contract3y', 'measured', 'giveHalf', 'hold', 'give3', 'freight', 'walkAway', 'scan'],
+    ],
+  }),
+  floor({
+    id: 3,
+    line: 'cost',
+    boss: 'cost',
+    startOps: [add('cost', 4)],
+    turns: [
+      ['absorb', 'passValue', 'passLight', 'renegotiate', 'swapInput', 'hedge', 'stockUp'],
+      ['passValue', 'swapInput', 'passLight', 'hedge', 'renegotiate', 'stockUp', 'absorb'],
+      ['renegotiate', 'stockUp', 'passValue', 'passLight', 'swapInput', 'hedge', 'absorb'],
+    ],
+  }),
+  floor({
+    id: 4,
+    line: 'serve',
+    boss: 'truck',
+    turns: [
+      ['acceptAll', 'routeOpt', 'remote', 'fee', 'comodatoReview', 'billExtras', 'ignore'],
+      ['fee', 'ignore', 'remote', 'routeOpt', 'comodatoReview', 'billExtras', 'acceptAll'],
+      ['routeOpt', 'remote', 'fee', 'billExtras', 'comodatoReview', 'ignore', 'acceptAll'],
+    ],
+  }),
+  floor({
+    id: 5,
+    line: 'sga',
+    boss: 'fixed',
+    startOps: [volume(-8)],
+    turns: [
+      ['freeze', 'restructure', 'hireGrowth', 'keep', 'trimTravel', 'priceSmall'],
+      ['hireGrowth', 'trimTravel', 'restructure', 'priceSmall', 'freeze', 'keep'],
+      ['keep', 'trimTravel', 'freeze', 'priceSmall', 'restructure', 'hireGrowth'],
+    ],
+  }),
+]);
+
+// A control room follows these floors; the game is saved there.
+const CONTROL_AFTER = Object.freeze({ 3: 'cm', 4: 'gp' });
+
+module.exports = { FLOORS, CONTROL_AFTER };
+
+});
+__d("engine", function (module, exports, __r) {
+'use strict';
+
+// The game as a state machine. A "run" is an immutable snapshot: every function returns a
+// new run and never modifies the one it receives. The UI only reads run.phase and calls
+// next / playCard / retry.
+//
+// Phases: floorIntro -> turn -> turnResult -> (turn ...) -> floorOutro -> [control] ->
+//         floorIntro ... -> final.  Any move can end in 'dead'.
+
+const { BASE_PL, applyOps, operatingIncome, delta } = __r("model");
+const { CARDS } = __r("content/cards");
+const { FLOORS, CONTROL_AFTER } = __r("content/floors");
+const { buildAutopsy } = __r("autopsy");
+
+const TURNS_PER_FLOOR = 3;
+const HAND_SIZE = 4;
+const MIN_OI = 10;
+const GOAL_OI = 15;
+const START_FLAGS = Object.freeze({ scanned: false, valueMeasured: false });
+
+const oiOf = (run) => operatingIncome(run.pl);
+const isDead = (run) => oiOf(run) <= 0;
+
+const die = (run) => ({ ...run, phase: 'dead', autopsy: buildAutopsy(run) });
+
+const freshRun = () => ({
+  phase: 'floorIntro',
+  floorIdx: 0,
+  turn: 0,
+  pl: BASE_PL,
+  flags: START_FLAGS,
+  played: [],
+  entries: [],
+  deferred: [],
+  hand: [],
+  entry: null,
+  last: null,
+  room: null,
+  checkpoint: null,
+  attempt: 1,
+});
+
+// Applies bills deferred from earlier floors, then the floor's own shock.
+function enterFloor(run, idx) {
+  const floor = FLOORS[idx];
+  const due = run.deferred.filter((d) => d.floorIdx === idx);
+  const afterDeferred = due.reduce((pl, d) => applyOps(pl, d.ops), run.pl);
+  const afterShock = applyOps(afterDeferred, floor.startOps);
+  const entry = {
+    floorIdx: idx,
+    fromCards: due.map((d) => d.cardId),
+    deferredOi: operatingIncome(afterDeferred) - operatingIncome(run.pl),
+    shockOi: operatingIncome(afterShock) - operatingIncome(afterDeferred),
+  };
+  const next = {
+    ...run,
+    phase: 'floorIntro',
+    floorIdx: idx,
+    turn: 0,
+    pl: afterShock,
+    deferred: run.deferred.filter((d) => d.floorIdx !== idx),
+    hand: [],
+    entry,
+    entries: [...run.entries, entry],
+    last: null,
+    room: null,
+  };
+  return isDead(next) ? die(next) : next;
+}
+
+const newRun = () => enterFloor(freshRun(), 0);
+
+const isEligible = (card, run, playedIds) =>
+  !playedIds.has(card.id) &&
+  card.requires.every((flag) => run.flags[flag] === true) &&
+  card.excludes.every((flag) => run.flags[flag] !== true);
+
+// First four eligible cards from this turn's list, topped up from the floor's pool.
+function buildHand(run) {
+  const floor = FLOORS[run.floorIdx];
+  const playedIds = new Set(run.played.map((p) => p.cardId));
+  const ordered = [...floor.turns[run.turn], ...floor.pool];
+  return ordered
+    .filter((id, i) => ordered.indexOf(id) === i)
+    .filter((id) => isEligible(CARDS[id], run, playedIds))
+    .slice(0, HAND_SIZE);
+}
+
+function startTurn(run, turn) {
+  const dealt = { ...run, phase: 'turn', turn };
+  return { ...dealt, hand: buildHand(dealt) };
+}
+
+function afterOutro(run) {
+  const room = CONTROL_AFTER[FLOORS[run.floorIdx].id];
+  if (room) {
+    const control = { ...run, phase: 'control', room, checkpoint: null };
+    return { ...control, checkpoint: control };
+  }
+  return run.floorIdx + 1 < FLOORS.length
+    ? enterFloor(run, run.floorIdx + 1)
+    : { ...run, phase: 'final' };
+}
+
+function next(run) {
+  switch (run.phase) {
+    case 'floorIntro':
+      return startTurn(run, 0);
+    case 'turnResult':
+      return run.turn + 1 < TURNS_PER_FLOOR
+        ? startTurn(run, run.turn + 1)
+        : { ...run, phase: 'floorOutro' };
+    case 'floorOutro':
+      return afterOutro(run);
+    case 'control':
+      return enterFloor(run, run.floorIdx + 1);
+    default:
+      return run;
+  }
+}
+
+function playCard(run, cardId) {
+  if (run.phase !== 'turn') throw new Error(`Cannot play a card in phase ${run.phase}`);
+  if (!run.hand.includes(cardId)) throw new Error(`Card ${cardId} is not in hand`);
+  const card = CARDS[cardId];
+  const pl = applyOps(run.pl, card.ops);
+  const entry = {
+    floorIdx: run.floorIdx,
+    turn: run.turn,
+    cardId,
+    hand: run.hand,
+    oiBefore: oiOf(run),
+    oiAfter: operatingIncome(pl),
+    delta: delta(run.pl, pl),
+  };
+  const played = {
+    ...run,
+    pl,
+    phase: 'turnResult',
+    last: entry,
+    flags: card.grants.reduce((flags, grant) => ({ ...flags, [grant]: true }), run.flags),
+    deferred: [
+      ...run.deferred,
+      ...card.later.map((l) => ({ floorIdx: l.floor - 1, ops: l.ops, cardId })),
+    ],
+    played: [...run.played, entry],
+  };
+  return isDead(played) ? die(played) : played;
+}
+
+// Restarts from the last control room, or from floor 1 if none was reached.
+function retry(run) {
+  const attempt = run.attempt + 1;
+  if (run.checkpoint) return { ...run.checkpoint, checkpoint: run.checkpoint, attempt };
+  return { ...newRun(), attempt };
+}
+
+function starsFor(run) {
+  if (run.phase === 'dead') return 0;
+  const value = oiOf(run);
+  if (value <= 0) return 0;
+  const reachedGoal = value >= GOAL_OI && run.flags.scanned === true;
+  return 1 + (value >= MIN_OI ? 1 : 0) + (reachedGoal ? 1 : 0);
+}
+
+// Immediate OI effect of a card, ignoring bills it defers to later floors.
+const previewDelta = (run, cardId) => delta(run.pl, applyOps(run.pl, CARDS[cardId].ops));
+
+module.exports = {
+  TURNS_PER_FLOOR,
+  HAND_SIZE,
+  MIN_OI,
+  GOAL_OI,
+  newRun,
+  enterFloor,
+  next,
+  playCard,
+  retry,
+  starsFor,
+  previewDelta,
+  oiOf,
+};
+
+});
+__d("freeze", function (module, exports, __r) {
+'use strict';
+
+// Freezes constant game data once, at load time, so nothing can mutate it later.
+function deepFreeze(value) {
+  if (value && typeof value === 'object' && !Object.isFrozen(value)) {
+    Object.values(value).forEach(deepFreeze);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+module.exports = { deepFreeze };
+
+});
+__d("i18n", function (module, exports, __r) {
+'use strict';
+
+const PLACEHOLDER = /\{(\w+)\}/g;
+
+// Looks a key up in the chosen language, falling back to Spanish and then to the key
+// itself, and fills {name} placeholders. It never throws: a missing string must not stop
+// the game (the content tests guarantee that both languages are complete).
+function createI18n(dicts) {
+  const has = (lang, key) =>
+    Object.prototype.hasOwnProperty.call(dicts[lang] || {}, key);
+
+  const t = (lang, key, params = {}) => {
+    const source = has(lang, key) ? dicts[lang] : dicts.es;
+    const raw = Object.prototype.hasOwnProperty.call(source, key) ? source[key] : key;
+    return raw.replace(PLACEHOLDER, (match, name) => (name in params ? String(params[name]) : match));
+  };
+
+  return { t, has };
+}
+
+module.exports = { createI18n };
+
+});
+__d("main", function (module, exports, __r) {
+'use strict';
+
+// Browser entry point: wires the canvas, keyboard, pointer, sound and storage to the pure
+// game state in ui/app.js. All game rules live elsewhere; this file only moves events in
+// and effects out.
+
+const { createApp, reduce } = __r("ui/app");
+const { keyToAction, toLogical } = __r("ui/keys");
+const { createStorage } = __r("storage");
+const { createAudio } = __r("audio");
+const { drawFrame } = __r("render/index");
+const { W, H } = __r("ui/layout");
+
+const MAX_DT = 0.1;
+
+// Reading window.localStorage can itself throw (blocked cookies, some file:// setups).
+function safeStorage() {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function browserLang() {
+  return String(navigator.language || 'es').toLowerCase().startsWith('en') ? 'en' : 'es';
+}
+
+// Whole-number scaling keeps the pixels square; on very small screens it falls back to a
+// fractional scale so the picture still fits.
+function fitCanvas(canvas) {
+  const fit = Math.max(0.25, Math.min(window.innerWidth / W, window.innerHeight / H));
+  const scale = fit >= 2 ? Math.floor(fit) : fit;
+  canvas.style.width = `${Math.round(W * scale)}px`;
+  canvas.style.height = `${Math.round(H * scale)}px`;
+}
+
+// Owns the current app state and turns actions into state changes plus side effects.
+function createRuntime(saved, audio, storage) {
+  let app = createApp({ lang: saved.lang || browserLang(), muted: saved.muted, best: saved.bestStars });
+  audio.setMuted(app.muted);
+
+  const perform = (effect) => {
+    if (effect.type === 'sfx') audio.sfx(effect.name);
+    else if (effect.type === 'music') audio.music(effect.mode);
+    else if (effect.type === 'mute') audio.setMuted(effect.value);
+    else if (effect.type === 'save') app = { ...app, best: storage.save(effect.patch).bestStars };
+  };
+
+  const dispatch = (action) => {
+    const outcome = reduce(app, action);
+    app = outcome.app;
+    outcome.effects.forEach(perform);
+  };
+
+  return { dispatch, current: () => app };
+}
+
+function bindInput(canvas, dispatch) {
+  window.addEventListener('keydown', (event) => {
+    const action = keyToAction(event.key);
+    if (!action || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return;
+    event.preventDefault();
+    dispatch({ type: 'key', key: action });
+  });
+  const logical = (event) => toLogical(event.clientX, event.clientY, canvas.getBoundingClientRect());
+  canvas.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    dispatch({ type: 'tap', ...logical(event) });
+  });
+  canvas.addEventListener('pointermove', (event) => {
+    if (event.pointerType === 'mouse') dispatch({ type: 'hover', ...logical(event) });
+  });
+  window.addEventListener('resize', () => fitCanvas(canvas));
+}
+
+function startLoop(ctx, runtime) {
+  let last = performance.now();
+  const frame = (now) => {
+    const dt = Math.min(MAX_DT, (now - last) / 1000);
+    last = now;
+    runtime.dispatch({ type: 'tick', dt });
+    drawFrame(ctx, runtime.current());
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}
+
+function start() {
+  const canvas = document.getElementById('screen');
+  const storage = createStorage(safeStorage());
+  const audio = createAudio(window.AudioContext || window.webkitAudioContext);
+  const runtime = createRuntime(storage.load(), audio, storage);
+  bindInput(canvas, runtime.dispatch);
+  fitCanvas(canvas);
+  startLoop(canvas.getContext('2d'), runtime);
+}
+
+start();
+
+});
+__d("model", function (module, exports, __r) {
+'use strict';
+
+// The P&L model. Every figure is "points per 100 of plan sales", so OI 15 means 15%.
+// All functions are pure: they return new objects and never touch their input.
+
+const SERVE_VARIABLE_SHARE = 0.6;
+const DEDUCTION_LINES = Object.freeze(['incentives', 'cost', 'serve', 'sga']);
+
+const BASE_PL = Object.freeze({
+  sales: 100,
+  incentives: 2,
+  cost: 53,
+  serve: 14,
+  sga: 16,
+});
+
+const contributionMargin = (pl) => pl.sales - pl.incentives - pl.cost;
+const grossProfit = (pl) => contributionMargin(pl) - pl.serve;
+const operatingIncome = (pl) => grossProfit(pl) - pl.sga;
+
+function assertNumber(value, name) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new Error(`Invalid ${name}: ${value}`);
+  }
+}
+
+// Price moves sales and the rebates that are a percentage of sales; cost does not follow.
+function scalePrice(pl, pct) {
+  assertNumber(pct, 'pct');
+  const k = 1 + pct / 100;
+  return { ...pl, sales: pl.sales * k, incentives: pl.incentives * k };
+}
+
+// Volume moves every variable line. SG&A is fixed, so it does not scale with volume.
+function scaleVolume(pl, pct) {
+  assertNumber(pct, 'pct');
+  if (pct <= -100) throw new Error(`Invalid pct: ${pct}`);
+  const k = 1 + pct / 100;
+  return {
+    ...pl,
+    sales: pl.sales * k,
+    incentives: pl.incentives * k,
+    cost: pl.cost * k,
+    serve: pl.serve * (1 + (k - 1) * SERVE_VARIABLE_SHARE),
+  };
+}
+
+function addToLine(pl, line, pts) {
+  if (!DEDUCTION_LINES.includes(line)) throw new Error(`Invalid line: ${line}`);
+  assertNumber(pts, 'pts');
+  return { ...pl, [line]: pl[line] + pts };
+}
+
+function applyOp(pl, op) {
+  switch (op.op) {
+    case 'price':
+      return scalePrice(pl, op.pct);
+    case 'volume':
+      return scaleVolume(pl, op.pct);
+    case 'add':
+      return addToLine(pl, op.line, op.pts);
+    default:
+      throw new Error(`Unknown op: ${op.op}`);
+  }
+}
+
+const applyOps = (pl, ops) => ops.reduce(applyOp, pl);
+
+const delta = (before, after) => ({
+  sales: after.sales - before.sales,
+  incentives: after.incentives - before.incentives,
+  cost: after.cost - before.cost,
+  serve: after.serve - before.serve,
+  sga: after.sga - before.sga,
+  oi: operatingIncome(after) - operatingIncome(before),
+});
+
+module.exports = {
+  BASE_PL,
+  SERVE_VARIABLE_SHARE,
+  DEDUCTION_LINES,
+  contributionMargin,
+  grossProfit,
+  operatingIncome,
+  applyOp,
+  applyOps,
+  delta,
+};
+
+});
+__d("render/backdrops", function (module, exports, __r) {
+'use strict';
+
+const { rect, disc, line, bands, mix } = __r("render/draw");
+const { text } = __r("render/ui");
+const { LOOKS } = __r("render/looks");
+
+// The room behind each floor, repainted with the factory state. The ladder covers the left
+// half of the screen, so the props live on the right, where the boss stands.
+
+function room(ctx, look, tier, t) {
+  bands(ctx, 0, 0, 256, 58, look.wall, mix(look.wall, look.shade, 0.35), 4);
+  rect(ctx, 0, 0, 256, 6, look.shade);
+  bands(ctx, 0, 58, 256, 28, look.ground, mix(look.ground, '#000000', 0.35), 4);
+  rect(ctx, 0, 58, 256, 1, mix(look.wall, '#000000', 0.4));
+  for (let x = 0; x < 256; x += 32) rect(ctx, x, 6, 1, 52, mix(look.wall, look.shade, 0.5));
+  [30, 110, 190].forEach((x, i) => {
+    const lit = !(tier === 'edge' && Math.floor(t * 5 + i * 2) % 4 === 0);
+    rect(ctx, x, 6, 18, 3, lit ? '#fff6c8' : '#5a5050');
+    if (lit) {
+      ctx.globalAlpha = 0.14;
+      rect(ctx, x - 6, 9, 30, 18, '#fff6c8');
+      ctx.globalAlpha = 1;
+    }
+  });
+  if (tier === 'hightech' || tier === 'modern') {
+    rect(ctx, 0, 40, 256, 2, look.accent);
+  }
+  if (tier === 'worn' || tier === 'edge') {
+    ctx.globalAlpha = 0.35;
+    [[140, 12, 18, 14], [212, 22, 22, 10], [170, 40, 14, 12]].forEach(([x, y, w, h]) => rect(ctx, x, y, w, h, '#201810'));
+    ctx.globalAlpha = 1;
+  }
+  if (tier === 'edge') {
+    line(ctx, 150, 6, 160, 30, '#14101a');
+    line(ctx, 160, 30, 154, 48, '#14101a');
+    line(ctx, 226, 6, 218, 26, '#14101a');
+  }
+}
+
+const screenColor = (tier) => ({ hightech: '#4cf0a0', modern: '#68d8f8', normal: '#98b8d8', worn: '#6a7078', edge: '#c04c3c' }[tier]);
+
+const PROPS = {
+  1(ctx, look, tier) {
+    rect(ctx, 138, 44, 112, 14, look.shade);
+    rect(ctx, 138, 44, 112, 2, look.roofHi);
+    rect(ctx, 146, 38, 16, 6, '#f4f4f8');
+    rect(ctx, 148, 40, 12, 1, '#a0a8b8');
+    rect(ctx, 218, 22, 22, 28, '#f4f4f8');
+    rect(ctx, 218, 22, 22, 5, '#d85858');
+    for (let k = 0; k < 4; k += 1) rect(ctx, 221, 30 + k * 5, 16, 1, '#a0a8b8');
+    if (tier === 'hightech') rect(ctx, 196, 30, 12, 10, screenColor(tier));
+  },
+  2(ctx, look, tier) {
+    rect(ctx, 136, 50, 114, 6, '#8a6a3a');
+    rect(ctx, 136, 50, 114, 1, '#b08a4a');
+    rect(ctx, 142, 56, 4, 14, '#6a4a28');
+    rect(ctx, 240, 56, 4, 14, '#6a4a28');
+    rect(ctx, 204, 12, 44, 26, '#f4f4f8');
+    rect(ctx, 204, 12, 44, 2, '#a0a8b8');
+    text(ctx, '%', 220, 20, '#d85858', { scale: 2 });
+    rect(ctx, 148, 40, 14, 10, look.shade);
+    rect(ctx, 150, 36, 10, 4, tier === 'hightech' ? look.accent : '#c8a070');
+  },
+  3(ctx, look, tier, t) {
+    [18, 34].forEach((y) => rect(ctx, 138, y, 112, 2, look.shade));
+    [[144, 8], [168, 8], [196, 24], [222, 8], [232, 24]].forEach(([x, y]) => {
+      rect(ctx, x, y + 2, 12, 14, '#8a5a30');
+      rect(ctx, x, y + 6, 12, 2, '#58606c');
+    });
+    rect(ctx, 130, 56, 126, 5, '#303040');
+    for (let k = 0; k < 12; k += 1) rect(ctx, 130 + ((k * 11 + t * 18) % 126), 57, 4, 3, '#808090');
+  },
+  4(ctx, look, tier, t) {
+    rect(ctx, 140, 14, 86, 42, '#242434');
+    for (let k = 0; k < 7; k += 1) rect(ctx, 140, 16 + k * 6, 86, 1, '#3a3a4c');
+    rect(ctx, 232, 38, 16, 18, '#a87848');
+    rect(ctx, 232, 46, 16, 1, '#7a5028');
+    rect(ctx, 236, 28, 12, 10, '#a87848');
+    rect(ctx, 130, 56, 126, 4, look.accent);
+    const x = 130 + ((t * 24) % 120);
+    rect(ctx, x, 57, 6, 2, '#ffffff');
+  },
+  5(ctx, look, tier, t) {
+    rect(ctx, 136, 50, 52, 6, '#8a6a3a');
+    rect(ctx, 150, 38, 18, 12, '#202838');
+    rect(ctx, 152, 40, 14, 8, screenColor(tier));
+    rect(ctx, 156, 50, 6, 2, '#58606c');
+    rect(ctx, 214, 24, 18, 32, '#808898');
+    for (let k = 0; k < 3; k += 1) rect(ctx, 216, 28 + k * 9, 14, 6, '#a0a8b8');
+    disc(ctx, 244, 48, 6, tier === 'worn' || tier === 'edge' ? '#6a7a48' : '#3fa868');
+    rect(ctx, 243, 52, 3, 6, '#6a4a28');
+    if (Math.floor(t * 2) % 2) rect(ctx, 162, 42, 2, 1, '#ffffff');
+  },
+};
+
+function drawBackdrop(ctx, floorId, tier, t = 0) {
+  const look = LOOKS[tier === 'collapse' ? 'edge' : tier];
+  room(ctx, look, tier, t);
+  PROPS[floorId](ctx, look, tier, t);
+}
+
+module.exports = { drawBackdrop };
+
+});
+__d("render/bosses", function (module, exports, __r) {
+'use strict';
+
+const { rect, disc, ellipse, line } = __r("render/draw");
+const { text } = __r("render/ui");
+
+// The five P&L bosses and the hero, all drawn from rectangles and discs so the game needs
+// no image files. Each draws around (cx, cy) and reacts to the mood: 'hit' blinks, 'happy'
+// grins (the boss just took a bite out of your margin).
+
+const INK = '#101020';
+
+function eyes(ctx, x, y, gap, mood) {
+  const h = mood === 'happy' ? 3 : 5;
+  [-gap, gap].forEach((dx) => {
+    rect(ctx, x + dx - 3, y, 6, h, '#ffffff');
+    rect(ctx, x + dx - 1, y + 1, 3, Math.min(3, h - 1), INK);
+  });
+  line(ctx, x - gap - 4, y - 3, x - gap + 2, y - 1, INK);
+  line(ctx, x + gap + 4, y - 3, x + gap - 2, y - 1, INK);
+}
+
+function grin(ctx, x, y, w, mood) {
+  rect(ctx, x - w / 2, y, w, 2, INK);
+  if (mood === 'happy') rect(ctx, x - w / 2 + 1, y + 2, w - 2, 2, '#ffffff');
+}
+
+const BOSSES = {
+  order(ctx, cx, cy, t, mood) {
+    rect(ctx, cx - 25, cy + 13, 50, 5, '#c0c4d4');
+    rect(ctx, cx - 23, cy + 9, 46, 5, '#e4e6f0');
+    rect(ctx, cx - 21, cy - 23, 42, 34, '#8890a8');
+    rect(ctx, cx - 20, cy - 22, 40, 32, '#f8f8fc');
+    for (let k = 0; k < 3; k += 1) rect(ctx, cx - 15, cy + 4 + k * 2, 30, 1, '#c8d0e0');
+    rect(ctx, cx + 9, cy - 20, 9, 7, '#d84848');
+    rect(ctx, cx + 11, cy - 18, 5, 1, '#ffffff');
+    eyes(ctx, cx - 2, cy - 14, 6, mood);
+    grin(ctx, cx - 2, cy - 2, 12, mood);
+    line(ctx, cx + 22, cy - 20, cx + 30, cy - 8, '#f8d048');
+  },
+  rebate(ctx, cx, cy, t, mood) {
+    disc(ctx, cx, cy, 25, '#a87410');
+    disc(ctx, cx, cy, 22, '#f8d048');
+    disc(ctx, cx, cy, 17, '#f0b830');
+    rect(ctx, cx - 17, cy - 12, 3, 9, '#fff6c0');
+    disc(ctx, cx - 7, cy - 15, 3, '#fff6c0');
+    disc(ctx, cx + 7, cy - 6, 3, '#fff6c0');
+    line(ctx, cx + 8, cy - 16, cx - 8, cy - 5, '#fff6c0');
+    eyes(ctx, cx, cy + 3, 7, mood);
+    grin(ctx, cx, cy + 14, 14, mood);
+  },
+  cost(ctx, cx, cy, t, mood) {
+    rect(ctx, cx - 19, cy - 18, 38, 38, '#9a6a3a');
+    ellipse(ctx, cx, cy - 18, 19, 5, '#b8884a');
+    ellipse(ctx, cx, cy + 20, 19, 5, '#7a5028');
+    rect(ctx, cx - 19, cy - 8, 38, 3, '#58606c');
+    rect(ctx, cx - 19, cy + 9, 38, 3, '#58606c');
+    rect(ctx, cx - 8, cy - 18, 1, 38, '#7a5028');
+    rect(ctx, cx + 8, cy - 18, 1, 38, '#7a5028');
+    eyes(ctx, cx, cy - 2, 6, mood);
+    grin(ctx, cx, cy + 14, 12, mood);
+    rect(ctx, cx + 19, cy + 2, 7, 4, '#c0c8d0');
+    for (let j = 0; j < 3; j += 1) {
+      const phase = (t * 0.7 + j / 3) % 1;
+      ctx.globalAlpha = 0.9 - phase * 0.9;
+      disc(ctx, cx + 6 + phase * 6, cy - 26 - phase * 14, 2 + Math.round(phase * 3), '#e8f0f8');
+    }
+    ctx.globalAlpha = 1;
+  },
+  truck(ctx, cx, cy, t, mood) {
+    rect(ctx, cx - 30, cy - 18, 36, 30, '#d8d8e0');
+    rect(ctx, cx - 30, cy - 4, 36, 3, '#58a0e0');
+    rect(ctx, cx + 6, cy - 8, 24, 20, '#d85850');
+    rect(ctx, cx + 14, cy - 4, 14, 10, '#88c8e8');
+    eyes(ctx, cx + 21, cy - 3, 3, mood);
+    rect(ctx, cx + 28, cy + 4, 4, 7, '#303040');
+    rect(ctx, cx + 29, cy + 5, 2, 1, '#ffffff');
+    rect(ctx, cx + 29, cy + 8, 2, 1, '#ffffff');
+    [[-18, 13], [14, 13]].forEach(([dx, dy]) => {
+      disc(ctx, cx + dx, cy + dy, 7, '#202028');
+      disc(ctx, cx + dx, cy + dy, 3, '#a0a8b8');
+    });
+    for (let j = 0; j < 3; j += 1) {
+      const phase = (t * 0.8 + j / 3) % 1;
+      ctx.globalAlpha = 0.8 - phase * 0.8;
+      disc(ctx, cx - 34 - phase * 10, cy + 8 - phase * 6, 2 + Math.round(phase * 3), '#9098a8');
+    }
+    ctx.globalAlpha = 1;
+  },
+  fixed(ctx, cx, cy, t, mood) {
+    ellipse(ctx, cx, cy + 4, 27, 21, '#6a7698');
+    ellipse(ctx, cx, cy + 4, 24, 18, '#7a86a8');
+    ellipse(ctx, cx - 9, cy - 8, 9, 4, '#aab6d6');
+    [-8, 8].forEach((dx) => {
+      rect(ctx, cx + dx - 3, cy - 2, 6, 5, '#ffffff');
+      rect(ctx, cx + dx - 1, cy, 3, 3, INK);
+      rect(ctx, cx + dx - 3, cy - 3, 6, 3, '#6a7698');
+    });
+    grin(ctx, cx, cy + 12, 14, mood);
+    text(ctx, 'z', cx + 20, cy - 24 + Math.round(Math.sin(t * 2) * 2), '#e8f0ff');
+    text(ctx, 'z', cx + 27, cy - 31 + Math.round(Math.sin(t * 2 + 1) * 2), '#e8f0ff');
+    [[0, 0], [4, 3], [8, 6]].forEach(([dx, dy]) => rect(ctx, cx + 27 + dx, cy + 14 + dy, 3, 3, '#58606c'));
+    disc(ctx, cx + 38, cy + 24, 8, '#303040');
+    rect(ctx, cx + 34, cy + 19, 3, 2, '#8088a0');
+  },
+};
+
+function drawBoss(ctx, id, cx, cy, t = 0, mood = 'idle') {
+  if (mood === 'hit' && Math.floor(t * 18) % 2 === 0) return;
+  const bob = Math.round(Math.sin(t * 2.2) * 2);
+  BOSSES[id](ctx, Math.round(cx), Math.round(cy) + bob, t, mood);
+}
+
+// A small hard-hatted manager; (x, y) is the middle of the feet.
+function drawHero(ctx, x, y, t = 0) {
+  const bob = Math.round(Math.sin(t * 3));
+  rect(ctx, x - 4, y - 8, 3, 8, '#2a3a6a');
+  rect(ctx, x + 1, y - 8, 3, 8, '#2a3a6a');
+  rect(ctx, x - 5, y - 19 + bob, 10, 11, '#3a62c0');
+  rect(ctx, x - 1, y - 18 + bob, 2, 6, '#f8f8f8');
+  rect(ctx, x - 6, y - 18 + bob, 2, 8, '#f0c8a0');
+  rect(ctx, x + 4, y - 18 + bob, 2, 8, '#f0c8a0');
+  rect(ctx, x - 4, y - 27 + bob, 8, 8, '#f0c8a0');
+  rect(ctx, x - 5, y - 29 + bob, 10, 4, '#f8d048');
+  rect(ctx, x - 6, y - 26 + bob, 12, 1, '#d8a820');
+  rect(ctx, x - 2, y - 24 + bob, 1, 1, INK);
+  rect(ctx, x + 1, y - 24 + bob, 1, 1, INK);
+}
+
+module.exports = { drawBoss, drawHero };
+
+});
+__d("render/draw", function (module, exports, __r) {
+'use strict';
+
+// Pixel primitives. Everything is built from whole-pixel fillRect calls, so nothing is
+// anti-aliased and the picture keeps the hard edges of a 16-bit screen.
+
+const rect = (ctx, x, y, w, h, color) => {
+  ctx.fillStyle = color;
+  ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+};
+
+function disc(ctx, cx, cy, r, color) {
+  ctx.fillStyle = color;
+  for (let dy = -r; dy <= r; dy += 1) {
+    const dx = Math.round(Math.sqrt(r * r - dy * dy));
+    ctx.fillRect(Math.round(cx) - dx, Math.round(cy) + dy, dx * 2 + 1, 1);
+  }
+}
+
+function ellipse(ctx, cx, cy, rx, ry, color) {
+  ctx.fillStyle = color;
+  for (let dy = -ry; dy <= ry; dy += 1) {
+    const dx = Math.round(rx * Math.sqrt(1 - (dy * dy) / (ry * ry)));
+    ctx.fillRect(Math.round(cx) - dx, Math.round(cy) + dy, dx * 2 + 1, 1);
+  }
+}
+
+// Bresenham line, one pixel wide.
+function line(ctx, x0, y0, x1, y1, color) {
+  ctx.fillStyle = color;
+  const xe = Math.round(x1);
+  const ye = Math.round(y1);
+  const dx = Math.abs(xe - Math.round(x0));
+  const dy = -Math.abs(ye - Math.round(y0));
+  const sx = x0 < x1 ? 1 : -1;
+  const sy = y0 < y1 ? 1 : -1;
+  let x = Math.round(x0);
+  let y = Math.round(y0);
+  let err = dx + dy;
+  for (;;) {
+    ctx.fillRect(x, y, 1, 1);
+    if (x === xe && y === ye) break;
+    const e2 = 2 * err;
+    if (e2 >= dy) {
+      err += dy;
+      x += sx;
+    }
+    if (e2 <= dx) {
+      err += dx;
+      y += sy;
+    }
+  }
+}
+
+const hexToRgb = (hex) => {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+};
+
+const mixCache = new Map();
+function mix(a, b, t) {
+  const key = `${a}|${b}|${t.toFixed(3)}`;
+  if (!mixCache.has(key)) {
+    const from = hexToRgb(a);
+    const to = hexToRgb(b);
+    const c = from.map((v, i) => Math.round(v + (to[i] - v) * t));
+    mixCache.set(key, `rgb(${c[0]},${c[1]},${c[2]})`);
+  }
+  return mixCache.get(key);
+}
+
+// Vertical gradient in hard bands, like the colour ramps of a SNES backdrop.
+function bands(ctx, x, y, w, h, top, bottom, step = 2) {
+  for (let i = 0; i < h; i += step) {
+    const t = h <= step ? 0 : i / (h - step);
+    rect(ctx, x, y + i, w, Math.min(step, h - i), mix(top, bottom, t));
+  }
+}
+
+// Draws a sprite from rows of characters; '.' is transparent.
+function sprite(ctx, rows, palette, x, y, scale = 1) {
+  rows.forEach((row, cy) => {
+    [...row].forEach((ch, cx) => {
+      if (ch !== '.' && palette[ch]) rect(ctx, x + cx * scale, y + cy * scale, scale, scale, palette[ch]);
+    });
+  });
+}
+
+module.exports = { rect, disc, ellipse, line, mix, bands, sprite };
+
+});
+__d("render/factory", function (module, exports, __r) {
+'use strict';
+
+const { rect, disc, line, bands, mix } = __r("render/draw");
+const { text } = __r("render/ui");
+const { LOOKS } = __r("render/looks");
+
+// The factory is drawn in a 120x66 box. Each state repaints the same building: cleaner and
+// brighter as OI rises, then rusty, cracked and finally in ruins as it falls.
+
+function drawSky(ctx, x, y, w, h, tier, t = 0) {
+  const look = LOOKS[tier];
+  bands(ctx, x, y, w, h, look.sky[0], look.sky[1], 4);
+  const gloomy = ['worn', 'edge', 'collapse'].includes(tier);
+  [[20, 8, 1], [110, 16, 0.7], [180, 6, 1.2]].forEach(([cx, cy, s]) => {
+    const px = ((cx + t * 3 * s) % (w + 60)) - 30 + x;
+    ctx.globalAlpha = gloomy ? 0.55 : 0.85;
+    rect(ctx, px, y + cy, 22 * s, 4, gloomy ? '#5a5260' : '#ffffff');
+    rect(ctx, px + 4, y + cy - 3, 14 * s, 4, gloomy ? '#5a5260' : '#ffffff');
+    ctx.globalAlpha = 1;
+  });
+}
+
+function body(ctx, look) {
+  rect(ctx, -6, 60, 132, 8, look.ground);
+  rect(ctx, -6, 61, 132, 1, mix(look.ground, '#ffffff', 0.18));
+  rect(ctx, 6, 26, 108, 34, look.wall);
+  rect(ctx, 6, 54, 108, 6, look.shade);
+  rect(ctx, 6, 26, 108, 2, look.shade);
+  for (let x = 24; x < 110; x += 18) rect(ctx, x, 28, 1, 26, mix(look.wall, look.shade, 0.5));
+}
+
+function roofs(ctx, look) {
+  [8, 44, 80].forEach((x0) => {
+    for (let k = 0; k < 28; k += 2) {
+      const h = 2 + Math.floor(k / 3);
+      rect(ctx, x0 + k, 26 - h, 2, h, look.roof);
+      rect(ctx, x0 + k, 26 - h, 2, 1, look.roofHi);
+    }
+    rect(ctx, x0 + 28, 15, 4, 11, look.glass);
+  });
+}
+
+function smoke(ctx, look, tier, t) {
+  const puffs = { hightech: 2, modern: 2, normal: 3, worn: 4, edge: 6 }[tier] || 3;
+  [[20, 3], [100, 8]].forEach(([cx, top], c) => {
+    for (let j = 0; j < puffs; j += 1) {
+      const phase = (t * 0.5 + j / puffs + c * 0.37) % 1;
+      const radius = tier === 'hightech' ? 1 + phase * 2 : 2 + phase * 4;
+      ctx.globalAlpha = Math.max(0, 0.95 - phase);
+      disc(ctx, cx + Math.sin(t * 1.3 + j * 2 + c) * 2 + phase * 7, top - phase * 24, Math.round(radius), look.smoke);
+    }
+    ctx.globalAlpha = 1;
+  });
+}
+
+function chimneys(ctx, look, tier, t) {
+  rect(ctx, 16, 4, 9, 22, look.shade);
+  rect(ctx, 15, 3, 11, 3, look.roofHi);
+  rect(ctx, 96, 9, 8, 17, look.shade);
+  rect(ctx, 95, 8, 10, 3, look.roofHi);
+  if (tier === 'hightech' || tier === 'modern') {
+    rect(ctx, 16, 12, 9, 2, look.accent);
+    rect(ctx, 96, 15, 8, 2, look.accent);
+  }
+  smoke(ctx, look, tier, t);
+}
+
+const WINDOW_PATTERN = { hightech: 'LLLLLL', modern: 'LLLLLL', normal: 'LDLDLD', worn: 'DxDLxD', edge: 'DxxDxD' };
+
+function windows(ctx, look, tier, t) {
+  [...(WINDOW_PATTERN[tier] || 'DDDDDD')].forEach((state, i) => {
+    const x = 12 + i * 17;
+    const flicker = tier === 'edge' && Math.floor(t * 6 + i) % 5 === 0;
+    rect(ctx, x, 34, 11, 9, state === 'L' && !flicker ? look.glassHi : look.glass);
+    rect(ctx, x, 34, 11, 1, look.shade);
+    rect(ctx, x, 42, 11, 1, look.shade);
+    rect(ctx, x + 5, 34, 1, 9, look.shade);
+    if (state === 'x') {
+      line(ctx, x + 1, 35, x + 9, 41, look.shade);
+      line(ctx, x + 9, 35, x + 3, 41, look.shade);
+    }
+  });
+}
+
+function door(ctx, look, tier) {
+  const [x, y, w, h] = [50, 44, 20, 16];
+  if (tier === 'hightech') {
+    rect(ctx, x, y, w, h, look.glass);
+    rect(ctx, x + 9, y, 2, h, look.shade);
+    rect(ctx, x, y, w, 1, look.accent);
+    return;
+  }
+  rect(ctx, x, y, w, h, look.shade);
+  for (let k = 3; k < h; k += 3) rect(ctx, x, y + k, w, 1, mix(look.shade, look.wall, 0.4));
+  if (tier === 'edge') {
+    for (let k = 0; k < 7; k += 1) rect(ctx, x + k * 3, y + 3, 2, 3, k % 2 ? '#f8d048' : '#14141c');
+  }
+}
+
+function sign(ctx, look, tier, t) {
+  const crooked = tier === 'worn' || tier === 'edge';
+  const y = 3 + (crooked ? 1 : 0);
+  const plate = { hightech: '#10202c', modern: '#14243c', normal: '#6a4a30', worn: '#4a3828', edge: '#2a2220' }[tier];
+  rect(ctx, 44, y, 32, 12, tier === 'hightech' || tier === 'modern' ? look.accent : look.shade);
+  rect(ctx, 45, y + 1, 30, 10, plate);
+  const label = tier === 'edge' && Math.floor(t * 4) % 3 === 0 ? 'P  ' : 'P&L';
+  text(ctx, label, 51, y + 3, tier === 'normal' ? '#f8e098' : '#ffffff');
+}
+
+function hightechExtras(ctx, look, t) {
+  rect(ctx, 6, 25, 108, 1, look.accent);
+  [[0, 56], [120, 56]].forEach(([x, y]) => {
+    rect(ctx, x - 1, y + 2, 2, 4, '#6a4a30');
+    disc(ctx, x, y, 4, '#3fbf78');
+  });
+  const dx = 60 + Math.sin(t * 1.2) * 30;
+  const dy = 0 + Math.sin(t * 2) * 2;
+  rect(ctx, dx - 3, dy, 6, 2, '#f4f9ff');
+  rect(ctx, dx - 6, dy - 1, 4, 1, Math.floor(t * 20) % 2 ? '#9fb0c8' : '#ffffff');
+  rect(ctx, dx + 2, dy - 1, 4, 1, Math.floor(t * 20) % 2 ? '#ffffff' : '#9fb0c8');
+  if (Math.floor(t * 3) % 2) rect(ctx, dx, dy + 2, 1, 1, look.accent);
+  rect(ctx, 104, 52, 8, 8, look.shade);
+  line(ctx, 108, 52, 114, 42, look.roofHi);
+  line(ctx, 114, 42, 110, 34, look.roofHi);
+  disc(ctx, 114, 42, 1, look.accent);
+}
+
+function modernExtras(ctx, look, t) {
+  rect(ctx, 6, 25, 108, 1, look.accent);
+  [[0, 57], [120, 57]].forEach(([x, y]) => {
+    rect(ctx, x - 1, y + 2, 2, 3, '#6a4a30');
+    disc(ctx, x, y, 3, '#3fa868');
+  });
+  rect(ctx, 112, 10, 1, 18, '#c8d0e0');
+  rect(ctx, 113, 10, 6 + Math.round(Math.sin(t * 3)), 4, look.accent);
+}
+
+function normalExtras(ctx) {
+  rect(ctx, 28, 52, 9, 8, '#a87848');
+  rect(ctx, 28, 55, 9, 1, '#7a5028');
+  rect(ctx, 76, 50, 8, 10, '#8a6a3a');
+  rect(ctx, 76, 53, 8, 1, '#5a6070');
+}
+
+function wornExtras(ctx, look) {
+  [[12, 46, 6, 4], [88, 30, 8, 3], [100, 50, 5, 5], [32, 40, 4, 2]].forEach(([x, y, w, h]) => {
+    rect(ctx, x, y, w, h, look.accent);
+  });
+  [[6, 58], [40, 59], [84, 58], [108, 59]].forEach(([x, y]) => rect(ctx, x, y, 4, 2, '#6a6a72'));
+  [[2, 58], [112, 58], [64, 59]].forEach(([x, y]) => {
+    rect(ctx, x, y, 1, 3, '#4a8a48');
+    rect(ctx, x + 2, y + 1, 1, 2, '#4a8a48');
+  });
+}
+
+function edgeExtras(ctx, look, t) {
+  line(ctx, 30, 26, 38, 54, '#14101a');
+  line(ctx, 38, 54, 34, 58, '#14101a');
+  line(ctx, 90, 26, 82, 40, '#14101a');
+  line(ctx, 82, 40, 88, 52, '#14101a');
+  rect(ctx, 56, 18, 12, 8, look.sky[0]);
+  [[22, 30], [74, 34], [96, 46], [48, 28]].forEach(([x, y], i) => {
+    if (Math.floor(t * 8 + i * 3) % 4 === 0) rect(ctx, x, y, 2, 2, '#f8d048');
+  });
+  if (Math.floor(t * 2) % 2) {
+    disc(ctx, 60, 20, 2, look.accent);
+    rect(ctx, 59, 18, 3, 1, '#ffb0a0');
+  }
+}
+
+function ruins(ctx, look, t) {
+  rect(ctx, -6, 60, 132, 8, look.ground);
+  rect(ctx, 6, 38, 26, 22, look.wall);
+  rect(ctx, 6, 38, 26, 2, look.shade);
+  rect(ctx, 11, 44, 7, 7, look.glass);
+  rect(ctx, 96, 46, 18, 14, look.wall);
+  rect(ctx, 96, 46, 18, 2, look.shade);
+  rect(ctx, 100, 51, 6, 6, look.glass);
+  line(ctx, 18, 38, 24, 56, look.shade);
+  line(ctx, 104, 46, 98, 58, look.shade);
+  ctx.globalAlpha = 0.28 + 0.1 * Math.sin(t * 6);
+  disc(ctx, 62, 52, 15, '#f88830');
+  ctx.globalAlpha = 1;
+  disc(ctx, 40, 58, 9, look.wall);
+  disc(ctx, 64, 59, 13, look.shade);
+  disc(ctx, 84, 58, 10, look.wall);
+  rect(ctx, 38, 50, 32, 7, look.roofHi);
+  rect(ctx, 38, 50, 32, 1, look.wall);
+  line(ctx, 46, 44, 56, 58, look.roof);
+  line(ctx, 80, 42, 68, 58, look.roof);
+  [30, 62, 94].forEach((cx, c) => {
+    for (let j = 0; j < 5; j += 1) {
+      const phase = (t * 0.4 + j / 5 + c * 0.3) % 1;
+      ctx.globalAlpha = Math.max(0, 0.85 - phase);
+      disc(ctx, cx + Math.sin(t + j) * 3, 50 - phase * 36, 3 + Math.round(phase * 5), look.smoke);
+    }
+    ctx.globalAlpha = 1;
+  });
+  for (let k = 0; k < 8; k += 1) {
+    rect(ctx, 14 + k * 13 + Math.sin(t * 3 + k) * 3, 54 - ((t * 20 + k * 9) % 30), 1, 1, '#f8c040');
+  }
+}
+
+const EXTRAS = { hightech: hightechExtras, modern: modernExtras, normal: normalExtras, worn: wornExtras, edge: edgeExtras };
+
+// Draws the factory with its top-left corner at (ox, oy). Scale must be a whole number.
+function drawFactory(ctx, tier, ox, oy, t = 0, scale = 1) {
+  const look = LOOKS[tier];
+  ctx.save();
+  ctx.translate(Math.round(ox), Math.round(oy));
+  ctx.scale(scale, scale);
+  if (tier === 'collapse') {
+    ruins(ctx, look, t);
+  } else {
+    body(ctx, look);
+    roofs(ctx, look);
+    chimneys(ctx, look, tier, t);
+    windows(ctx, look, tier, t);
+    door(ctx, look, tier);
+    sign(ctx, look, tier, t);
+    EXTRAS[tier](ctx, look, t);
+  }
+  ctx.restore();
+}
+
+module.exports = { drawSky, drawFactory };
+
+});
+__d("render/font", function (module, exports, __r) {
+'use strict';
+
+// A 5x7 bitmap font drawn into a 6x9 cell: one column of spacing and two rows above the
+// letters, so accents never collide with a capital. The table is the classic 5x7 ASCII
+// set (one byte per column, bit 0 is the top row). Accented letters and the inverted
+// marks used by Spanish are built from it, so the whole game needs no font file.
+
+const CELL_W = 6;
+const CELL_H = 9;
+const LINE_H = 10;
+const FIRST = 32;
+const TOP = 2;
+
+// ASCII 32 (space) through 125 ('}').
+const COLUMNS = [
+  [0x00, 0x00, 0x00, 0x00, 0x00], [0x00, 0x00, 0x5f, 0x00, 0x00], [0x00, 0x07, 0x00, 0x07, 0x00],
+  [0x14, 0x7f, 0x14, 0x7f, 0x14], [0x24, 0x2a, 0x7f, 0x2a, 0x12], [0x23, 0x13, 0x08, 0x64, 0x62],
+  [0x36, 0x49, 0x55, 0x22, 0x50], [0x00, 0x05, 0x03, 0x00, 0x00], [0x00, 0x1c, 0x22, 0x41, 0x00],
+  [0x00, 0x41, 0x22, 0x1c, 0x00], [0x08, 0x2a, 0x1c, 0x2a, 0x08], [0x08, 0x08, 0x3e, 0x08, 0x08],
+  [0x00, 0x50, 0x30, 0x00, 0x00], [0x08, 0x08, 0x08, 0x08, 0x08], [0x00, 0x60, 0x60, 0x00, 0x00],
+  [0x20, 0x10, 0x08, 0x04, 0x02], [0x3e, 0x51, 0x49, 0x45, 0x3e], [0x00, 0x42, 0x7f, 0x40, 0x00],
+  [0x42, 0x61, 0x51, 0x49, 0x46], [0x21, 0x41, 0x45, 0x4b, 0x31], [0x18, 0x14, 0x12, 0x7f, 0x10],
+  [0x27, 0x45, 0x45, 0x45, 0x39], [0x3c, 0x4a, 0x49, 0x49, 0x30], [0x01, 0x71, 0x09, 0x05, 0x03],
+  [0x36, 0x49, 0x49, 0x49, 0x36], [0x06, 0x49, 0x49, 0x29, 0x1e], [0x00, 0x36, 0x36, 0x00, 0x00],
+  [0x00, 0x56, 0x36, 0x00, 0x00], [0x00, 0x08, 0x14, 0x22, 0x41], [0x14, 0x14, 0x14, 0x14, 0x14],
+  [0x41, 0x22, 0x14, 0x08, 0x00], [0x02, 0x01, 0x51, 0x09, 0x06], [0x32, 0x49, 0x79, 0x41, 0x3e],
+  [0x7e, 0x11, 0x11, 0x11, 0x7e], [0x7f, 0x49, 0x49, 0x49, 0x36], [0x3e, 0x41, 0x41, 0x41, 0x22],
+  [0x7f, 0x41, 0x41, 0x22, 0x1c], [0x7f, 0x49, 0x49, 0x49, 0x41], [0x7f, 0x09, 0x09, 0x01, 0x01],
+  [0x3e, 0x41, 0x41, 0x51, 0x32], [0x7f, 0x08, 0x08, 0x08, 0x7f], [0x00, 0x41, 0x7f, 0x41, 0x00],
+  [0x20, 0x40, 0x41, 0x3f, 0x01], [0x7f, 0x08, 0x14, 0x22, 0x41], [0x7f, 0x40, 0x40, 0x40, 0x40],
+  [0x7f, 0x02, 0x04, 0x02, 0x7f], [0x7f, 0x04, 0x08, 0x10, 0x7f], [0x3e, 0x41, 0x41, 0x41, 0x3e],
+  [0x7f, 0x09, 0x09, 0x09, 0x06], [0x3e, 0x41, 0x51, 0x21, 0x5e], [0x7f, 0x09, 0x19, 0x29, 0x46],
+  [0x46, 0x49, 0x49, 0x49, 0x31], [0x01, 0x01, 0x7f, 0x01, 0x01], [0x3f, 0x40, 0x40, 0x40, 0x3f],
+  [0x1f, 0x20, 0x40, 0x20, 0x1f], [0x7f, 0x20, 0x18, 0x20, 0x7f], [0x63, 0x14, 0x08, 0x14, 0x63],
+  [0x03, 0x04, 0x78, 0x04, 0x03], [0x61, 0x51, 0x49, 0x45, 0x43], [0x00, 0x00, 0x7f, 0x41, 0x41],
+  [0x02, 0x04, 0x08, 0x10, 0x20], [0x41, 0x41, 0x7f, 0x00, 0x00], [0x04, 0x02, 0x01, 0x02, 0x04],
+  [0x40, 0x40, 0x40, 0x40, 0x40], [0x00, 0x01, 0x02, 0x04, 0x00], [0x20, 0x54, 0x54, 0x54, 0x78],
+  [0x7f, 0x48, 0x44, 0x44, 0x38], [0x38, 0x44, 0x44, 0x44, 0x20], [0x38, 0x44, 0x44, 0x48, 0x7f],
+  [0x38, 0x54, 0x54, 0x54, 0x18], [0x08, 0x7e, 0x09, 0x01, 0x02], [0x08, 0x14, 0x54, 0x54, 0x3c],
+  [0x7f, 0x08, 0x04, 0x04, 0x78], [0x00, 0x44, 0x7d, 0x40, 0x00], [0x20, 0x40, 0x44, 0x3d, 0x00],
+  [0x00, 0x7f, 0x10, 0x28, 0x44], [0x00, 0x41, 0x7f, 0x40, 0x00], [0x7c, 0x04, 0x18, 0x04, 0x78],
+  [0x7c, 0x08, 0x04, 0x04, 0x78], [0x38, 0x44, 0x44, 0x44, 0x38], [0x7c, 0x14, 0x14, 0x14, 0x08],
+  [0x08, 0x14, 0x14, 0x18, 0x7c], [0x7c, 0x08, 0x04, 0x04, 0x08], [0x48, 0x54, 0x54, 0x54, 0x20],
+  [0x04, 0x3f, 0x44, 0x40, 0x20], [0x3c, 0x40, 0x40, 0x20, 0x7c], [0x1c, 0x20, 0x40, 0x20, 0x1c],
+  [0x3c, 0x40, 0x30, 0x40, 0x3c], [0x44, 0x28, 0x10, 0x28, 0x44], [0x0c, 0x50, 0x50, 0x50, 0x3c],
+  [0x44, 0x64, 0x54, 0x4c, 0x44], [0x00, 0x08, 0x36, 0x41, 0x00], [0x00, 0x00, 0x7f, 0x00, 0x00],
+  [0x00, 0x41, 0x36, 0x08, 0x00],
+];
+
+const ACCENTED = Object.freeze({
+  á: ['a', 'acute'], é: ['e', 'acute'], í: ['i', 'acute'], ó: ['o', 'acute'], ú: ['u', 'acute'],
+  ü: ['u', 'diaeresis'], ñ: ['n', 'tilde'],
+  Á: ['A', 'acute'], É: ['E', 'acute'], Í: ['I', 'acute'], Ó: ['O', 'acute'], Ú: ['U', 'acute'],
+  Ü: ['U', 'diaeresis'], Ñ: ['N', 'tilde'],
+});
+
+// Marks as [x, y] pixels, two rows tall at most.
+const MARKS = Object.freeze({
+  acute: [[3, 0], [2, 1]],
+  diaeresis: [[1, 0], [3, 0]],
+  tilde: [[1, 0], [2, 0], [0, 1], [3, 1], [4, 1]],
+});
+
+const ASCII = Array.from({ length: COLUMNS.length }, (_, i) => String.fromCharCode(FIRST + i)).join('');
+const SUPPORTED_CHARS = `${ASCII}${Object.keys(ACCENTED).join('')}¡¿`;
+
+const isUpper = (ch) => ch >= 'A' && ch <= 'Z';
+const columnsFor = (ch) => COLUMNS[ch.charCodeAt(0) - FIRST] || COLUMNS['?'.charCodeAt(0) - FIRST];
+
+// Mirrors a glyph top to bottom (bit y goes to bit 6 - y): '!' becomes the inverted mark.
+const flipRows = (cols) =>
+  cols.map((bits) => [0, 1, 2, 3, 4, 5, 6].reduce((acc, y) => acc | (((bits >> y) & 1) << (6 - y)), 0));
+
+const bodyPixels = (cols) =>
+  cols.flatMap((bits, x) =>
+    [0, 1, 2, 3, 4, 5, 6].filter((y) => (bits >> y) & 1).map((y) => [x, y + TOP]));
+
+function buildPixels(ch) {
+  if (ch === '¡') return bodyPixels(flipRows(columnsFor('!')));
+  if (ch === '¿') return bodyPixels(flipRows(columnsFor('?')));
+  const accented = ACCENTED[ch];
+  if (!accented) return bodyPixels(columnsFor(ch));
+  const [base, mark] = accented;
+  const body = bodyPixels(columnsFor(base)).filter(([, y]) => !(base === 'i' && y === TOP));
+  const offset = isUpper(base) ? 0 : 1;
+  return [...body, ...MARKS[mark].map(([x, y]) => [x, y + offset])];
+}
+
+// Memoized: each glyph is built once and then reused every frame.
+const cache = new Map();
+function pixelsOf(ch) {
+  if (!cache.has(ch)) cache.set(ch, Object.freeze(buildPixels(ch)));
+  return cache.get(ch);
+}
+
+const textWidth = (text, scale = 1) => text.length * CELL_W * scale;
+
+module.exports = { CELL_W, CELL_H, LINE_H, SUPPORTED_CHARS, pixelsOf, textWidth };
+
+});
+__d("render/index", function (module, exports, __r) {
+'use strict';
+
+const layout = __r("ui/layout");
+const P = __r("render/palette");
+const hud = __r("render/scenes/hud");
+const { drawBattle } = __r("render/scenes/battle");
+const screens = __r("render/scenes/screens");
+
+const PLAY_SCREENS = Object.freeze({
+  control: screens.drawRoom,
+  final: screens.drawFinal,
+  dead: screens.drawDead,
+});
+
+// Draws one whole frame for the given app state.
+function drawFrame(ctx, app) {
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = P.ink;
+  ctx.fillRect(0, 0, layout.W, layout.H);
+  if (app.scene === 'title') screens.drawTitle(ctx, app);
+  else if (app.scene === 'intro') screens.drawIntro(ctx, app);
+  else (PLAY_SCREENS[app.run.phase] || drawBattle)(ctx, app);
+  if (app.overlay) screens.drawNote(ctx, app);
+  hud.drawFooter(ctx, app);
+}
+
+module.exports = { drawFrame };
+
+});
+__d("render/looks", function (module, exports, __r) {
+'use strict';
+
+const { deepFreeze } = __r("freeze");
+
+// The look of the factory in each state: the same building, repainted. Colours go from
+// bright and clean (hightech) to dark and broken (collapse), so OI is readable at a glance.
+const LOOKS = deepFreeze({
+  hightech: {
+    wall: '#eef3fb', shade: '#c4d0e6', roof: '#8fa0c4', roofHi: '#b4c4e4', glass: '#5fe0ff',
+    glassHi: '#d4fbff', accent: '#4cf0a0', smoke: '#f4f9ff', ground: '#5a6c80', sky: ['#7fd6ff', '#d6f4ff'],
+  },
+  modern: {
+    wall: '#d6deee', shade: '#a9b6d0', roof: '#6d7fae', roofHi: '#8fa0c8', glass: '#7ccbea',
+    glassHi: '#c2efff', accent: '#4cc880', smoke: '#e9f0f8', ground: '#5a6272', sky: ['#6ec0f0', '#bfe6fa'],
+  },
+  normal: {
+    wall: '#b9805a', shade: '#8d5e44', roof: '#5a5a6c', roofHi: '#74748a', glass: '#8cb2d2',
+    glassHi: '#f6e09a', accent: '#d8a040', smoke: '#b8b8c2', ground: '#505060', sky: ['#78a8d8', '#c8dcec'],
+  },
+  worn: {
+    wall: '#8c6c58', shade: '#684c3c', roof: '#46464e', roofHi: '#5c5c66', glass: '#566678',
+    glassHi: '#7e7658', accent: '#a65a32', smoke: '#6c6c76', ground: '#403c44', sky: ['#7a8898', '#a8b0b8'],
+  },
+  edge: {
+    wall: '#5e4e4a', shade: '#40302c', roof: '#302c34', roofHi: '#443f48', glass: '#2e323a',
+    glassHi: '#c04c3c', accent: '#c83434', smoke: '#34343a', ground: '#2c282e', sky: ['#4a3c4c', '#6a5460'],
+  },
+  collapse: {
+    wall: '#7a6660', shade: '#54443f', roof: '#463c3c', roofHi: '#6c5c58', glass: '#1c1c24',
+    glassHi: '#1c1c24', accent: '#a03030', smoke: '#5a5a62', ground: '#2e2a30', sky: ['#40283c', '#7c4a50'],
+  },
+});
+
+module.exports = { LOOKS };
+
+});
+__d("render/palette", function (module, exports, __r) {
+'use strict';
+
+// One palette for the whole game. Tone names (white, red, green...) double as keys, so a
+// message tagged tone: 'red' is drawn with PALETTE.red.
+module.exports = Object.freeze({
+  ink: '#0c0c1c',
+  white: '#f8f8f8',
+  gray: '#a8b0c8',
+  dim: '#6a7290',
+  gold: '#f8d048',
+  red: '#f05858',
+  green: '#58e088',
+  cyan: '#68d8f8',
+  orange: '#f89848',
+  winTop: '#2c40a8',
+  winBottom: '#0c1452',
+  winEdge: '#f4f4fa',
+  winShade: '#7284d8',
+  selTop: '#5470e0',
+  selBottom: '#1c2a80',
+  area: Object.freeze({
+    sales: '#d85858',
+    procurement: '#d8963c',
+    ops: '#44a868',
+    finance: '#4a92dc',
+    mgmt: '#9a64cc',
+  }),
+});
+
+});
+__d("render/scenes/battle", function (module, exports, __r) {
+'use strict';
+
+const engine = __r("engine");
+const { CARDS } = __r("content/cards");
+const { FLOORS } = __r("content/floors");
+const { tierFor } = __r("tiers");
+const layout = __r("ui/layout");
+const view = __r("ui/view");
+const { tx, signed } = __r("ui/tx");
+const P = __r("render/palette");
+const { rect } = __r("render/draw");
+const ui = __r("render/ui");
+const hud = __r("render/scenes/hud");
+const { drawBackdrop } = __r("render/backdrops");
+const { drawBoss } = __r("render/bosses");
+
+const WRAP = 40;
+
+function bossMood(app) {
+  const { run } = app;
+  if (run.phase !== 'turnResult') return 'idle';
+  if (run.last.delta.oi < -0.05) return 'happy';
+  return run.last.delta.oi > 0.05 && app.phaseT < 0.8 ? 'hit' : 'idle';
+}
+
+function drawCard(ctx, app, id, i) {
+  const card = CARDS[id];
+  const { x, y, w, h } = layout.cardRect(i);
+  const selected = i === app.cursor;
+  ui.windowBox(ctx, x, y, w, h, { selected });
+  ui.text(ctx, tx(app, `card.${id}.name`), x + 6, y + 4, P.white);
+  const tag = tx(app, `area.tag.${card.area}`);
+  rect(ctx, x + 5, y + 13, ui.textWidth(tag) + 3, 9, P.area[card.area]);
+  ui.text(ctx, tag, x + 7, y + 14, P.white);
+  view.chipsFor(card).reduce((cx, chip) => {
+    const label = tx(app, chip.key);
+    const width = ui.textWidth(label) + (chip.dir ? 7 : 0);
+    if (cx + width > x + w - 4) return cx;
+    ui.text(ctx, label, cx, y + 24, P.gray);
+    if (chip.dir) ui.triangle(ctx, cx + ui.textWidth(label), y + 25, chip.dir, P.white);
+    return cx + width + 6;
+  }, x + 6);
+  if (selected && Math.floor(app.t * 3) % 2 === 0) ui.triangle(ctx, x + w - 10, y + 5, -1, P.gold);
+}
+
+function drawTurn(ctx, app) {
+  const { run } = app;
+  const floor = FLOORS[run.floorIdx];
+  const line = layout.BOSS_LINE;
+  ui.windowBox(ctx, line.x, line.y, line.w, line.h);
+  const said = ui.wrapLines([{ text: tx(app, `floor.${floor.id}.t${run.turn + 1}`) }], WRAP);
+  ui.paragraph(ctx, said, line.x + 6, line.y + 5);
+  run.hand.forEach((id, i) => drawCard(ctx, app, id, i));
+  const d = layout.DETAIL;
+  ui.windowBox(ctx, d.x, d.y, d.w, d.h);
+  const desc = ui.wrapLines([{ text: tx(app, `card.${run.hand[app.cursor]}.desc`) }], WRAP);
+  ui.paragraph(ctx, desc, d.x + 6, d.y + 5);
+}
+
+function drawMessage(ctx, app, rows) {
+  ui.windowBox(ctx, 4, 90, 248, 120);
+  ui.paragraph(ctx, ui.wrapLines(rows, 38).slice(0, 11), 12, 98);
+}
+
+function drawFloorIntro(ctx, app) {
+  const { run } = app;
+  const floor = FLOORS[run.floorIdx];
+  const boss = tx(app, `boss.${floor.boss}`);
+  drawMessage(ctx, app, [
+    { text: tx(app, 'ui.appears', { boss }), tone: 'gold' },
+    { text: `${tx(app, 'ui.floor', { n: floor.id })} - ${tx(app, `floor.${floor.id}.name`)}`, tone: 'white' },
+    { text: tx(app, `floor.${floor.id}.place`), tone: 'gray' },
+    { text: ' ', tone: 'white' },
+    ...view.entryLines(app),
+    { text: ' ', tone: 'white' },
+    { text: tx(app, `floor.${floor.id}.t1`), tone: 'cyan' },
+  ]);
+}
+
+function drawReveal(ctx, app) {
+  const r = layout.REVEAL;
+  ui.windowBox(ctx, r.x, r.y, r.w, r.h);
+  ui.paragraph(ctx, ui.wrapLines(view.revealLines(app), WRAP).slice(0, 6), r.x + 8, r.y + 8);
+}
+
+function drawFloorOutro(ctx, app) {
+  const { run } = app;
+  const impact = view.floorImpact(run);
+  const tier = tierFor(engine.oiOf(run));
+  drawMessage(ctx, app, [
+    { text: tx(app, 'ui.floorDone', { n: FLOORS[run.floorIdx].id }), tone: 'gold' },
+    { text: ' ', tone: 'white' },
+    { text: tx(app, 'ui.floorImpact', { delta: signed(app, impact) }), tone: view.toneOf(impact) },
+    { text: tx(app, `tier.${tier}`), tone: 'white' },
+  ]);
+}
+
+const PHASES = { floorIntro: drawFloorIntro, turn: drawTurn, turnResult: drawReveal, floorOutro: drawFloorOutro };
+
+// Everything shared by the fight screens: the room, the boss and the P&L ladder.
+function drawBattle(ctx, app) {
+  const { run } = app;
+  const floor = FLOORS[run.floorIdx];
+  const tier = tierFor(engine.oiOf(run));
+  drawBackdrop(ctx, floor.id, tier, app.t);
+  const slide = run.phase === 'floorIntro' ? Math.max(0, 1 - app.phaseT / 0.5) * 44 : 0;
+  drawBoss(ctx, floor.boss, layout.BOSS_CENTER.x, layout.BOSS_CENTER.y - slide, app.t, bossMood(app));
+  hud.drawBossPlate(ctx, app, floor);
+  hud.drawStage(ctx, app, floor);
+  hud.drawOiBar(ctx, app);
+  const before = run.phase === 'turnResult' ? view.plBefore(run) : null;
+  hud.drawLadder(ctx, app, { before, focus: floor.line });
+  PHASES[run.phase](ctx, app);
+}
+
+module.exports = { drawBattle };
+
+});
+__d("render/scenes/hud", function (module, exports, __r) {
+'use strict';
+
+const engine = __r("engine");
+const { tierFor } = __r("tiers");
+const layout = __r("ui/layout");
+const view = __r("ui/view");
+const { tx, num } = __r("ui/tx");
+const P = __r("render/palette");
+const { rect } = __r("render/draw");
+const ui = __r("render/ui");
+
+const TIER_COLOR = Object.freeze({
+  collapse: P.red, edge: P.red, worn: P.orange, normal: P.white, modern: P.green, hightech: P.cyan,
+});
+
+// The P&L cascade as a ladder: lines in grey, subtotals in white, OI coloured by factory
+// state. Rows that just moved flash green (better) or red (worse).
+function drawLadder(ctx, app, { before = null, focus = null, at = layout.LADDER } = {}) {
+  const { x, y, w, h } = at;
+  ui.windowBox(ctx, x, y, w, h, { alpha: 0.95 });
+  const rows = view.ladderRows(app.run.pl);
+  const was = before ? view.ladderRows(before) : rows;
+  const changed = new Set(before ? view.changedRowIds(before, app.run.pl) : []);
+  const tier = tierFor(engine.oiOf(app.run));
+  rows.forEach((row, i) => {
+    const top = y + 4 + i * 9;
+    const subtotal = row.kind === 'subtotal';
+    if (row.id === focus) rect(ctx, x + 2, top, w - 4, 9, 'rgba(248,208,72,0.25)');
+    if (subtotal) rect(ctx, x + 5, top, w - 10, 1, P.winShade);
+    let color = subtotal ? P.white : P.gray;
+    if (row.id === 'oi') color = TIER_COLOR[tier];
+    if (changed.has(row.id)) color = row.value > was[i].value ? P.green : P.red;
+    ui.text(ctx, tx(app, `line.short.${row.id}`), x + 6, top + 2, subtotal ? P.white : P.gray);
+    ui.textRight(ctx, num(app, row.value), x + w - 5, top + 2, color);
+  });
+}
+
+function drawOiBar(ctx, app) {
+  const { x, y, w, h } = layout.OI_BAR;
+  const oi = engine.oiOf(app.run);
+  const color = TIER_COLOR[tierFor(oi)];
+  ui.windowBox(ctx, x, y, w, h, { alpha: 0.95 });
+  ui.text(ctx, `OI ${num(app, Math.max(oi, 0))}`, x + 5, y + 2, color);
+  const barX = x + 56;
+  const barW = w - 62;
+  ui.bar(ctx, barX, y + 3, barW, 4, oi / 25, color);
+  [engine.MIN_OI, engine.GOAL_OI].forEach((mark) => rect(ctx, barX + Math.round((barW * mark) / 25), y + 2, 1, 6, P.gold));
+}
+
+function drawBossPlate(ctx, app, floor) {
+  const { x, y, w, h } = layout.BOSS_PLATE;
+  ui.windowBox(ctx, x, y, w, h, { alpha: 0.95 });
+  ui.text(ctx, tx(app, `boss.${floor.boss}`), x + 6, y + 4, P.gold);
+}
+
+function drawStage(ctx, app, floor) {
+  const label = tx(app, 'ui.stage', { f: floor.id, n: app.run.turn + 1 });
+  ui.textRight(ctx, label, layout.STAGE.right, layout.STAGE.y, P.white, { shadow: P.ink });
+}
+
+const ACTION_KEYS = Object.freeze({
+  title: 'ui.btn.start',
+  intro: 'ui.btn.next',
+  turn: 'ui.btn.pick',
+  final: 'ui.btn.again',
+  dead: 'ui.btn.again',
+  overlay: 'ui.btn.close',
+});
+
+function actionKey(app) {
+  if (app.overlay) return ACTION_KEYS.overlay;
+  if (app.scene !== 'play') return ACTION_KEYS[app.scene];
+  return ACTION_KEYS[app.run.phase] || 'ui.btn.next';
+}
+
+// Bottom strip: the action for the current screen plus the three global buttons.
+function drawFooter(ctx, app) {
+  const f = layout.FOOTER;
+  rect(ctx, 0, f.y, layout.W, f.h, P.ink);
+  rect(ctx, 0, f.y, layout.W, 1, '#242844');
+  const items = [
+    [tx(app, actionKey(app)), 3, P.gold],
+    [tx(app, 'ui.btn.note'), 101, P.gray],
+    [tx(app, 'ui.btn.sound'), 141, app.muted ? P.dim : P.gray],
+    [tx(app, 'ui.btn.lang'), 195, P.gray],
+  ];
+  items.forEach(([label, x, color]) => ui.text(ctx, label, x, f.y + 3, color));
+}
+
+module.exports = { drawLadder, drawOiBar, drawBossPlate, drawStage, drawFooter, TIER_COLOR };
+
+});
+__d("render/scenes/screens", function (module, exports, __r) {
+'use strict';
+
+const engine = __r("engine");
+const { tierFor } = __r("tiers");
+const layout = __r("ui/layout");
+const view = __r("ui/view");
+const { tx, num } = __r("ui/tx");
+const P = __r("render/palette");
+const { rect } = __r("render/draw");
+const ui = __r("render/ui");
+const hud = __r("render/scenes/hud");
+const { drawSky, drawFactory } = __r("render/factory");
+const { drawHero } = __r("render/bosses");
+
+const SKY_H = 212;
+
+function drawTitle(ctx, app) {
+  drawSky(ctx, 0, 0, layout.W, SKY_H, 'normal', app.t);
+  drawFactory(ctx, 'normal', 8, 80, app.t, 2);
+  ui.textRight(ctx, tx(app, 'ui.fictional'), 252, 4, P.white, { shadow: P.ink });
+  ui.textCenter(ctx, tx(app, 'ui.title'), 128, 16, P.gold, { scale: 3, shadow: '#7a4a10' });
+  ui.textCenter(ctx, tx(app, 'ui.subtitle'), 128, 46, P.white, { shadow: P.ink });
+  if (Math.floor(app.t * 2) % 2 === 0) ui.textCenter(ctx, tx(app, 'ui.press'), 128, 60, P.white, { shadow: P.ink });
+  const es = tx(app, 'lang.es');
+  const en = tx(app, 'lang.en');
+  const total = ui.textWidth(`${es} / ${en}`);
+  const x = Math.round(128 - total / 2);
+  ui.text(ctx, es, x, 72, app.lang === 'es' ? P.gold : P.dim, { shadow: P.ink });
+  ui.text(ctx, ' / ', x + ui.textWidth(es), 72, P.white, { shadow: P.ink });
+  ui.text(ctx, en, x + ui.textWidth(`${es} / `), 72, app.lang === 'en' ? P.gold : P.dim, { shadow: P.ink });
+  if (app.best > 0) ui.textCenter(ctx, tx(app, 'ui.best', { n: app.best }), 128, 202, P.white, { shadow: P.ink });
+}
+
+function drawIntro(ctx, app) {
+  drawSky(ctx, 0, 0, layout.W, SKY_H, 'normal', app.t);
+  drawFactory(ctx, 'normal', 68, 6, app.t, 1);
+  drawHero(ctx, 38, 70, app.t);
+  ui.windowBox(ctx, 4, 78, 248, 130);
+  const rows = ui.wrapLines([
+    { text: tx(app, 'ui.intro1') },
+    { text: ' ' },
+    { text: tx(app, 'ui.intro2') },
+  ], 38);
+  ui.paragraph(ctx, rows, 12, 88);
+}
+
+function drawRoom(ctx, app) {
+  const { run } = app;
+  const tier = tierFor(engine.oiOf(run));
+  drawSky(ctx, 0, 0, layout.W, SKY_H, tier, app.t);
+  drawFactory(ctx, tier, 68, 4, app.t, 1);
+  ui.windowBox(ctx, 4, 74, 248, 16);
+  ui.textCenter(ctx, `${tx(app, 'ui.room')} - ${tx(app, `room.${run.room}.title`)}`, 128, 78, P.gold);
+  hud.drawLadder(ctx, app, { focus: run.room, at: { x: 4, y: 94, w: 124, h: 80 } });
+  ui.windowBox(ctx, 132, 94, 120, 80);
+  const rows = ui.wrapLines([{ text: tx(app, `room.${run.room}.body`) }], 18);
+  ui.paragraph(ctx, rows, 138, 101);
+  ui.text(ctx, tx(app, `tier.${tier}`), 8, 182, hud.TIER_COLOR[tier], { shadow: P.ink });
+  ui.text(ctx, tx(app, 'ui.saved'), 138, 182, P.green, { shadow: P.ink });
+}
+
+function drawFinal(ctx, app) {
+  const { run } = app;
+  const oi = engine.oiOf(run);
+  const tier = tierFor(oi);
+  const stars = engine.starsFor(run);
+  drawSky(ctx, 0, 0, layout.W, SKY_H, tier, app.t);
+  drawFactory(ctx, tier, 68, 2, app.t, 1);
+  ui.textCenter(ctx, tx(app, 'ui.result'), 128, 72, P.gold, { shadow: P.ink });
+  [0, 1, 2].forEach((i) => ui.star(ctx, 128 - 31 + i * 22, 82, i < stars));
+  const summary = `${tx(app, 'ui.finalOi', { n: num(app, oi) })}  ${tx(app, `tier.${tier}`)}`;
+  ui.textCenter(ctx, summary, 128, 94, hud.TIER_COLOR[tier], { shadow: P.ink });
+  const criteria = [
+    tx(app, 'ui.star1'),
+    tx(app, 'ui.star2', { n: engine.MIN_OI }),
+    tx(app, 'ui.star3', { n: engine.GOAL_OI }),
+  ];
+  criteria.forEach((label, i) => ui.text(ctx, label, 36, 106 + i * 10, i < stars ? P.green : P.dim, { shadow: P.ink }));
+  ui.windowBox(ctx, 4, 140, 248, 70);
+  const rows = ui.wrapLines(view.lessons(app).map((text) => ({ text })), 40);
+  ui.paragraph(ctx, rows.slice(0, 6), 10, 147);
+}
+
+function drawDead(ctx, app) {
+  const shake = app.phaseT < 0.8 ? Math.round(Math.sin(app.phaseT * 60) * 2) : 0;
+  drawSky(ctx, 0, 0, layout.W, SKY_H, 'collapse', app.t);
+  drawFactory(ctx, 'collapse', 68 + shake, 6, app.t, 1);
+  ui.textCenter(ctx, tx(app, 'ui.gameOver'), 128, 78, P.red, { scale: 2, shadow: P.ink });
+  ui.windowBox(ctx, 4, 98, 248, 110);
+  ui.text(ctx, tx(app, 'ui.autopsy'), 12, 106, P.gold);
+  const rows = ui.wrapLines(view.autopsyLines(app).map((text) => ({ text })), 38);
+  ui.paragraph(ctx, rows.slice(0, 9), 12, 120);
+}
+
+function drawNote(ctx, app) {
+  ctx.fillStyle = 'rgba(0,0,12,0.6)';
+  ctx.fillRect(0, 0, layout.W, layout.H);
+  const keys = view.noteKeys(app);
+  ui.windowBox(ctx, 10, 30, 236, 150);
+  ui.text(ctx, tx(app, keys.title), 20, 40, P.gold);
+  rect(ctx, 20, 52, 216, 1, P.winShade);
+  ui.paragraph(ctx, ui.wrapLines([{ text: tx(app, keys.body) }], 37), 20, 60);
+}
+
+module.exports = { drawTitle, drawIntro, drawRoom, drawFinal, drawDead, drawNote };
+
+});
+__d("render/ui", function (module, exports, __r) {
+'use strict';
+
+const { SUPPORTED_CHARS, CELL_W, CELL_H, pixelsOf } = __r("render/font");
+const { wrapText } = __r("text");
+const P = __r("render/palette");
+const { rect, bands } = __r("render/draw");
+
+const INDEX = new Map([...SUPPORTED_CHARS].map((ch, i) => [ch, i]));
+const FALLBACK = INDEX.get('?');
+
+// One pre-rendered strip of glyphs per colour; drawing text is then one drawImage per letter.
+const atlases = new Map();
+function atlasFor(color) {
+  if (!atlases.has(color)) {
+    const canvas = document.createElement('canvas');
+    canvas.width = SUPPORTED_CHARS.length * CELL_W;
+    canvas.height = CELL_H;
+    const g = canvas.getContext('2d');
+    g.fillStyle = color;
+    [...SUPPORTED_CHARS].forEach((ch, i) => {
+      pixelsOf(ch).forEach(([x, y]) => g.fillRect(i * CELL_W + x, y, 1, 1));
+    });
+    atlases.set(color, canvas);
+  }
+  return atlases.get(color);
+}
+
+// y is the top of the capital letters; the glyph cell reserves two rows above for accents.
+function text(ctx, str, x, y, color = P.white, { scale = 1, shadow = null } = {}) {
+  if (shadow) text(ctx, str, x + scale, y + scale, shadow, { scale });
+  const atlas = atlasFor(color);
+  ctx.imageSmoothingEnabled = false;
+  [...str].forEach((ch, i) => {
+    const idx = INDEX.has(ch) ? INDEX.get(ch) : FALLBACK;
+    ctx.drawImage(
+      atlas, idx * CELL_W, 0, CELL_W, CELL_H,
+      Math.round(x) + i * CELL_W * scale, Math.round(y) - 2 * scale, CELL_W * scale, CELL_H * scale,
+    );
+  });
+}
+
+const textWidth = (str, scale = 1) => [...str].length * CELL_W * scale;
+const textRight = (ctx, str, xRight, y, color, opts = {}) =>
+  text(ctx, str, xRight - textWidth(str, opts.scale || 1) + (opts.scale || 1), y, color, opts);
+const textCenter = (ctx, str, cx, y, color, opts = {}) =>
+  text(ctx, str, cx - Math.round(textWidth(str, opts.scale || 1) / 2), y, color, opts);
+
+// Wraps tagged lines ({ text, tone }) to a column width, keeping the tone on every row.
+const wrapLines = (items, cols) =>
+  items.flatMap((item) => wrapText(item.text, cols).map((row) => ({ text: row, tone: item.tone || 'white' })));
+
+function paragraph(ctx, rows, x, y, lineH = 10) {
+  rows.forEach((row, i) => text(ctx, row.text, x, y + i * lineH, P[row.tone] || P.white));
+}
+
+// A blue gradient window with a light frame and cut corners, like a Final Fantasy menu.
+function windowBox(ctx, x, y, w, h, { selected = false, alpha = 1 } = {}) {
+  ctx.globalAlpha = alpha;
+  bands(ctx, x + 1, y + 1, w - 2, h - 2, selected ? P.selTop : P.winTop, selected ? P.selBottom : P.winBottom, 2);
+  ctx.globalAlpha = 1;
+  const edge = selected ? P.gold : P.winEdge;
+  rect(ctx, x + 1, y, w - 2, 1, edge);
+  rect(ctx, x + 1, y + h - 1, w - 2, 1, edge);
+  rect(ctx, x, y + 1, 1, h - 2, edge);
+  rect(ctx, x + w - 1, y + 1, 1, h - 2, edge);
+  rect(ctx, x + 2, y + 1, w - 4, 1, selected ? P.winEdge : P.winShade);
+}
+
+function bar(ctx, x, y, w, h, fraction, fg, bg = '#10142c') {
+  rect(ctx, x, y, w, h, bg);
+  rect(ctx, x, y, Math.round(w * Math.max(0, Math.min(1, fraction))), h, fg);
+}
+
+function triangle(ctx, x, y, dir, color) {
+  if (dir > 0) {
+    rect(ctx, x + 2, y, 1, 1, color);
+    rect(ctx, x + 1, y + 1, 3, 1, color);
+    rect(ctx, x, y + 2, 5, 1, color);
+  } else {
+    rect(ctx, x, y, 5, 1, color);
+    rect(ctx, x + 1, y + 1, 3, 1, color);
+    rect(ctx, x + 2, y + 2, 1, 1, color);
+  }
+}
+
+const STAR = ['...#...', '...#...', '#######', '.#####.', '..###..', '.##.##.', '.#...#.'];
+function star(ctx, x, y, filled) {
+  const color = filled ? P.gold : P.dim;
+  STAR.forEach((row, cy) => {
+    [...row].forEach((ch, cx) => {
+      if (ch === '#') rect(ctx, x + cx, y + cy, 1, 1, color);
+    });
+  });
+}
+
+module.exports = {
+  text,
+  textRight,
+  textCenter,
+  textWidth,
+  paragraph,
+  wrapLines,
+  windowBox,
+  bar,
+  triangle,
+  star,
+};
+
+});
+__d("storage", function (module, exports, __r) {
+'use strict';
+
+// Saves the language, the mute switch and the best stars. Storage can be blocked or
+// corrupt (private windows, file:// quirks), so every read is validated and every write
+// is allowed to fail: the game must work the same without it.
+
+const KEY = 'plquest.v1';
+const LANGS = Object.freeze(['es', 'en']);
+const DEFAULTS = Object.freeze({ lang: null, muted: false, bestStars: 0 });
+
+function sanitize(raw) {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  const stars = Number.isInteger(source.bestStars) ? Math.min(3, Math.max(0, source.bestStars)) : 0;
+  return {
+    lang: LANGS.includes(source.lang) ? source.lang : null,
+    muted: source.muted === true,
+    bestStars: stars,
+  };
+}
+
+function createStorage(backend) {
+  const load = () => {
+    try {
+      const stored = backend ? backend.getItem(KEY) : null;
+      return stored ? sanitize(JSON.parse(stored)) : DEFAULTS;
+    } catch {
+      return DEFAULTS;
+    }
+  };
+
+  const save = (patch) => {
+    const current = load();
+    const merged = sanitize({
+      ...current,
+      ...patch,
+      bestStars: Math.max(current.bestStars, patch.bestStars ?? 0),
+    });
+    try {
+      if (backend) backend.setItem(KEY, JSON.stringify(merged));
+    } catch {
+      // Storage may be blocked or full; the game keeps working without saving.
+    }
+    return merged;
+  };
+
+  return { load, save };
+}
+
+module.exports = { createStorage, DEFAULTS, KEY };
+
+});
+__d("text", function (module, exports, __r) {
+'use strict';
+
+function splitLongWord(word, maxCols) {
+  const chunks = [];
+  for (let i = 0; i < word.length; i += maxCols) chunks.push(word.slice(i, i + maxCols));
+  return chunks;
+}
+
+function wrapParagraph(paragraph, maxCols) {
+  const words = paragraph
+    .split(' ')
+    .filter((word) => word.length > 0)
+    .flatMap((word) => splitLongWord(word, maxCols));
+  if (words.length === 0) return [''];
+  return words.reduce((lines, word) => {
+    const last = lines[lines.length - 1];
+    if (last === undefined) return [word];
+    return last.length + 1 + word.length <= maxCols
+      ? [...lines.slice(0, -1), `${last} ${word}`]
+      : [...lines, word];
+  }, []);
+}
+
+// Greedy word wrap on a monospace grid; explicit newlines start a new paragraph.
+const wrapText = (text, maxCols) =>
+  String(text)
+    .split('\n')
+    .flatMap((paragraph) => wrapParagraph(paragraph, maxCols));
+
+function formatNumber(n, lang, digits = 1) {
+  const negligible = Math.abs(n) < 0.5 * 10 ** -digits;
+  const fixed = negligible ? (0).toFixed(digits) : n.toFixed(digits);
+  return lang === 'es' ? fixed.replace('.', ',') : fixed;
+}
+
+function formatDelta(n, lang, digits = 1) {
+  const body = formatNumber(n, lang, digits);
+  const isZero = /^0[.,]0+$/.test(body);
+  return n > 0 && !isZero ? `+${body}` : body;
+}
+
+module.exports = { wrapText, formatNumber, formatDelta };
+
+});
+__d("tiers", function (module, exports, __r) {
+'use strict';
+
+// Factory states, from worst to best. They follow the projected OI bar.
+const TIERS = Object.freeze(['collapse', 'edge', 'worn', 'normal', 'modern', 'hightech']);
+
+function tierFor(oi) {
+  if (!(oi > 0)) return 'collapse';
+  if (oi < 5) return 'edge';
+  if (oi < 10) return 'worn';
+  if (oi < 16) return 'normal';
+  if (oi < 19) return 'modern';
+  return 'hightech';
+}
+
+function tierDirection(from, to) {
+  const change = TIERS.indexOf(to) - TIERS.indexOf(from);
+  if (change > 0) return 'up';
+  if (change < 0) return 'down';
+  return 'same';
+}
+
+module.exports = { TIERS, tierFor, tierDirection };
+
+});
+__d("ui/app", function (module, exports, __r) {
+'use strict';
+
+// The UI state machine. reduce(app, action) returns { app, effects }: a new app state plus
+// a list of side effects (sounds, saving) for the shell to perform. No drawing and no DOM
+// in here, so the whole flow of the game can be tested in Node.
+
+const engine = __r("engine");
+const { tierFor } = __r("tiers");
+const layout = __r("ui/layout");
+
+const NONE = Object.freeze([]);
+
+const createApp = ({ lang, muted, best }) => ({
+  scene: 'title',
+  lang,
+  muted,
+  best,
+  run: null,
+  cursor: 0,
+  overlay: null,
+  t: 0,
+  phaseT: 0,
+});
+
+const sfx = (name) => ({ type: 'sfx', name });
+const music = (mode) => ({ type: 'music', mode });
+const result = (app, effects = NONE) => ({ app, effects });
+const moved = (app, patch) => ({ ...app, ...patch, phaseT: 0 });
+
+function toggleMute(app) {
+  const muted = !app.muted;
+  return result({ ...app, muted }, [{ type: 'mute', value: muted }, { type: 'save', patch: { muted } }]);
+}
+
+function toggleLang(app) {
+  const lang = app.lang === 'es' ? 'en' : 'es';
+  return result({ ...app, lang }, [{ type: 'save', patch: { lang } }]);
+}
+
+// Effects that follow a change of run phase (arriving at the final screen or dying).
+function arrival(run) {
+  if (run.phase === 'final') {
+    return [{ type: 'save', patch: { bestStars: engine.starsFor(run) } }, sfx('star'), music('title')];
+  }
+  if (run.phase === 'dead') return [sfx('death'), music('off')];
+  return [sfx('select')];
+}
+
+function advance(app) {
+  const run = engine.next(app.run);
+  return result(moved(app, { run, cursor: 0 }), arrival(run));
+}
+
+function soundFor(before, after) {
+  if (after.phase === 'dead') return sfx('death');
+  const change = after.last.delta.oi;
+  const tierChanged = tierFor(after.last.oiBefore) !== tierFor(after.last.oiAfter);
+  if (tierChanged && change > 0) return sfx('tier');
+  if (change > 0.05) return sfx('good');
+  if (change < -0.05) return sfx('bad');
+  return sfx('confirm');
+}
+
+function playSelected(app) {
+  const id = app.run.hand[app.cursor];
+  const run = engine.playCard(app.run, id);
+  const effects = run.phase === 'dead' ? [soundFor(app.run, run), music('off')] : [soundFor(app.run, run)];
+  return result(moved(app, { run, cursor: 0 }), effects);
+}
+
+const startRun = (app) => {
+  const run = engine.newRun();
+  return result(moved(app, { scene: 'play', run, cursor: 0, overlay: null }), [sfx('confirm'), music('play')]);
+};
+
+function confirmPlay(app) {
+  switch (app.run.phase) {
+    case 'turn':
+      return playSelected(app);
+    case 'final':
+      return startRun(app);
+    case 'dead': {
+      const run = engine.retry(app.run);
+      return result(moved(app, { run, cursor: 0 }), [sfx('confirm'), music('play')]);
+    }
+    default:
+      return advance(app);
+  }
+}
+
+function confirm(app) {
+  if (app.scene === 'title') return result(moved(app, { scene: 'intro' }), [sfx('confirm'), music('title')]);
+  if (app.scene === 'intro') return startRun(app);
+  return confirmPlay(app);
+}
+
+function move(app, key) {
+  if (app.scene !== 'play' || app.run.phase !== 'turn') return result(app);
+  const col = app.cursor % 2;
+  const row = Math.floor(app.cursor / 2);
+  const next = {
+    left: row * 2,
+    right: row * 2 + 1,
+    up: col,
+    down: 2 + col,
+  }[key];
+  const cursor = Math.min(next, app.run.hand.length - 1);
+  return cursor === app.cursor ? result(app) : result({ ...app, cursor }, [sfx('select')]);
+}
+
+function onKey(app, key) {
+  if (key === 'mute') return toggleMute(app);
+  if (key === 'lang') return toggleLang(app);
+  if (app.overlay) {
+    const closes = ['confirm', 'back', 'note'].includes(key);
+    return closes ? result({ ...app, overlay: null }, [sfx('select')]) : result(app);
+  }
+  if (key === 'note') {
+    return app.scene === 'play' ? result({ ...app, overlay: 'note' }, [sfx('select')]) : result(app);
+  }
+  if (key === 'confirm') return confirm(app);
+  if (['up', 'down', 'left', 'right'].includes(key)) return move(app, key);
+  return result(app);
+}
+
+function onTap(app, x, y) {
+  const button = layout.hitFooter(x, y);
+  if (button) return onKey(app, button);
+  if (app.overlay) return onKey(app, 'confirm');
+  const turning = app.scene === 'play' && app.run.phase === 'turn';
+  if (!turning) return onKey(app, 'confirm');
+  const index = layout.hitCard(x, y);
+  if (index < 0 || index >= app.run.hand.length) return result(app);
+  return index === app.cursor ? onKey(app, 'confirm') : result({ ...app, cursor: index }, [sfx('select')]);
+}
+
+function onHover(app, x, y) {
+  if (app.scene !== 'play' || app.run.phase !== 'turn' || app.overlay) return result(app);
+  const index = layout.hitCard(x, y);
+  if (index < 0 || index >= app.run.hand.length || index === app.cursor) return result(app);
+  return result({ ...app, cursor: index }, [sfx('select')]);
+}
+
+function reduce(app, action) {
+  switch (action.type) {
+    case 'tick':
+      return result({ ...app, t: app.t + action.dt, phaseT: app.phaseT + action.dt });
+    case 'key':
+      return onKey(app, action.key);
+    case 'tap':
+      return onTap(app, action.x, action.y);
+    case 'hover':
+      return onHover(app, action.x, action.y);
+    default:
+      return result(app);
+  }
+}
+
+module.exports = { createApp, reduce };
+
+});
+__d("ui/keys", function (module, exports, __r) {
+'use strict';
+
+const { W, H } = __r("ui/layout");
+
+const KEY_ACTIONS = Object.freeze({
+  Enter: 'confirm',
+  ' ': 'confirm',
+  z: 'confirm',
+  Z: 'confirm',
+  ArrowUp: 'up',
+  ArrowDown: 'down',
+  ArrowLeft: 'left',
+  ArrowRight: 'right',
+  w: 'up',
+  W: 'up',
+  s: 'down',
+  S: 'down',
+  a: 'left',
+  A: 'left',
+  d: 'right',
+  D: 'right',
+  n: 'note',
+  N: 'note',
+  m: 'mute',
+  M: 'mute',
+  l: 'lang',
+  L: 'lang',
+  Escape: 'back',
+  x: 'back',
+  X: 'back',
+});
+
+const keyToAction = (key) =>
+  typeof key === 'string' && Object.prototype.hasOwnProperty.call(KEY_ACTIONS, key) ? KEY_ACTIONS[key] : null;
+
+// Converts a pointer position on the (scaled) canvas to the 256x224 logical screen.
+function toLogical(clientX, clientY, rect) {
+  if (!rect.width || !rect.height) return { x: 0, y: 0 };
+  return {
+    x: ((clientX - rect.left) * W) / rect.width,
+    y: ((clientY - rect.top) * H) / rect.height,
+  };
+}
+
+module.exports = { keyToAction, toLogical };
+
+});
+__d("ui/layout", function (module, exports, __r) {
+'use strict';
+
+// Screen geometry in logical pixels (the game draws at 256x224, like a SNES). Shared by the
+// renderer and by the reducer so a tap lands on exactly what the player sees.
+
+const W = 256;
+const H = 224;
+
+const LADDER = Object.freeze({ x: 4, y: 3, w: 124, h: 80 });
+const BOSS_PLATE = Object.freeze({ x: 134, y: 3, w: 118, h: 14 });
+const BOSS_CENTER = Object.freeze({ x: 193, y: 41 });
+const STAGE = Object.freeze({ right: 252, y: 66 });
+const OI_BAR = Object.freeze({ x: 134, y: 76, w: 118, h: 10 });
+const BOSS_LINE = Object.freeze({ x: 4, y: 88, w: 248, h: 24 });
+const REVEAL = Object.freeze({ x: 4, y: 90, w: 248, h: 120 });
+const DETAIL = Object.freeze({ x: 4, y: 186, w: 248, h: 26 });
+
+const CARD = Object.freeze({ w: 122, h: 34, xs: [4, 130], ys: [114, 150] });
+
+const FOOTER = Object.freeze({
+  y: 212,
+  h: 12,
+  zones: [
+    ['confirm', 0, 98],
+    ['note', 98, 138],
+    ['mute', 138, 192],
+    ['lang', 192, 256],
+  ],
+});
+
+const cardRect = (i) => ({ x: CARD.xs[i % 2], y: CARD.ys[Math.floor(i / 2)], w: CARD.w, h: CARD.h });
+
+const inside = (rect, x, y) => x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h;
+
+function hitCard(x, y) {
+  return [0, 1, 2, 3].find((i) => inside(cardRect(i), x, y)) ?? -1;
+}
+
+function hitFooter(x, y) {
+  if (y < FOOTER.y || y >= FOOTER.y + FOOTER.h) return null;
+  const zone = FOOTER.zones.find(([, from, to]) => x >= from && x < to);
+  return zone ? zone[0] : null;
+}
+
+module.exports = {
+  W,
+  H,
+  LADDER,
+  BOSS_PLATE,
+  BOSS_CENTER,
+  STAGE,
+  OI_BAR,
+  BOSS_LINE,
+  REVEAL,
+  DETAIL,
+  CARD,
+  FOOTER,
+  cardRect,
+  hitCard,
+  hitFooter,
+  inside,
+};
+
+});
+__d("ui/tx", function (module, exports, __r) {
+'use strict';
+
+const { createI18n } = __r("i18n");
+const { formatNumber, formatDelta } = __r("text");
+
+const i18n = createI18n({ es: __r("content/es"), en: __r("content/en") });
+
+// tx(app, key, params) translates with the app's current language. The content tests scan
+// the code for calls with a literal key, so a missing string fails the tests, not the game.
+const tx = (app, key, params) => i18n.t(app.lang, key, params);
+const num = (app, n) => formatNumber(n, app.lang);
+const signed = (app, n) => formatDelta(n, app.lang);
+
+module.exports = { tx, num, signed };
+
+});
+__d("ui/view", function (module, exports, __r) {
+'use strict';
+
+// Pure helpers that turn a run into what the screens show: ladder rows, card chips and the
+// short messages after each move. No drawing here, so all of it is unit tested.
+
+const { contributionMargin, grossProfit, operatingIncome } = __r("model");
+const { CARDS } = __r("content/cards");
+const { FLOORS } = __r("content/floors");
+const { tierFor, tierDirection } = __r("tiers");
+const { tx, num, signed } = __r("ui/tx");
+
+const NEGLIGIBLE = 0.05;
+
+function ladderRows(pl) {
+  return [
+    { id: 'sales', kind: 'line', value: pl.sales },
+    { id: 'incentives', kind: 'line', value: -pl.incentives },
+    { id: 'cost', kind: 'line', value: -pl.cost },
+    { id: 'cm', kind: 'subtotal', value: contributionMargin(pl) },
+    { id: 'serve', kind: 'line', value: -pl.serve },
+    { id: 'gp', kind: 'subtotal', value: grossProfit(pl) },
+    { id: 'sga', kind: 'line', value: -pl.sga },
+    { id: 'oi', kind: 'subtotal', value: operatingIncome(pl) },
+  ];
+}
+
+function changedRowIds(before, after) {
+  const was = ladderRows(before);
+  return ladderRows(after)
+    .filter((row, i) => Math.abs(row.value - was[i].value) >= NEGLIGIBLE)
+    .map((row) => row.id);
+}
+
+// The levers a card touches, with the direction each lever moves. Never the effect on OI.
+function chipsFor(card) {
+  const fromOps = card.ops.map((op) => {
+    if (op.op === 'price') return { key: 'chip.price', dir: Math.sign(op.pct) };
+    if (op.op === 'volume') return { key: 'chip.volume', dir: Math.sign(op.pct) };
+    return { key: `line.short.${op.line}`, dir: Math.sign(op.pts) };
+  });
+  const unlock = card.grants.length > 0 ? [{ key: 'chip.unlock', dir: 0 }] : [];
+  const shift = card.later.length > 0 ? [{ key: 'chip.shift', dir: 0 }] : [];
+  return [...fromOps, ...unlock, ...shift];
+}
+
+const toneOf = (value) => {
+  if (value > NEGLIGIBLE) return 'green';
+  if (value < -NEGLIGIBLE) return 'red';
+  return 'white';
+};
+
+function tierLine(app, last) {
+  const direction = tierDirection(tierFor(last.oiBefore), tierFor(last.oiAfter));
+  if (direction === 'up') return [{ text: tx(app, 'ui.tierUp'), tone: 'gold' }];
+  if (direction === 'down') return [{ text: tx(app, 'ui.tierDown'), tone: 'orange' }];
+  return [];
+}
+
+function revealLines(app) {
+  const { last } = app.run;
+  const card = CARDS[last.cardId];
+  const change = Math.abs(last.delta.oi) < NEGLIGIBLE
+    ? tx(app, 'ui.noChange')
+    : tx(app, 'ui.oiChange', {
+      from: num(app, last.oiBefore),
+      to: num(app, last.oiAfter),
+      delta: signed(app, last.delta.oi),
+    });
+  return [
+    { text: tx(app, 'ui.played', { card: tx(app, `card.${card.id}.name`) }), tone: 'white' },
+    { text: change, tone: toneOf(last.delta.oi) },
+    ...card.later.map((l) => ({ text: tx(app, 'ui.shift', { n: l.floor }), tone: 'cyan' })),
+    ...(card.grants.includes('scanned') ? [{ text: tx(app, 'ui.scanDone'), tone: 'green' }] : []),
+    ...(card.grants.includes('valueMeasured') ? [{ text: tx(app, 'ui.measuredDone'), tone: 'green' }] : []),
+    ...tierLine(app, last),
+  ];
+}
+
+// What hit the factory as the floor began: bills from earlier choices and the floor shock.
+function entryLines(app) {
+  const { entry } = app.run;
+  if (!entry) return [];
+  const deferred = Math.abs(entry.deferredOi) >= NEGLIGIBLE
+    ? [{ text: tx(app, 'ui.entryDeferred', { delta: signed(app, entry.deferredOi) }), tone: toneOf(entry.deferredOi) }]
+    : [];
+  const shock = Math.abs(entry.shockOi) >= NEGLIGIBLE
+    ? [{ text: tx(app, 'ui.entryShock', { delta: signed(app, entry.shockOi) }), tone: toneOf(entry.shockOi) }]
+    : [];
+  return [...deferred, ...shock];
+}
+
+function noteKeys(app) {
+  const { run } = app;
+  if (run.phase === 'control') return { title: `room.${run.room}.title`, body: `room.${run.room}.body` };
+  if (run.phase === 'final') return { title: 'note.6.title', body: 'note.6.body' };
+  const id = FLOORS[run.floorIdx].id;
+  return { title: `note.${id}.title`, body: `note.${id}.body` };
+}
+
+function autopsyLines(app) {
+  const { autopsy, checkpoint } = app.run;
+  const name = (id) => tx(app, `card.${id}.name`);
+  const biggest = autopsy.biggestLine
+    ? [tx(app, 'ui.autopsyBiggest', { line: tx(app, `line.${autopsy.biggestLine}`) })]
+    : [];
+  const worst = autopsy.worst
+    ? [tx(app, 'ui.autopsyWorst', {
+      floor: autopsy.worst.floor,
+      turn: autopsy.worst.turn,
+      chosen: name(autopsy.worst.chosen),
+      best: name(autopsy.worst.best),
+    })]
+    : [];
+  return [...biggest, ...worst, checkpoint ? tx(app, 'ui.retryRoom') : tx(app, 'ui.retryStart')];
+}
+
+// Three takeaways for the final screen, chosen by what the player actually did.
+function lessons(app) {
+  const { flags, played } = app.run;
+  const measured = flags.scanned ? tx(app, 'lesson.measured') : tx(app, 'lesson.unmeasured');
+  const shifted = played.some((p) => p.cardId === 'freight')
+    ? tx(app, 'lesson.shifted')
+    : tx(app, 'lesson.cts');
+  return [measured, shifted, tx(app, 'lesson.fixed')];
+}
+
+// The P&L as it was before the last card, rebuilt from the stored line deltas.
+const plBefore = (run) => ({
+  sales: run.pl.sales - run.last.delta.sales,
+  incentives: run.pl.incentives - run.last.delta.incentives,
+  cost: run.pl.cost - run.last.delta.cost,
+  serve: run.pl.serve - run.last.delta.serve,
+  sga: run.pl.sga - run.last.delta.sga,
+});
+
+// Net OI movement on the current floor: the shock and bills on arrival plus the cards played.
+function floorImpact(run) {
+  const entry = run.entries.find((e) => e.floorIdx === run.floorIdx);
+  const arrival = entry ? entry.deferredOi + entry.shockOi : 0;
+  return run.played
+    .filter((p) => p.floorIdx === run.floorIdx)
+    .reduce((sum, p) => sum + p.delta.oi, arrival);
+}
+
+module.exports = {
+  plBefore,
+  floorImpact,
+  ladderRows,
+  changedRowIds,
+  chipsFor,
+  revealLines,
+  entryLines,
+  noteKeys,
+  autopsyLines,
+  lessons,
+  toneOf,
+};
+
+});
+__r("main");
+})();
+</script>
+</body>
+</html>
