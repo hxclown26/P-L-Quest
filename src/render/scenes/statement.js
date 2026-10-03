@@ -26,6 +26,8 @@ const HEADER_MIN_W = 36;
 const NEGLIGIBLE = 0.05;
 // Where the floating change sits on the OI row: in the gap between its short label and its number.
 const FLOAT_X = 50;
+// ...and the one of the sales, in the gap between the label of the sales row and its number.
+const SALES_FLOAT_X = 59;
 // A row that just moved carries a triangle in the free slot after its number (the slot a closing bracket
 // takes in a loss, which is why a loss has none): up when it helped the business, down when it hurt.
 const ARROW_GAP = 2;
@@ -74,20 +76,21 @@ function drawRow(ctx, app, row, top, box, { tierColor, moves, focus }) {
   if (dir && !negative) ui.triangle(ctx, edge + ARROW_GAP, top + 2, dir, dir > 0 ? P.green : P.red);
 }
 
-// The change in OI (in points of margin) floats up from the OI row and fades out.
-function drawFloat(ctx, app, delta, at, rowCount) {
+// The change in OI (in points of margin) floats up from the OI row and fades out; the growth of the sales does the
+// same from the sales row.
+function drawFloat(ctx, app, text, up, x, row, at) {
   const float = anim.floatState(app.phaseT);
-  if (!float || Math.abs(delta) < NEGLIGIBLE) return;
-  const top = at.y + layout.STATEMENT_ROWS.top + (rowCount - 1) * layout.STATEMENT_ROWS.pitch;
+  if (!float) return;
+  const top = at.y + layout.STATEMENT_ROWS.top + row * layout.STATEMENT_ROWS.pitch;
   ctx.globalAlpha = float.alpha;
-  ui.textCenter(ctx, `${signed(app, delta)} pp`, at.x + FLOAT_X, top - float.rise, delta > 0 ? P.green : P.red, { shadow: P.ink });
+  ui.textCenter(ctx, text, at.x + x, top - float.rise, up ? P.green : P.red, { shadow: P.ink });
   ctx.globalAlpha = 1;
 }
 
 // `progress` (0 to 1) rolls the numbers from `before` to `pl`; the rows that changed keep their
 // green or red from the start. `delta` is the change in the OI margin, floated over the OI row.
 function drawStatement(ctx, app, {
-  pl = app.run.pl, before = null, focus = null, column = 'stmt.col.real', at = layout.STATEMENT, progress = 1, delta = null,
+  pl = app.run.pl, before = null, focus = null, column = 'stmt.col.real', at = layout.STATEMENT, progress = 1, delta = null, growth = null,
 } = {}) {
   const shown = before && progress < 1 ? anim.blendPl(before, pl, progress) : pl;
   ui.windowBox(ctx, at.x, at.y, at.w, at.h, { alpha: 0.95 });
@@ -101,7 +104,8 @@ function drawStatement(ctx, app, {
   rows.forEach((row, i) => {
     drawRow(ctx, app, row, at.y + layout.STATEMENT_ROWS.top + i * layout.STATEMENT_ROWS.pitch, at, look);
   });
-  if (before && delta !== null) drawFloat(ctx, app, delta, at, rows.length);
+  if (before && delta !== null && Math.abs(delta) >= NEGLIGIBLE) drawFloat(ctx, app, `${signed(app, delta)} pp`, delta > 0, FLOAT_X, rows.length - 1, at);
+  if (before && growth !== null) drawFloat(ctx, app, `${signed(app, growth)}%`, growth > 0, SALES_FLOAT_X, 0, at);
 }
 
 module.exports = { drawStatement, ARROW_GAP };

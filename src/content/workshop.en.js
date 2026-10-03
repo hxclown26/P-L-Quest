@@ -24,6 +24,7 @@ module.exports = Object.freeze({
   'ws.setup.needCode': 'The 4-digit code is missing.',
   'ws.team.default': 'TEAM',
   'year.intro.code': 'Game code: {code}',
+  'year.intro.code.short': 'Code {code}',
 
   // Result code (last page of a workshop year)
   'ws.result.title': 'RESULT CODE',

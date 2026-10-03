@@ -25,7 +25,7 @@ const TITLE_SKY_H = 26;
 const TITLE_Y = 8;
 const FEEDBACK_WRAP = 38;
 const FEEDBACK_ROWS = 15;
-const GAUGE = Object.freeze({ x: 136, bar: 24, barW: 62, valueRight: 248, rowStep: 12 });
+const GAUGE = Object.freeze({ x: 136, bar: 24, barW: 62, valueRight: 248, rowStep: 11 });
 const BRIDGE = Object.freeze({ x: 4, y: 98, w: 248, h: 128, axisX: 138, axisW: 100, axisMax: 35 });
 const BRIDGE_ROW = 10;
 // The bridge builds up one bar after another, each growing for BRIDGE_SECONDS (the figures are written from the start).
@@ -38,11 +38,12 @@ const TITLE_BAND = 'rgba(12,12,28,0.62)';
 
 const tierColor = (v) => hud.TIER_COLOR[v.tier];
 
-// The code of the game in the corner of a page, so two screenshots can be told to be the same year.
-function drawCodeTag(ctx, app, box) {
+// The code of the game in the corner of a page, so two screenshots can be told to be the same year. Where the foot of the
+// window is taken (the report's notes) it goes short on the title row instead.
+function drawCodeTag(ctx, app, box, onTitle = false) {
   if (app.year.seed === null) return;
-  const code = tx(app, 'year.intro.code', { code: formatCode(app.year.seed) });
-  ui.textRight(ctx, code, box.x + box.w - 8, box.y + box.h - 12, P.dim);
+  const code = tx(app, onTitle ? 'year.intro.code.short' : 'year.intro.code', { code: formatCode(app.year.seed) });
+  ui.textRight(ctx, code, box.x + box.w - 8, onTitle ? box.y + 6 : box.y + box.h - 12, P.dim);
 }
 
 function drawTitle(ctx, app, v) {
@@ -50,15 +51,17 @@ function drawTitle(ctx, app, v) {
   ui.textCenter(ctx, tx(app, v.titleKey), 128, TITLE_Y, tierColor(v), { scale: 2, shadow: P.ink });
 }
 
-// OI against the plan and the three meters at the end of the year.
+// OI against the plan (in % and in money), the growth of the sales and the three meters at the end of the year.
 function drawNumbers(ctx, app, v) {
   const { x, y, w, h } = { x: 130, y: 26, w: 122, h: 66 };
   ui.windowBox(ctx, x, y, w, h);
-  ui.text(ctx, v.oiText, GAUGE.x, y + 6, tierColor(v));
-  ui.text(ctx, v.planText, GAUGE.x, y + 16, P.gray);
-  if (v.timeText) ui.textRight(ctx, v.timeText, GAUGE.valueRight, y + 16, P.gray);
+  ui.text(ctx, v.oiText, GAUGE.x, y + 5, tierColor(v));
+  ui.textRight(ctx, v.moneyText, GAUGE.valueRight, y + 5, P.white);
+  ui.text(ctx, v.planText, GAUGE.x, y + 14, P.gray);
+  if (v.timeText) ui.textRight(ctx, v.timeText, GAUGE.valueRight, y + 14, P.gray);
+  ui.text(ctx, v.growthText, GAUGE.x, y + 23, P[v.growthTone]);
   rules.METER_KEYS.forEach((key, i) => {
-    const top = y + 30 + i * GAUGE.rowStep;
+    const top = y + 35 + i * GAUGE.rowStep;
     const value = v.meters[key];
     const color = frame.meterColor(value);
     ui.text(ctx, tx(app, `year.meterTag.${key}`), GAUGE.x, top, P.gray);
@@ -98,6 +101,8 @@ function drawBridge(ctx, app, v) {
     const grown = app.calm ? 1 : anim.grow(app.phaseT, BRIDGE_DELAY + i * BRIDGE_STEP, BRIDGE_SECONDS);
     drawBridgeRow(ctx, row, top + i * BRIDGE_ROW, last, color, grown);
   });
+  // Above the game code, which keeps the foot of the window to itself.
+  if (v.tagKey) ui.text(ctx, tx(app, v.tagKey), x + 8, y + h - 24, P.orange);
   drawCodeTag(ctx, app, BRIDGE);
 }
 
@@ -121,7 +126,7 @@ function drawReportPage(ctx, app, v) {
   drawSky(ctx, 0, 0, layout.W, TITLE_SKY_H, v.tier, app.t);
   drawTitle(ctx, app, v);
   report.drawReport(ctx, app, v);
-  drawCodeTag(ctx, app, report.WINDOW);
+  drawCodeTag(ctx, app, report.WINDOW, true);
 }
 
 // What happened, in the player's own terms, separated by blank rows.

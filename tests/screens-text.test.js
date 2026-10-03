@@ -27,11 +27,11 @@ test('the menu of a player lists the year, the half year and the tutorial, and n
   assert.doesNotMatch(text, /Taller/);
 });
 
-test('the menu names this build: Demo 5, in both modes of the menu', () => {
+test('the menu names this build: Demo 6, in both modes of the menu', () => {
   for (const creator of [false, true]) {
     const text = screenText(base({ scene: 'menu', creator }));
-    assert.match(text, /DEMO 5/);
-    assert.doesNotMatch(text, /DEMO [34]/);
+    assert.match(text, /DEMO 6/);
+    assert.doesNotMatch(text, /DEMO [345]/);
   }
 });
 
@@ -78,9 +78,9 @@ test('the intro does not advertise the reviewer key to a player', () => {
 
 test('the end of a year played from a code shows that code on the result and on the report', () => {
   const run = sim.simulate(sim.PROFILES.expert, 1, engine.newYear(4821));
-  for (const page of [0, 1]) {
-    assert.match(screenText(base({ scene: 'year', year: run, page })), /Código de partida: 4821/, `page ${page}`);
-  }
+  // The result carries it in full at the foot of the bridge; the report, whose foot holds its notes, in short on the title row.
+  assert.match(screenText(base({ scene: 'year', year: run, page: 0 })), /Código de partida: 4821/);
+  assert.match(screenText(base({ scene: 'year', year: run, page: 1 })), /Cód\. 4821/);
 });
 
 test('a pinned ending, which has no code of its own, shows none', () => {
@@ -100,7 +100,7 @@ test('the rules show the grades with their real thresholds, and the next page th
   const assumptions = read(base({ scene: 'yearIntro', overlay: 'rules', rulesPage: 1 }));
   assert.match(assumptions, /SUPUESTOS DEL MODELO/);
   assert.match(assumptions, /US\$ millones/);
-  assert.match(assumptions, /El juego termina en el OI/, 'the page says where the game stops, and so what is left out');
+  assert.match(assumptions, /Termina en el OI/, 'the page says where the game stops, and so what is left out');
   assert.match(assumptions, /\(2\/2\)/);
 });
 

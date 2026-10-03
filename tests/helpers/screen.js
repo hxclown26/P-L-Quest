@@ -52,4 +52,47 @@ function draw(app) {
   return { glyphs, fills };
 }
 
-module.exports = { recorder, textIn, draw };
+// The boxes of every text call a screen makes (x, y, width, height of what is written), so a test can find text that is
+// printed over other text. The text helpers of the renderer are wrapped for the length of one frame.
+function textRuns(app) {
+  const ui = require('../../src/render/ui');
+  const original = { text: ui.text, textRight: ui.textRight, textCenter: ui.textCenter, paragraph: ui.paragraph };
+  const runs = [];
+  const width = (str, scale = 1) => [...str].length * CELL_W * scale;
+  const add = (str, x, y, scale = 1) => runs.push({ text: str, x: Math.round(x), y, w: width(str, scale), h: 8 * scale });
+  ui.text = (ctx, str, x, y, color, opts = {}) => { add(str, x, y, opts.scale || 1); return original.text(ctx, str, x, y, color, opts); };
+  ui.textRight = (ctx, str, xRight, y, color, opts = {}) => {
+    const scale = opts.scale || 1;
+    add(str, xRight - width(str, scale) + scale - (opts.bold ? 1 : 0), y, scale);
+    return original.textRight(ctx, str, xRight, y, color, opts);
+  };
+  ui.textCenter = (ctx, str, cx, y, color, opts = {}) => {
+    const scale = opts.scale || 1;
+    add(str, cx - Math.round(width(str, scale) / 2), y, scale);
+    return original.textCenter(ctx, str, cx, y, color, opts);
+  };
+  ui.paragraph = (ctx, rows, x, y, lineH = 10) => {
+    rows.forEach((row, i) => add(row.text, x, y + i * lineH));
+    return original.paragraph(ctx, rows, x, y, lineH);
+  };
+  try {
+    draw(app);
+  } finally {
+    Object.assign(ui, original);
+  }
+  return runs;
+}
+
+// Pairs of text runs that share more than a pixel across and two rows down: letters on top of letters.
+function overlaps(runs) {
+  const found = [];
+  runs.forEach((a, i) => runs.slice(i + 1).forEach((b) => {
+    if (!a.text.trim() || !b.text.trim()) return;
+    const across = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+    const down = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
+    if (across > 1 && down > 2 && !(a.text === b.text && a.x === b.x && a.y === b.y)) found.push([a, b]);
+  }));
+  return found;
+}
+
+module.exports = { recorder, textIn, draw, textRuns, overlaps };

@@ -21,7 +21,8 @@ function seedOf(run) {
 function resultPlan(app) {
   if (!played(app, 'result')) return null;
   const seed = seedOf(app.year);
-  return { ...fx.resultFeedback(app.year.last.delta, { pace: app.year.pace, calm: app.calm, seed }), seed };
+  const focus = engine.currentProblem(app.year).focus;
+  return { ...fx.resultFeedback(app.year.last.delta, { pace: app.year.pace, calm: app.calm, seed, focus }), seed };
 }
 
 const sumMeters = (bills) => bills.reduce((sum, d) => ({ C: sum.C + d.meters.C, P: sum.P + d.meters.P, E: sum.E + d.meters.E }), { C: 0, P: 0, E: 0 });
@@ -40,6 +41,13 @@ function closePlan(app) {
 function rescuePlan(app) {
   if (!played(app, 'rescue')) return null;
   const seed = ((app.year.seed ?? 0) * 101 + (app.year.rescueMonth ?? 0)) | 0;
+  return { ...fx.rescueFeedback({ calm: app.calm, seed }), seed };
+}
+
+// A meter at zero is a heavy blow: it hits like the plan that follows a crisis.
+function shockPlan(app) {
+  if (!played(app, 'shock')) return null;
+  const seed = ((app.year.seed ?? 0) * 101 + app.year.shocks.length * 13 + app.year.monthIdx) | 0;
   return { ...fx.rescueFeedback({ calm: app.calm, seed }), seed };
 }
 
@@ -62,9 +70,9 @@ const STILL = Object.freeze({ dx: 0, dy: 0 });
 
 // How far, in whole pixels, the scene is pushed right now (never the footer or the veil).
 function screenShake(app) {
-  const plan = resultPlan(app) || closePlan(app) || rescuePlan(app) || verdictPlan(app);
+  const plan = resultPlan(app) || closePlan(app) || rescuePlan(app) || shockPlan(app) || verdictPlan(app);
   if (!plan || plan.trauma <= 0) return STILL;
   return fx.shakeOffset(plan.trauma, app.phaseT - fx.IMPACT_AT, plan.seed);
 }
 
-module.exports = { resultPlan, closePlan, rescuePlan, verdictPlan, screenShake, sceneMood };
+module.exports = { resultPlan, closePlan, rescuePlan, shockPlan, verdictPlan, screenShake, sceneMood };

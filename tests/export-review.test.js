@@ -57,3 +57,52 @@ test('the months a problem fits are exported, so the reviewer sees which ones ar
 test('the rows are plain data that survives a round trip through JSON', () => {
   assert.deepEqual(JSON.parse(JSON.stringify(rows)), rows);
 });
+
+// ---- Demo 6: the segment, the brief, the story and what each answer does to the P&L
+
+test('every row names the segment of the client and carries the brief and the facts of its problem, in both languages', () => {
+  for (const row of rows) {
+    const problem = PROBLEMS.find((p) => p.id === row.id);
+    for (const [lang, dict] of [['es', es], ['en', en]]) {
+      assert.equal(row[lang].segment, dict[`year.seg.${problem.segment}`]);
+      assert.equal(row[lang].brief, dict[`year.${row.id}.brief`]);
+      assert.equal(row[lang].facts, dict[`year.${row.id}.facts`].split('|').join(' · '));
+    }
+  }
+});
+
+test('every row carries the story the game tells after the answer, in both languages', () => {
+  for (const row of rows) {
+    assert.equal(row.es.story, es[`year.${row.id}.${row.type}.why`]);
+    assert.equal(row.en.story, en[`year.${row.id}.${row.type}.why`]);
+  }
+});
+
+test('every row says which lines the answer moves and which way, as a reviewer reads a P&L', () => {
+  const byKey = (id, type) => rows.find((row) => row.id === id && row.type === type);
+  // a rebate to win a renewal: more sales, more incentives
+  assert.equal(byKey('m01c', 'smart').es.effect, 'Ventas ↑ · Incentivos ↑');
+  assert.equal(byKey('m01c', 'smart').en.effect, 'Sales ↑ · Incentives ↑');
+  // giving the rebate away: only the incentives
+  assert.equal(byKey('m01c', 'plac').es.effect, 'Incentivos ↑');
+  // a halted shipment loses sales and saves freight
+  assert.equal(byKey('m07e', 'ign').es.effect, 'Ventas ↓ · Flete ↓');
+  for (const row of rows) {
+    for (const lang of ['es', 'en']) assert.match(row[lang].effect, /[↑↓]|volumen|volume|precio|price/, `${row.id} ${row.type} ${lang}`);
+  }
+});
+
+test('a growth answer says its volume and its price, and a red line says so', () => {
+  const byKey = (id, type) => rows.find((row) => row.id === id && row.type === type);
+  const tender = byKey('m08c', 'plac');
+  assert.match(tender.es.effect, /volumen \+9,0%/);
+  assert.match(tender.es.effect, /precio -3,0%/);
+  assert.match(tender.en.effect, /volume \+9\.0%/);
+  assert.match(tender.en.effect, /price -3\.0%/);
+  const red = rows.filter((row) => row.redLine).map((row) => `${row.id} ${row.type}`);
+  assert.deepEqual(red, ['m01e temp', 'm02s temp', 'm05p temp', 'm06p temp', 'm12p temp', 'm12s temp']);
+  for (const row of rows.filter((r) => r.redLine)) {
+    assert.match(row.es.effect, /LÍNEA ROJA/);
+    assert.match(row.en.effect, /RED LINE/);
+  }
+});

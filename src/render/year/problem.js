@@ -1,7 +1,7 @@
 'use strict';
 
-// The two screens of one problem: the question with its four answers, and what happened
-// after answering. They share the P&L statement, the voice plate, the picture and the gauges.
+// The three screens of one problem: its brief (who is asking and why now), the question with its four answers, and
+// what happened after answering. They share the P&L statement, the voice plate, the picture and the gauges.
 
 const layout = require('../../ui/layout');
 const engine = require('../../year/engine');
@@ -18,6 +18,8 @@ const { drawStatement } = require('../scenes/statement');
 const frame = require('./frame');
 
 const WRAP = 40;
+// The brief: up to five rows of text, a rule and three facts under it.
+const BRIEF = Object.freeze({ rows: view.BRIEF_ROWS, ruleY: 59, factsY: 63 });
 const RESULT_WRAP = 38;
 const MAX_RESULT_ROWS = 8;
 const ROW_H = 9;
@@ -36,14 +38,15 @@ function gaugeNotes(app) {
 }
 
 // Backdrop, P&L statement, voice plate, picture and gauges. Returns the current problem.
-function drawTop(ctx, app, { before = null, focus = null, notes = [], delta = null } = {}) {
+function drawTop(ctx, app, { before = null, focus = null, notes = [], delta = null, growth = null } = {}) {
   const run = app.year;
   const problem = engine.currentProblem(run);
   frame.drawBackdrop(ctx);
-  drawStatement(ctx, app, { pl: run.pl, before, focus, delta, progress: anim.rollProgress(app.phaseT) });
+  drawStatement(ctx, app, { pl: run.pl, before, focus, delta, growth, progress: anim.rollProgress(app.phaseT) });
   frame.drawPlate(ctx, tx(app, `year.voice.${problem.voice}`), frame.voiceColor(problem.voice));
   frame.drawArtWindow(ctx, app, problem.theme);
   frame.drawStage(ctx, app);
+  frame.drawSegmentTag(ctx, app, problem);
   frame.drawReviewBadge(ctx, app);
   frame.drawMeters(ctx, app, { notes, atStake: view.crisisMeter(app) });
   return problem;
@@ -51,16 +54,21 @@ function drawTop(ctx, app, { before = null, focus = null, notes = [], delta = nu
 
 const drawRule = (ctx, d, y) => rect(ctx, d.x + 4, d.y + y, d.w - 8, 1, P.winShade);
 
-// The title of the problem (and the rescue goal) and the situation in two rows.
-function drawSituation(ctx, app, problem) {
+// The title of the problem and, once the unit has been rescued, how far it is from the goal.
+function drawHeading(ctx, app, title) {
   const d = layout.DIALOGUE;
-  ui.text(ctx, tx(app, `year.${problem.id}.title`), d.x + 6, d.y + d.titleY, P.gold);
+  ui.text(ctx, title, d.x + 6, d.y + d.titleY, P.gold);
   if (app.year.rescued) {
     const reached = engine.oiOf(app.year) >= rules.RESCUE_GOAL;
     ui.textRight(ctx, tx(app, 'year.goal', { n: rules.RESCUE_GOAL }), d.x + d.w - 6, d.y + d.titleY, reached ? P.green : P.orange);
   }
-  const scene = ui.wrapLines([{ text: tx(app, `year.${problem.id}.scene`) }], WRAP);
-  ui.paragraph(ctx, anim.revealRows(scene, anim.typedChars(app.phaseT)), d.x + 6, d.y + d.sceneY, ROW_H);
+}
+
+// The title of the problem and the situation in two rows (the brief already told it in full).
+function drawSituation(ctx, app, problem) {
+  const d = layout.DIALOGUE;
+  drawHeading(ctx, app, tx(app, `year.${problem.id}.title`));
+  ui.paragraph(ctx, ui.wrapLines([{ text: tx(app, `year.${problem.id}.scene`) }], WRAP), d.x + 6, d.y + d.sceneY, ROW_H);
   drawRule(ctx, d, d.firstRule);
 }
 
@@ -86,7 +94,31 @@ function drawDetail(ctx, app, cards) {
   ui.paragraph(ctx, ui.wrapLines([{ text: tx(app, cards[app.cursor].descKey) }], WRAP), d.x + 6, d.y + d.detailY, ROW_H);
 }
 
+// The facts of the brief, one row each: the label in gray and the value in white.
+function drawFacts(ctx, facts, d) {
+  facts.forEach((fact, i) => {
+    const y = d.y + BRIEF.factsY + i * ROW_H;
+    const label = `${fact.label}:`;
+    ui.text(ctx, label, d.x + 6, y, P.gray);
+    ui.text(ctx, fact.value, d.x + 6 + ui.textWidth(label) + 4, y, P.white);
+  });
+}
+
+// Before the answers: who is asking and why now, typed in, and three facts to weigh it by.
+function drawBrief(ctx, app) {
+  drawTop(ctx, app, { notes: view.crisisLines(app).map((text) => ({ text, color: P.orange })) });
+  const d = layout.DIALOGUE;
+  const brief = view.briefOf(app);
+  ui.windowBox(ctx, d.x, d.y, d.w, d.h);
+  drawHeading(ctx, app, brief.title);
+  const rows = ui.wrapLines([{ text: brief.text }], view.BRIEF_COLS).slice(0, BRIEF.rows);
+  ui.paragraph(ctx, anim.revealRows(rows, anim.typedChars(app.phaseT)), d.x + 6, d.y + d.sceneY, ROW_H);
+  drawRule(ctx, d, BRIEF.ruleY);
+  drawFacts(ctx, brief.facts, d);
+}
+
 function drawProblem(ctx, app) {
+  if (view.briefing(app)) return drawBrief(ctx, app);
   const cards = view.yearCards(app);
   const problem = drawTop(ctx, app, { focus: cards[app.cursor].line, notes: gaugeNotes(app) });
   const d = layout.DIALOGUE;
@@ -115,7 +147,7 @@ function drawDeltaStrip(ctx, app, x, y) {
 const burstOrigin = () => ({ x: layout.ART.x + Math.floor(layout.ART.w / 2), y: layout.ART.y + layout.ART.h - 10 });
 
 function drawResult(ctx, app) {
-  drawTop(ctx, app, { before: app.year.last.plBefore, delta: app.year.last.delta.oi });
+  drawTop(ctx, app, { before: app.year.last.plBefore, delta: app.year.last.delta.oi, growth: view.resultGrowth(app) });
   const plan = screenFx.resultPlan(app);
   if (plan) fxDraw.drawFlash(ctx, plan, app.phaseT);
   const d = layout.DIALOGUE;

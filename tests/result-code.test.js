@@ -30,7 +30,7 @@ test('a result code is the team name, a slash and groups of four characters from
 test('a full year fits in 28 characters of code, a shorter one in less', () => {
   const full = encode({ name: '', code: 1, choices: sample(1) }).replace(/-/g, '');
   assert.equal(full.length, 28);
-  const bankrupt = sample(1, 'short');
+  const bankrupt = sample(1, 'passive');
   assert.ok(encode({ name: '', code: 1, choices: bankrupt }).replace(/-/g, '').length < 28);
 });
 

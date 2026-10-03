@@ -62,6 +62,7 @@ function startTeam(app) {
     moved(app, {
       scene: 'year',
       year: engine.newYear(code),
+      briefedSlot: -1,
       workshop: { team, code, result: null },
       sim: false,
       review: false,

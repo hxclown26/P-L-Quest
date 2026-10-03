@@ -13,6 +13,12 @@ const app = (year, lang = 'es', extra = {}) => ({ lang, year, bestYear: 0, ...ex
 const pick = (run, a) => engine.options(run).findIndex((o) => o.a === a);
 const answer = (run, a) => engine.choose(run, pick(run, a));
 
+const toMonthCloseRun = () => {
+  let run = engine.newYear();
+  while (run.phase !== 'monthClose') run = run.phase === 'problem' ? engine.choose(run, pick(run, 'smart')) : engine.next(run);
+  return run;
+};
+
 test('yearCards lists the four answers with text keys and a P&L chip, never the meter effect', () => {
   const cards = view.yearCards(app(engine.newYear()));
   assert.equal(cards.length, 4);
@@ -20,7 +26,7 @@ test('yearCards lists the four answers with text keys and a P&L chip, never the 
   const byA = Object.fromEntries(cards.map((c) => [c.a, c]));
   assert.equal(byA.smart.nameKey, 'year.m01c.smart.name');
   assert.equal(byA.temp.descKey, 'year.m01c.temp.desc');
-  assert.deepEqual(byA.smart.chip, { key: 'line.short.incentives' });
+  assert.deepEqual(byA.smart.chip, { key: 'line.short.sales' });
   assert.deepEqual(byA.temp.chip, { key: 'line.short.sales' });
   assert.deepEqual(byA.plac.chip, { key: 'line.short.incentives' });
   assert.deepEqual(byA.ign.chip, { key: 'line.short.sales' });
@@ -56,24 +62,36 @@ test('crisisLines say which meter is in crisis and what it costs, in two short r
   assert.deepEqual(view.crisisLines(app(engine.newYear())), []);
 });
 
-test('resultLines tell what you chose, what OI did and why', () => {
+test('resultLines tell what you chose, what OI did and the story of that answer', () => {
   const run = answer(engine.newYear(), 'temp');
   const lines = view.resultLines(app(run));
   assert.match(lines[0].text, /Elegiste: Aceptar y compensar/);
   assert.match(lines[1].text, /^OI 15,0% > 15,5% {2}\(\+0,5 pp\)$/);
   assert.equal(lines[1].tone, 'green');
-  assert.match(lines[2].text, /Atajo/);
-  assert.match(lines[2].text, /Cliente/);
+  assert.equal(lines[2].text, 'Atajo: aceptaste el 3% y lo cobraste en otros productos; el OI sube hoy y el hotel lo notará.');
+  assert.equal(lines[2].tone, 'orange');
   const en = view.resultLines(app(run, 'en'));
   assert.match(en[0].text, /You chose: Accept and offset/);
-  assert.match(en[2].text, /Shortcut/);
+  assert.match(en[2].text, /^Shortcut: /);
+});
+
+test('every kind of answer has the colour of its character in its story, and a red line is red', () => {
+  const tones = { smart: 'green', temp: 'orange', plac: 'cyan', ign: 'red' };
+  for (const a of Object.keys(tones)) assert.equal(view.resultLines(app(answer(engine.newYear(), a)))[2].tone, tones[a], a);
+  const red = answer({ ...engine.newYear(), monthIdx: 11, problemIdx: 3 }, 'temp');
+  assert.equal(red.last.redLine, true);
+  const lines = view.resultLines(app(red));
+  assert.match(lines[2].text, /^Línea roja: /);
+  assert.equal(lines[2].tone, 'red');
+  assert.ok(lines.some((l) => l.text === 'Multa en el SG&A y confianza perdida' && l.tone === 'red'), 'and a note says what it cost');
 });
 
 test('resultLines explain a crisis, a rescue and the measuring answer', () => {
   const crisis = answer({ ...engine.newYear(), meters: { C: 30, P: 60, E: 60 } }, 'smart');
   assert.ok(view.resultLines(app(crisis)).some((l) => /crisis/.test(l.text)));
-  const rescued = answer({ ...engine.newYear(), rescued: true, pl: rules.RESCUE_PL }, 'smart');
-  assert.ok(view.resultLines(app(rescued)).some((l) => /rescate/.test(l.text)));
+  const stressed = model.applyOp(model.BASE_PL, { op: 'oi', line: 'sales', pts: -12 });
+  const rescued = answer({ ...engine.newYear(), rescued: true, pl: stressed }, 'smart');
+  assert.ok(view.resultLines(app(rescued)).some((l) => /Recuperación/.test(l.text)));
   const measuring = answer({ ...engine.newYear(), monthIdx: 0, problemIdx: 3 }, 'smart');
   assert.ok(view.resultLines(app(measuring)).some((l) => /Valor medido/.test(l.text)));
 });
@@ -110,13 +128,35 @@ test('chartBars has 12 slots and only closed months carry an OI', () => {
   assert.equal(bars[1].oi, null);
 });
 
-test('rescueLines name the cause and the goal', () => {
-  const shaky = { ...engine.newYear(), monthIdx: 3, pl: model.applyOp(model.BASE_PL, { op: 'oi', line: 'sales', pts: -14.8 }) };
-  const rescue = engine.next(answer(shaky, 'ign'));
+test('rescueLines name the cause, the cuts of the plan and the goal', () => {
+  const crisis = { ...engine.newYear(), monthIdx: 3, problemIdx: 3, phase: 'monthClose', pl: model.applyOp(model.BASE_PL, { op: 'oi', line: 'sales', pts: -15.5 }) };
+  const rescue = engine.next(crisis);
   assert.equal(rescue.phase, 'rescue');
   const lines = view.rescueLines(app(rescue));
   assert.match(lines[0].text, /el OI llegó a cero/);
+  assert.match(lines[1].text, /plan: recorta 15% del SG&A y 2% del costo/);
   assert.match(lines[2].text, /OI 10/);
+  assert.match(lines[3].text, /70% del SG&A/);
+  const en = view.rescueLines(app(rescue, 'en'));
+  assert.match(en[1].text, /plan: it cuts 15% of the SG&A and 2% of the cost/);
+});
+
+test('shockLines name the cause, what the blow did to the OI and the meter that restarts', () => {
+  const hit = engine.next(answer({ ...engine.newYear(), monthIdx: 1, meters: { C: 1, P: 60, E: 60 } }, 'ign'));
+  assert.equal(hit.phase, 'shock');
+  const lines = view.shockLines(app(hit));
+  assert.match(lines[0].text, /el cliente se fue/);
+  assert.match(lines[1].text, /cliente más grande/);
+  assert.match(lines[2].text, /^El OI pasa de -?\d+,\d% a -?\d+,\d%/);
+  assert.match(lines[3].text, /vuelve a 35/);
+  const en = view.shockLines(app(hit, 'en'));
+  assert.match(en[0].text, /the client left/);
+  assert.match(en[3].text, /restarts at 35/);
+  for (const meter of ['P', 'E']) {
+    const other = engine.next(answer({ ...engine.newYear(), monthIdx: 1, meters: { C: 60, P: 60, E: 60, [meter]: 0 } }, 'ign'));
+    const text = view.shockLines(app(other)).map((l) => l.text).join(' ');
+    assert.ok(!/\{|undefined/.test(text), meter);
+  }
 });
 
 test('verdict gathers title, factory state, numbers, walk and translated feedback', () => {
@@ -129,9 +169,9 @@ test('verdict gathers title, factory state, numbers, walk and translated feedbac
   assert.equal(v.lines.length, 4);
   assert.ok(v.lines.every((l) => typeof l === 'string' && !l.includes('{')));
   assert.ok(Math.abs(v.walk.end - v.oi) < 1e-6);
-  const bankrupt = view.verdict(app(sim.simulate(sim.PROFILES.short, 1), 'en'));
+  const bankrupt = view.verdict(app(sim.simulate(sim.PROFILES.passive, 1), 'en'));
   assert.equal(bankrupt.tier, 'collapse');
-  assert.match(bankrupt.lines[0], /Bankruptcy in month/);
+  assert.match(bankrupt.lines[0], /Bankruptcy in month \d+: the Gross Profit covered 70% of the SG&A or less at two closes in a row/);
 });
 
 test('every feedback line of every profile resolves with no placeholder left over', () => {
@@ -166,7 +206,7 @@ test('gradeRows print the real thresholds of the five grades, best first', () =>
 test('assumptionLines state what the model rests on, in both languages', () => {
   for (const lang of ['es', 'en']) {
     const lines = view.assumptionLines(app(engine.newYear(), lang));
-    assert.equal(lines.length, 5);
+    assert.equal(lines.length, 6);
     assert.match(lines[0], /US\$/);
     for (const line of lines) assert.ok(!/\{|undefined|NaN/.test(line), `${lang}: ${line}`);
   }
@@ -240,6 +280,39 @@ test('walkRows skip lines that did not move and colour a fall red', () => {
   assert.deepEqual(worse.map((r) => r.label), ['Plan', 'Freight', 'Real']);
   assert.equal(worse[1].text, '-3.0');
   assert.equal(worse[1].tone, 'red');
+});
+
+test('walkRows fold a movement too small to show into the next bar, so the bridge still lands on the real OI', () => {
+  const folded = view.walkRows(app(engine.newYear()), { start: 15, steps: [{ id: 'freight', pts: 0.03 }, { id: 'cost', pts: 2 }, { id: 'direct', pts: -0.02 }], end: 17.01 });
+  assert.deepEqual(folded.map((r) => r.label), ['Plan', 'Costo', 'Real']);
+  assert.ok(Math.abs(folded[1].to - 17.01) < 1e-9, 'the last bar ends on the real OI');
+  assert.equal(folded[1].text, '+2,0');
+  const still = view.walkRows(app(engine.newYear()), { start: 15, steps: [{ id: 'freight', pts: 0.02 }, { id: 'direct', pts: 0.01 }], end: 15.03 });
+  assert.deepEqual(still.map((r) => r.label), ['Plan', 'Real'], 'nothing to show when nothing moved enough');
+});
+
+test('the verdict shows the sales growth and the OI in money next to the margin, and a label when growth and profit part ways', () => {
+  const pleaser = sim.simulate(sim.PROFILES.pleaser, 1);
+  const v = view.verdict(app(pleaser));
+  assert.match(v.growthText, /^Ventas \+\d+,\d%$/);
+  assert.match(v.moneyText, /^US\$\d+,\dM$/);
+  assert.equal(v.growthTone, 'green');
+  assert.equal(v.tagKey, 'year.kpi.tag.growthNoMargin');
+  const en = view.verdict(app(pleaser, 'en'));
+  assert.match(en.growthText, /^Sales \+\d+\.\d%$/);
+  assert.match(en.moneyText, /^US\$\d+\.\dM$/);
+  const expert = view.verdict(app(sim.simulate(sim.PROFILES.expert, 1)));
+  assert.equal(expert.tagKey, null, 'a year that grew and earned needs no label');
+  const shrunk = view.verdict(app(sim.simulate(sim.PROFILES.short, 1)));
+  assert.equal(shrunk.growthTone, 'red', 'sales that fell are red');
+  assert.match(shrunk.growthText, /^Ventas -\d+,\d%$/);
+});
+
+test('the sales growth of the year is told in one short row, for the close of a month', () => {
+  const run = toMonthCloseRun();
+  const text = view.growthText(app(run));
+  assert.match(text, /^Ventas [+-]\d+,\d%$/);
+  assert.equal(view.growthText(app(run, 'en')).slice(0, 6), 'Sales ');
 });
 
 test('the four feedback lines always fit the 15 rows of the feedback page', () => {
@@ -337,7 +410,7 @@ test('the assumptions of a half year say that every answer weighs twice as much'
   assert.match(half[2], /doble/);
   assert.doesNotMatch(full[2], /doble/);
   assert.match(view.assumptionLines(app(engine.newYear(null, 6), 'en'))[2], /twice|double/);
-  assert.equal(half.length, 5);
+  assert.equal(half.length, 6);
 });
 
 test('the month close names the wear of the meters at the pace of the year', () => {

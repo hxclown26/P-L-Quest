@@ -28,14 +28,19 @@ const en = require('../src/content/en');
 const LANGS = ['es', 'en'];
 const rows = (items, cols) => items.reduce((sum, item) => sum + wrapText(item.text, cols).length, 0);
 
+// A P&L under strain, like the one a unit in crisis has.
+const STRESSED = model.applyOp(model.BASE_PL, { op: 'oi', line: 'sales', pts: -12 });
+
 // Every problem of the year, in the states that add the longest notes to the result.
 function resultStates() {
   const states = [];
   PROBLEMS.forEach((_, n) => {
     const run = { ...engine.newYear(), monthIdx: Math.floor(n / 4), problemIdx: n % 4 };
     const crisis = { ...run, meters: { C: 10, P: 10, E: 10 } };
-    const rescued = { ...run, rescued: true, pl: rules.RESCUE_PL };
-    for (const state of [run, crisis, rescued]) {
+    const rescued = { ...run, rescued: true, pl: STRESSED };
+    // Every note at once: a unit in crisis, in its recovery, that measured the value of the client.
+    const everything = { ...crisis, rescued: true, pl: STRESSED, flags: { valueMeasured: true } };
+    for (const state of [run, crisis, rescued, everything]) {
       for (let i = 0; i < 4; i += 1) states.push(engine.choose(state, i));
     }
   });
@@ -52,15 +57,28 @@ test('what happened after an answer fits the dialogue window, in every problem, 
 });
 
 function toRescue() {
-  const thin = model.applyOp(model.BASE_PL, { op: 'oi', line: 'sales', pts: -14.8 });
-  const shaky = { ...engine.newYear(), monthIdx: 3, pl: thin };
-  return engine.next(engine.choose(shaky, engine.options(shaky).findIndex((o) => o.a === 'ign')));
+  const thin = model.applyOp(model.BASE_PL, { op: 'oi', line: 'sales', pts: -15.5 });
+  return engine.next({ ...engine.newYear(), monthIdx: 3, problemIdx: 3, phase: 'monthClose', pl: thin });
 }
 
-test('the rescue text fits its window in both languages, for every cause', () => {
+function toShock(meter) {
+  const run = { ...engine.newYear(), monthIdx: 1, meters: { C: 60, P: 60, E: 60, [meter]: 0 } };
+  return engine.next(engine.choose(run, engine.options(run).findIndex((o) => o.a === 'ign')));
+}
+
+test('the text of the blow of each meter fits its window in both languages', () => {
+  for (const lang of LANGS) {
+    for (const meter of ['C', 'P', 'E']) {
+      const used = rows(yearView.shockLines({ lang, year: toShock(meter) }), close.TEXT_WRAP);
+      assert.ok(used <= close.RESCUE_ROWS, `${lang} blow of ${meter} uses ${used} rows of ${close.RESCUE_ROWS}`);
+    }
+  }
+});
+
+test('the restructuring text fits its window in both languages (only an OI at zero brings the plan)', () => {
   for (const lang of LANGS) {
     const run = toRescue();
-    for (const cause of ['oi', 'C', 'P', 'E']) {
+    for (const cause of ['oi']) {
       const withCause = { ...run, rescues: [{ ...run.rescues[run.rescues.length - 1], cause }] };
       const used = rows(yearView.rescueLines({ lang, year: withCause }), close.TEXT_WRAP);
       assert.ok(used <= close.RESCUE_ROWS, `${lang} rescue by ${cause} uses ${used} rows of ${close.RESCUE_ROWS}`);

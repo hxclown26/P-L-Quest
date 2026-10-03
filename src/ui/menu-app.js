@@ -32,7 +32,7 @@ function openMode(app) {
 }
 
 const startYear = (app) => result(
-  moved(app, { scene: 'year', year: engine.newYear(app.seed, app.months), sim: false, yearT: 0, cursor: 0, page: 0, codeEntry: '', seed: nextGameCode(app.seed) }),
+  moved(app, { scene: 'year', year: engine.newYear(app.seed, app.months), briefedSlot: -1, sim: false, yearT: 0, cursor: 0, page: 0, codeEntry: '', seed: nextGameCode(app.seed) }),
   [sfx('confirm'), music('play')],
 );
 

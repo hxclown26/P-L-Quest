@@ -111,3 +111,95 @@ test('the value-measured bonus doubles at double pace too', () => {
   const plain = state({ pace: 2 });
   near(effectOf(problem, option('smart'), measured).oi - effectOf(problem, option('smart'), plain).oi, 0.4);
 });
+
+// ---- Demo 6: an answer can touch two lines (a benefit and a cost), a growth answer is priced in price and volume,
+// and a red line costs more than it earns
+
+const mixed = (a, mix, over = {}) => ({ a, line: mix[0][0], mix, k: 1, ...over });
+const sumOps = (ops) => ops.reduce((total, op) => total + op.pts, 0);
+
+test('a mixed answer splits its OI over its lines by weight, and the parts add up to the OI of its kind', () => {
+  const e = effectOf(problem, mixed('smart', [['sales', 1.5], ['incentives', -0.5]]), state());
+  assert.equal(e.ops.length, 2);
+  assert.deepEqual(e.ops.map((op) => op.line), ['sales', 'incentives']);
+  near(e.ops[0].pts, 0.15);
+  near(e.ops[1].pts, -0.05);
+  near(sumOps(e.ops), e.oi);
+  near(e.oi, 0.1);
+});
+
+test('a loss can be a lost sale softened by a saving: the parts still add up to the loss', () => {
+  const e = effectOf(problem, mixed('ign', [['sales', 1.4], ['freight', -0.4]]), state());
+  near(e.ops[0].pts, -0.63);
+  near(e.ops[1].pts, 0.18);
+  near(sumOps(e.ops), -0.45);
+});
+
+test('an answer written with a single line keeps working: all the OI goes through it', () => {
+  const e = effectOf(problem, { a: 'smart', line: 'cost', k: 1 }, state());
+  assert.deepEqual(e.ops, [{ op: 'oi', line: 'cost', pts: 0.1 }]);
+});
+
+const growth = (over = {}) => ({ a: 'smart', line: 'sales', k: 1, grow: { volume: 10, price: -2, adds: [['direct', 0.5]] }, ...over });
+
+test('a growth answer is made of price, volume and extra service, not of an OI figure', () => {
+  const e = effectOf({ ...problem, segment: 'industry' }, growth(), state());
+  assert.equal(e.oi, null);
+  assert.deepEqual(e.ops.map((op) => op.op), ['volume', 'price', 'add']);
+  near(e.ops[0].pct, 10);
+  near(e.ops[1].pct, -2);
+  assert.deepEqual([e.ops[2].line, e.ops[2].pts], ['direct', 0.5]);
+});
+
+test('the service a segment asks for decides how much of freight and direct charges follows the volume', () => {
+  const share = (segment) => effectOf({ ...problem, segment }, growth(), state()).ops[0].share;
+  assert.ok(share('hospital') > share('industry'));
+  assert.ok(share('industry') > share('hotel'));
+  assert.ok(share('hospital') <= 1 && share('hotel') >= 0);
+});
+
+test('at double pace a growth answer weighs twice as much', () => {
+  const e = effectOf({ ...problem, segment: 'food' }, growth(), state({ pace: 2 }));
+  near(e.ops[0].pct, 20);
+  near(e.ops[1].pct, -4);
+  near(e.ops[2].pts, 1);
+});
+
+test('a growth answer weighs as much as the problem and the answer say: size and factor scale price, volume and service', () => {
+  const e = effectOf({ ...problem, segment: 'food', size: 1.5 }, growth({ k: 2 }), state());
+  near(e.ops[0].pct, 10 * 3);
+  near(e.ops[1].pct, -2 * 3);
+  near(e.ops[2].pts, 0.5 * 3);
+});
+
+test('a balanced growth answer still earns the value-measured and the recovery bonus, as plain OI on its line', () => {
+  const food = { ...problem, segment: 'food' };
+  const measured = effectOf(food, growth(), state({ flags: { valueMeasured: true } }));
+  const bonus = measured.ops[measured.ops.length - 1];
+  assert.deepEqual([bonus.op, bonus.line], ['oi', 'sales']);
+  near(bonus.pts, 0.2);
+  assert.ok(measured.notes.includes('value'));
+  const rescued = effectOf(food, growth(), state({ rescued: true, oi: 6 }));
+  near(rescued.ops[rescued.ops.length - 1].pts, 0.1 * 4);
+  assert.ok(rescued.notes.includes('recovery'));
+  assert.equal(effectOf(food, growth(), state()).ops.length, 3, 'nothing is added when neither bonus applies');
+  assert.equal(effectOf(food, growth({ a: 'temp' }), state({ flags: { valueMeasured: true } })).ops.length, 3, 'only a balanced answer earns them');
+});
+
+test('a growth answer still moves the meters like its kind', () => {
+  const e = effectOf({ ...problem, segment: 'food' }, growth({ a: 'plac' }), state());
+  near(e.meters.C, 6.5);
+  near(e.meters.P, -0.75);
+});
+
+test('a red line pays its gain, then a fine, and hits every meter now: nothing is left for later', () => {
+  const plain = effectOf(problem, mixed('temp', [['sales', 1]]), state());
+  const red = effectOf(problem, mixed('temp', [['sales', 1]], { redLine: true }), state());
+  assert.equal(red.delayed, null, 'a fine is paid on the spot');
+  assert.ok(red.notes.includes('redLine'));
+  assert.deepEqual(red.ops[red.ops.length - 1].line, 'sga');
+  assert.ok(red.ops[red.ops.length - 1].pts < 0, 'the fine is a cost');
+  assert.ok(sumOps(red.ops) < 0, 'the fine takes back more than the gain');
+  near(red.ops[0].pts, plain.ops[0].pts);
+  for (const key of ['C', 'P', 'E']) assert.ok(red.meters[key] < plain.meters[key] + plain.delayed[key] - 5, `${key} takes a reputation hit`);
+});

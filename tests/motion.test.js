@@ -42,17 +42,25 @@ test('a change in OI floats up from its row for a moment and then goes away', ()
   assert.equal(floating(anim.FLOAT_DELAY + anim.FLOAT_SECONDS + 0.5), false, 'and leaves');
 });
 
-test('the situation is typed: the first screen of a problem shows only the start of it', () => {
+test('the brief is typed: the first screen of a problem shows only the start of it', () => {
   const year = engine.newYear();
-  const scene = es[`year.${engine.currentProblem(year).id}.scene`];
-  const sceneBox = { x: layout.DIALOGUE.x, y: layout.DIALOGUE.y + layout.DIALOGUE.sceneY - 2, w: layout.DIALOGUE.w, h: 20 };
-  const typed = (phaseT) => textIn(draw(base({ scene: 'year', year, phaseT })).glyphs, sceneBox).join('').replace(/\s/g, '');
-  const complete = typed(5);
-  assert.equal(complete, scene.replace(/\s/g, ''), 'everything is there in the end');
+  const brief = es[`year.${engine.currentProblem(year).id}.brief`];
+  const briefBox = { x: layout.DIALOGUE.x, y: layout.DIALOGUE.y + layout.DIALOGUE.sceneY - 2, w: layout.DIALOGUE.w, h: 46 };
+  const typed = (phaseT) => textIn(draw(base({ scene: 'year', year, phaseT })).glyphs, briefBox).join('').replace(/\s/g, '');
+  const complete = typed(8);
+  assert.equal(complete, brief.replace(/\s/g, ''), 'everything is there in the end');
   assert.equal(typed(0), '');
   const partial = typed(0.3);
   assert.ok(partial.length > 0 && partial.length < complete.length, 'and part of it on the way');
   assert.ok(complete.startsWith(partial), 'in reading order');
+});
+
+test('the answers page shows the situation at once: the brief has told it already', () => {
+  const year = engine.newYear();
+  const scene = es[`year.${engine.currentProblem(year).id}.scene`];
+  const sceneBox = { x: layout.DIALOGUE.x, y: layout.DIALOGUE.y + layout.DIALOGUE.sceneY - 2, w: layout.DIALOGUE.w, h: 20 };
+  const shown = textIn(draw(base({ scene: 'year', year, phaseT: 0, briefedSlot: 0 })).glyphs, sceneBox).join('').replace(/\s/g, '');
+  assert.equal(shown, scene.replace(/\s/g, ''));
 });
 
 test('a screen that has just opened is under a dark veil that clears in a fraction of a second', () => {

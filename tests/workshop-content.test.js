@@ -13,7 +13,7 @@ function requiredKeys() {
   const keys = ['menu.workshop', 'menu.workshop.desc', 'ui.btn.paste'];
   for (const k of ['title', 'play', 'play.desc', 'rank', 'rank.desc']) keys.push(`ws.${k}`);
   for (const k of ['title', 'name', 'code', 'start', 'hint', 'needCode']) keys.push(`ws.setup.${k}`);
-  keys.push('ws.team.default', 'year.intro.code');
+  keys.push('ws.team.default', 'year.intro.code', 'year.intro.code.short');
   for (const k of ['title', 'team', 'body', 'copy', 'copied']) keys.push(`ws.result.${k}`);
   for (const k of ['title', 'code', 'empty', 'entry', 'hint', 'chart', 'other', 'added', 'updated', 'removed']) keys.push(`rank.${k}`);
   for (const k of ['team', 'result', 'oi', 'weak']) keys.push(`rank.col.${k}`);

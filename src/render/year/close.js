@@ -7,6 +7,7 @@ const anim = require('../../ui/anim');
 const screenFx = require('../../ui/screen-fx');
 const layout = require('../../ui/layout');
 const rules = require('../../year/rules');
+const { kpis } = require('../../year/kpis');
 const view = require('../../ui/year-view');
 const { toneOf } = require('../../ui/view');
 const { tx, num, signed } = require('../../ui/tx');
@@ -80,6 +81,7 @@ function drawReadout(ctx, app, d) {
   const head = `OI ${num(app, shown)}%`;
   ui.text(ctx, head, d.x + 8, d.y + READOUT_Y, oiColor(lastClose.oi));
   ui.text(ctx, `(${signed(app, change)} pp)`, d.x + 8 + ui.textWidth(head) + 6, d.y + READOUT_Y, P[toneOf(change)]);
+  ui.textRight(ctx, view.growthText(app), d.x + d.w - 8, d.y + READOUT_Y, P[toneOf(kpis(app.year.pl).growth)]);
 }
 
 // Bills and meter effects first; the constant monthly wear goes last.
@@ -108,6 +110,26 @@ function drawClose(ctx, app) {
   if (plan) fxDraw.drawBurst(ctx, plan, app.phaseT, burstOrigin(layout.SIDE), layout.SIDE);
 }
 
+// The picture of each blow: the client, the plant, the market, all in a bad mood.
+const SHOCK_THEME = Object.freeze({ C: 'client', P: 'plant', E: 'economy' });
+
+function drawShock(ctx, app) {
+  const run = app.year;
+  const blow = run.shocks[run.shocks.length - 1];
+  frame.drawBackdrop(ctx, RESCUE_SKY[0], RESCUE_SKY[1]);
+  drawStatement(ctx, app, { pl: run.pl, before: blow.plBefore, progress: anim.rollProgress(app.phaseT) });
+  frame.drawPlate(ctx, tx(app, 'year.shock.title'), P.red);
+  frame.drawArtWindow(ctx, app, SHOCK_THEME[blow.meter], 'bad');
+  const plan = screenFx.shockPlan(app);
+  if (plan) fxDraw.drawFlash(ctx, plan, app.phaseT, layout.ART);
+  frame.drawReviewBadge(ctx, app);
+  frame.drawMeters(ctx, app);
+  const d = layout.DIALOGUE;
+  ui.windowBox(ctx, d.x, d.y, d.w, d.h);
+  ui.paragraph(ctx, ui.wrapLines(view.shockLines(app), TEXT_WRAP).slice(0, RESCUE_ROWS), d.x + 6, d.y + 6, ROW_H);
+  if (plan) fxDraw.drawBurst(ctx, plan, app.phaseT, burstOrigin(layout.ART), layout.ART);
+}
+
 function drawRescue(ctx, app) {
   const run = app.year;
   frame.drawBackdrop(ctx, RESCUE_SKY[0], RESCUE_SKY[1]);
@@ -124,4 +146,4 @@ function drawRescue(ctx, app) {
   if (plan) fxDraw.drawBurst(ctx, plan, app.phaseT, burstOrigin(layout.ART), layout.ART);
 }
 
-module.exports = { drawClose, drawRescue, TEXT_ROWS, TEXT_WRAP, RESCUE_ROWS, orderedLines, fitRows };
+module.exports = { drawClose, drawRescue, drawShock, TEXT_ROWS, TEXT_WRAP, RESCUE_ROWS, orderedLines, fitRows };

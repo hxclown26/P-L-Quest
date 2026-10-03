@@ -32,6 +32,31 @@ test('the mood of an answer follows the sign of the change in OI, with a dead zo
   assert.equal(fx.moodOf(0), 'neutral');
 });
 
+test('a result is a win only when the OI and the meter of the problem both improve, a loss when both worsen, and mixed otherwise', () => {
+  assert.equal(fx.moodOfResult(0.1, 3.5), 'good', 'the balanced answer');
+  assert.equal(fx.moodOfResult(0.6, -2.75), 'neutral', 'a shortcut lifts the OI and hurts the meter');
+  assert.equal(fx.moodOfResult(-0.375, 6.5), 'neutral', 'giving in lifts the meter and costs OI');
+  assert.equal(fx.moodOfResult(-0.45, -4.5), 'bad', 'doing nothing');
+  assert.equal(fx.moodOfResult(0.02, 3.5), 'neutral', 'a change in OI too small to see is no win');
+  assert.equal(fx.moodOfResult(0.4, 0.2), 'neutral', 'nor is a meter that did not move');
+});
+
+test('the effects celebrate the balanced answer most: a double win is sparked up a grade and a shortcut is not celebrated at all', () => {
+  const win = fx.resultFeedback({ oi: 0.1, C: 3.5, P: 0.4, E: 0.4 }, { focus: 'C', seed: 1 });
+  assert.equal(win.mood, 'good');
+  assert.equal(win.tier, 'medium', 'a double win is worth more than its size');
+  assert.equal(win.burst.kind, 'spark');
+  assert.ok(win.burst.count >= 10);
+  const shortcut = fx.resultFeedback({ oi: 0.6, C: -2.75, P: -0.4, E: -0.4 }, { focus: 'C', seed: 1 });
+  assert.equal(shortcut.mood, 'neutral');
+  assert.deepEqual([shortcut.burst, shortcut.flash, shortcut.trauma], [null, null, 0]);
+  const gift = fx.resultFeedback({ oi: -0.375, C: 6.5, P: -0.75, E: -0.75 }, { focus: 'C', seed: 1 });
+  assert.deepEqual([gift.mood, gift.burst, gift.flash, gift.trauma], ['neutral', null, null, 0]);
+  const nothing = fx.resultFeedback({ oi: -0.45, C: -4.5, P: -0.75, E: -0.75 }, { focus: 'C', seed: 1 });
+  assert.equal(nothing.mood, 'bad');
+  assert.equal(nothing.burst.kind, 'smoke');
+});
+
 test('the mood of a voice follows what happened to the meter it cares about, with a dead zone for noise', () => {
   assert.equal(fx.moodOfMeter(3.5), 'good');
   assert.equal(fx.moodOfMeter(-2.8), 'bad');

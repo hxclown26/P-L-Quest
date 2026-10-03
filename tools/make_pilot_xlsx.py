@@ -206,7 +206,7 @@ def build_summary(workbook):
 
     # --- decision
     put("A34", "Decisión", title)
-    put("B34", '=IF(OR(B8="",B28="",B30="",B32=""),"Faltan datos",IF(AND(B8="Cumple",B28="Cumple",B30="Cumple",B32="Cumple"),"Evaluar Demo 5","Iterar con lo que mostró el piloto"))', bold)
+    put("B34", '=IF(OR(B8="",B28="",B30="",B32=""),"Faltan datos",IF(AND(B8="Cumple",B28="Cumple",B30="Cumple",B32="Cumple"),"Evaluar Demo 6","Iterar con lo que mostró el piloto"))', bold)
     sheet.page_setup.orientation = "portrait"
     sheet.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
     sheet.page_setup.fitToWidth, sheet.page_setup.fitToHeight = 1, 0

@@ -17,6 +17,7 @@ const { PROBLEMS } = require('../src/year/problems');
 const { THEMES } = require('../src/render/year/art');
 const { actionKey, noteKey } = require('../src/render/scenes/hud');
 const layout = require('../src/ui/layout');
+const { slotOf } = require('../src/ui/year-view');
 const es = require('../src/content/es');
 const en = require('../src/content/en');
 
@@ -66,10 +67,16 @@ function toMonthClose(policy = sim.PROFILES.expert, months = 12) {
   return run;
 }
 
+// The month close of a unit in crisis, then the restructuring plan the board imposes.
 function toRescue() {
-  const thin = model.applyOp(model.BASE_PL, { op: 'oi', line: 'sales', pts: -14.8 });
-  const shaky = { ...engine.newYear(), monthIdx: 3, pl: thin };
-  return engine.next(engine.choose(shaky, pick(shaky, 'ign')));
+  const thin = model.applyOp(model.BASE_PL, { op: 'oi', line: 'sales', pts: -15.5 });
+  return engine.next({ ...engine.newYear(), monthIdx: 3, problemIdx: 3, phase: 'monthClose', pl: thin });
+}
+
+// A meter at zero: the blow that follows the answer.
+function toShock(meter = 'C') {
+  const run = { ...engine.newYear(), monthIdx: 1, meters: { C: 60, P: 60, E: 60, [meter]: 0 } };
+  return engine.next(engine.choose(run, pick(run, 'ign')));
 }
 
 const CODE = 4821;
@@ -139,6 +146,7 @@ function allScreens() {
     ['quit overlay', inYear(engine.newYear(), { overlay: 'quit' })],
     ['month close', inYear(toMonthClose())],
     ['rescue', inYear(toRescue())],
+    ...['C', 'P', 'E'].map((meter) => [`blow of ${meter}`, inYear(toShock(meter))]),
   ];
   SHOWCASE.forEach((entry, i) => {
     screens.push([`endings ${entry.profile}`, base({ scene: 'endings', profileIdx: i })]);
@@ -151,7 +159,8 @@ function allScreens() {
   screens.push(...workshopScreens());
   PROBLEMS.forEach((problem, n) => {
     const run = { ...engine.newYear(), monthIdx: Math.floor(n / 4), problemIdx: n % 4 };
-    screens.push([`problem ${problem.id}`, inYear(run, { cursor: n % 4 })]);
+    screens.push([`brief ${problem.id}`, inYear(run)]);
+    screens.push([`problem ${problem.id}`, inYear(run, { cursor: n % 4, briefedSlot: slotOf(run) })]);
     screens.push([`result ${problem.id}`, inYear(engine.choose(run, n % 4), { cursor: n % 4 })]);
   });
   return screens;
@@ -187,7 +196,8 @@ test('every problem theme has a picture, and the rescue alarm has one too', () =
 });
 
 test('the answer list animates: the cursor of the selected answer blinks between two frames', () => {
-  const screen = inYear(engine.newYear(), { cursor: 1 });
+  const year = engine.newYear();
+  const screen = inYear(year, { cursor: 1, briefedSlot: slotOf(year) });
   const frames = [0, 0.4].map((t) => {
     const { ctx, counters } = recorder();
     drawFrame(ctx, { ...screen, t });
@@ -285,6 +295,10 @@ test('the long texts of the year fit the windows they are drawn in, in both lang
     assert.ok(rules <= 17, `${lang} rules use ${rules} rows of 17`);
     const rescue = view.rescueLines({ ...inYear(toRescue()), lang }).reduce((sum, line) => sum + rows(line.text, 38), 0);
     assert.ok(rescue <= 11, `${lang} rescue uses ${rescue} rows of 11`);
+    for (const meter of ['C', 'P', 'E']) {
+      const blow = view.shockLines({ ...inYear(toShock(meter)), lang }).reduce((sum, line) => sum + rows(line.text, 38), 0);
+      assert.ok(blow <= 11, `${lang} blow of ${meter} uses ${blow} rows of 11`);
+    }
     const tutorial = rows(dicts[lang]['ui.intro1'], 38) + rows(dicts[lang]['ui.intro2'], 38) + 1;
     assert.ok(tutorial <= 11, `${lang} tutorial intro uses ${tutorial} rows of 11`);
   }

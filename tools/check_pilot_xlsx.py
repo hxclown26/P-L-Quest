@@ -110,7 +110,7 @@ def expected(people):
                   "B29": useful, "B30": "Cumple" if useful >= GOALS["useful"] else "No cumple", "B31": objections,
                   "B32": "Cumple" if objections == 0 else "No cumple"})
     ok = all(cells[c] == "Cumple" for c in ("B8", "B28", "B30", "B32"))
-    cells["B34"] = "Evaluar Demo 5" if ok else "Iterar con lo que mostró el piloto"
+    cells["B34"] = "Evaluar Demo 6" if ok else "Iterar con lo que mostró el piloto"
     return cells
 
 
@@ -152,7 +152,7 @@ def main(path):
                 sys.exit(f"{label}: Resumen differs from the Python figures: {wrong}")
             print(f"ok {label}: {len(want)} cells match; gain {want['B7']:.1f} pp; decision: {want['B34']}")
             if goals_met:
-                assert want["B34"] == "Evaluar Demo 5", want["B34"]
+                assert want["B34"] == "Evaluar Demo 6", want["B34"]
         # the variant that scores the answers itself, from a made-up key
         key_file = Path(folder) / "key.json"
         key_file.write_text(json.dumps(FAKE_KEY))

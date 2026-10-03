@@ -71,12 +71,19 @@ test('a player who gives in names the OI that pleasing everyone cost', () => {
   assert.ok(f.lines[1].params.n >= 40);
 });
 
-test('a bankrupt shortcut-taker gets the month, the cause and their costliest shortcut', () => {
-  const run = year('short');
+test('a bankrupt unit gets the month and the cause: the gross profit that stopped covering the SG&A', () => {
+  const run = year('passive');
   const f = feedback(run);
   assert.equal(f.lines[0].key, 'year.fb.sum.bankrupt');
   assert.equal(f.lines[0].params.month, run.bankruptMonth);
-  assert.ok(['oi', 'C', 'P', 'E'].includes(f.lines[0].params.cause));
+  assert.equal(f.lines[0].params.cause, 'pl');
+  assert.equal(f.lines[1].key, 'year.fb.ign');
+});
+
+test('a ruined shortcut-taker gets their costliest shortcut', () => {
+  const run = year('short');
+  const f = feedback(run);
+  assert.equal(f.lines[0].key, 'year.fb.sum.terrible');
   assert.equal(f.lines[1].key, 'year.fb.temp');
   assert.ok(f.lines[1].params.problem.startsWith('m'));
   assert.ok(f.lines[1].params.oiGain > 0);
@@ -89,13 +96,24 @@ test('doing nothing is called out by its count', () => {
 });
 
 test('the tip points at the weakest meter when it is below 45', () => {
-  const run = year('pleaser');
-  const f = feedback(run);
-  const weakest = rules.weakest(run.meters);
-  if (run.meters[weakest] < 45) assert.equal(f.lines[2].key, `year.fb.tip.${weakest}`);
-  else assert.equal(f.lines[2].key, 'year.fb.tip.keep');
+  const run = year('expert');
+  assert.equal(feedback(run).lines[2].key, 'year.fb.tip.keep');
   const shaky = feedback({ ...run, meters: { C: 90, P: 90, E: 30 } });
   assert.equal(shaky.lines[2].key, 'year.fb.tip.E');
+  assert.ok(rules.weakest({ C: 90, P: 90, E: 30 }) === 'E');
+});
+
+test('a year that sold more and earned nothing gets the lesson of growth without margin in place of the tip', () => {
+  const f = feedback(year('pleaser'));
+  assert.equal(f.lines[2].key, 'year.fb.growth.growthNoMargin');
+  assert.ok(f.lines[2].params.growth >= 3 && f.lines[2].params.money < 15);
+});
+
+test('a margin kept by shrinking gets its own lesson', () => {
+  const shrunk = { ...year('expert'), pl: model.applyOps(model.BASE_PL, [{ op: 'volume', pct: -12, share: 0.6 }, { op: 'oi', line: 'cost', pts: 5 }]) };
+  const f = feedback(shrunk);
+  assert.equal(f.lines[2].key, 'year.fb.growth.marginNoGrowth');
+  assert.ok(f.lines[2].params.oi >= 17);
 });
 
 test('a rescue gets its own closing line, with or without reaching the goal', () => {

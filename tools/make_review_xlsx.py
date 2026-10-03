@@ -35,17 +35,25 @@ BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
 BASE_FONT = Font(name="Calibri", size=10)
 WRAP = Alignment(wrap_text=True, vertical="top")
 
-# (header, width, key in the row, reviewer input?)
+# (header, width)
 REVIEW_COLUMNS = [
-    ("ID", 7), ("Meses", 11), ("Voz", 12), ("Escena", 38), ("Respuesta", 20), ("Descripción", 52),
-    ("Línea que mueve", 14), ("Intención del autor", 14),
+    ("ID", 7), ("Meses", 11), ("Voz", 12), ("Segmento", 12), ("Escena", 38), ("Respuesta", 20), ("Descripción", 52),
+    ("Efecto en el P&L", 28), ("Línea que mueve", 14), ("Intención del autor", 14), ("Después de responder", 52),
     ("¿Realista?", 12), ("Línea correcta", 14), ("Comentario", 40),
-    ("Scene (EN)", 38), ("Answer (EN)", 20), ("Description (EN)", 52), ("¿Traducción correcta?", 14),
+    ("Scene (EN)", 38), ("Answer (EN)", 20), ("Description (EN)", 52), ("Effect on the P&L (EN)", 28), ("After answering (EN)", 52),
+    ("¿Traducción correcta?", 14),
 ]
 PROBLEM_COLUMNS = [
-    ("ID", 7), ("Meses", 11), ("Voz", 12), ("Título", 24), ("Escena", 44), ("Respuesta equilibrada", 60),
+    ("ID", 7), ("Meses", 11), ("Voz", 12), ("Segmento", 12), ("Título", 24), ("Escena", 44), ("Ficha completa", 60),
+    ("Respuesta equilibrada", 60),
     ("¿Escena realista?", 14), ("¿La equilibrada es la mejor?", 16), ("¿Falta una opción mejor? ¿Cuál?", 40), ("Comentario", 40),
 ]
+# The letters of the columns the formulas read and of the ones the reviewer fills in.
+REV_VOICE, REV_LINE, REV_TYPE = "C", "I", "J"
+REV_REALISTIC, REV_CORRECT_LINE, REV_TRANSLATION = "L", "M", "T"
+REV_INPUTS = {12, 13, 14, 20}
+PROB_SCENE, PROB_BEST = "I", "J"
+PROB_INPUTS = {9, 10, 11, 12}
 
 
 def months_label(months):
@@ -102,19 +110,21 @@ def build_review(workbook, rows):
     for offset, row in enumerate(rows, start=2):
         es, en = row["es"], row["en"]
         values = [
-            row["id"], months_label(row["months"]), es["voice"], es["scene"], es["name"], es["desc"],
-            es["line"], es["type"], None, None, None, en["scene"], en["name"], en["desc"], None,
+            row["id"], months_label(row["months"]), es["voice"], es["segment"], es["scene"], es["name"], es["desc"],
+            es["effect"], es["line"], es["type"], es["story"], None, None, None,
+            en["scene"], en["name"], en["desc"], en["effect"], en["story"], None,
         ]
-        write_row(sheet, offset, values, REVIEW_COLUMNS, {9, 10, 11, 15})
+        write_row(sheet, offset, values, REVIEW_COLUMNS, REV_INPUTS)
     last = len(rows) + 1
     style_header(sheet, REVIEW_COLUMNS)
-    add_list(sheet, VERDICTS, "I", 2, last)
-    add_list(sheet, LINE_CHOICES, "J", 2, last)
-    add_list(sheet, ["Sí", "No"], "O", 2, last)
-    sheet.conditional_formatting.add(f"I2:I{last}", FormulaRule(formula=['I2="No"'], fill=BAD_FILL))
-    sheet.conditional_formatting.add(f"I2:I{last}", FormulaRule(formula=['I2="Ambiguo"'], fill=WARN_FILL))
-    sheet.conditional_formatting.add(f"J2:J{last}", FormulaRule(formula=['AND(J2<>"",J2<>G2)'], fill=BAD_FILL))
-    sheet.conditional_formatting.add(f"O2:O{last}", FormulaRule(formula=['O2="No"'], fill=BAD_FILL))
+    r, c, t, line = REV_REALISTIC, REV_CORRECT_LINE, REV_TRANSLATION, REV_LINE
+    add_list(sheet, VERDICTS, r, 2, last)
+    add_list(sheet, LINE_CHOICES, c, 2, last)
+    add_list(sheet, ["Sí", "No"], t, 2, last)
+    sheet.conditional_formatting.add(f"{r}2:{r}{last}", FormulaRule(formula=[f'{r}2="No"'], fill=BAD_FILL))
+    sheet.conditional_formatting.add(f"{r}2:{r}{last}", FormulaRule(formula=[f'{r}2="Ambiguo"'], fill=WARN_FILL))
+    sheet.conditional_formatting.add(f"{c}2:{c}{last}", FormulaRule(formula=[f'AND({c}2<>"",{c}2<>{line}2)'], fill=BAD_FILL))
+    sheet.conditional_formatting.add(f"{t}2:{t}{last}", FormulaRule(formula=[f'{t}2="No"'], fill=BAD_FILL))
     return last
 
 
@@ -124,15 +134,15 @@ def build_problems(workbook, rows):
     for offset, row in enumerate(balanced, start=2):
         es = row["es"]
         values = [
-            row["id"], months_label(row["months"]), es["voice"], es["title"], es["scene"],
-            f'{es["name"]}: {es["desc"]}', None, None, None, None,
+            row["id"], months_label(row["months"]), es["voice"], es["segment"], es["title"], es["scene"],
+            f'{es["brief"]} ({es["facts"]})', f'{es["name"]}: {es["desc"]}', None, None, None, None,
         ]
-        write_row(sheet, offset, values, PROBLEM_COLUMNS, {7, 8, 9, 10})
+        write_row(sheet, offset, values, PROBLEM_COLUMNS, PROB_INPUTS)
     last = len(balanced) + 1
     style_header(sheet, PROBLEM_COLUMNS)
-    add_list(sheet, VERDICTS, "G", 2, last)
-    add_list(sheet, VERDICTS, "H", 2, last)
-    sheet.conditional_formatting.add(f"G2:H{last}", FormulaRule(formula=['G2="No"'], fill=BAD_FILL))
+    add_list(sheet, VERDICTS, PROB_SCENE, 2, last)
+    add_list(sheet, VERDICTS, PROB_BEST, 2, last)
+    sheet.conditional_formatting.add(f"{PROB_SCENE}2:{PROB_BEST}{last}", FormulaRule(formula=[f'{PROB_SCENE}2="No"'], fill=BAD_FILL))
     return last
 
 
@@ -143,10 +153,11 @@ def build_instructions(workbook):
     sheet.column_dimensions["B"].width = 100
     lines = [
         ("P&L Quest: ficha de revisión de dominio", None),
-        ("Para qué sirve", "Comprobar que las 48 situaciones del modo Año completo (192 respuestas) suenan reales en el negocio y que cada respuesta mueve la línea correcta del P&L. Los datos del juego son ficticios."),
-        ("Cuánto toma", "Cerca de 1 hora. Lee una fila a la vez: la escena, la respuesta y la línea que el juego dice que mueve."),
-        ("Hoja Revisión", "Una fila por respuesta. Completa las celdas amarillas: ¿Realista? (Sí, No o Ambiguo), Línea correcta (la del P&L que a tu juicio mueve la respuesta; «Fuera del P&L» si es caja, deuda, impuestos u otra cosa) y Comentario (obligatorio si marcas No, Ambiguo o una línea distinta). Las columnas en inglés son para quien revise la traducción."),
-        ("Hoja Problemas", "Una fila por situación. Dime si la escena es realista, si la respuesta equilibrada es de verdad la mejor y si falta una opción mejor."),
+        ("Para qué sirve", "Comprobar que las 48 situaciones del modo Año completo (192 respuestas) suenan reales en el negocio y que cada respuesta mueve las líneas correctas del P&L, en el sentido correcto. Los clientes son hoteles, hospitales, industria de alimentos e industria en general. Los datos del juego son ficticios."),
+        ("Cuánto toma", "Entre 1 y 1,5 horas. Lee una fila a la vez: la escena, la respuesta, lo que el juego dice que hace en el P&L y lo que cuenta después de responder."),
+        ("Hoja Revisión", "Una fila por respuesta. «Efecto en el P&L» muestra las líneas que se mueven y hacia dónde (↑ la línea sube, ↓ baja; una respuesta de crecimiento trae además su volumen y su precio, en % de las ventas del plan). «Después de responder» es la historia que el juego cuenta. Completa las celdas amarillas: ¿Realista? (Sí, No o Ambiguo), Línea correcta (la del P&L que a tu juicio mueve más la respuesta; «Fuera del P&L» si es caja, deuda, impuestos u otra cosa) y Comentario (obligatorio si marcas No, Ambiguo o una línea distinta). Las columnas en inglés son para quien revise la traducción."),
+        ("Hoja Problemas", "Una fila por situación, con su ficha completa: lo que la persona lee antes de decidir. Dime si la escena es realista, si la respuesta equilibrada es de verdad la mejor y si falta una opción mejor."),
+        ("Líneas rojas y crecimiento", "Seis respuestas son líneas rojas (incumplir un contrato, inflar una cifra, ocultar un incidente): el juego las castiga con una multa y no hay resultado que las compre de vuelta; marca si de verdad lo son. Cuatro situaciones de crecimiento (m06c, m08c, m09c, m12c) y dos mixtas (m03s, m06s) se miden en volumen y precio: revisa si el trueque entre vender más y ganar menos es creíble."),
         ("Hoja Resumen", "Se calcula sola con lo que completes. No hay que tocarla."),
         ("Las 6 líneas", "Ventas: ventas antes de incentivos. Incentivos: rebates y descuentos a clientes. Costo: costo de ventas (insumos, producción, mantención). Flete: llevar el producto al cliente. Direct Chg: cargos directos al cliente, como el comodato de equipos o las visitas de servicio. SG&A: ventas, generales y administración. Debajo de la línea de SG&A el juego termina en el OI: caja, capital de trabajo, deuda, intereses e impuestos quedan fuera."),
         ("Los 4 tipos de respuesta", "Equilibrada: la que el juego premia (mejora el OI con una contrapartida bien diseñada). Atajo: sube el OI hoy y cobra después. Ceder: cede a la voz en tensión y el OI paga. Pasiva: no hacer nada."),
@@ -184,19 +195,19 @@ def build_summary(workbook, review_last, problems_last):
     for column in "BCDE":
         sheet.column_dimensions[column].width = 14
     rev, prob, row = f"'{REVIEW}'", f"'{PROBLEMS}'", SUMMARY_ROW
-    realistic = lambda verdict: f"COUNTIF({rev}!I2:I{review_last},\"{verdict}\")"
+    realistic = lambda verdict: f"COUNTIF({rev}!{REV_REALISTIC}2:{REV_REALISTIC}{review_last},\"{verdict}\")"
     total = f"COUNTA({rev}!A2:A{review_last})"
     cells = [
         ("total", "Respuestas en la ficha", f"={total}"),
-        ("reviewed", "Respuestas revisadas (realista marcado)", f"=COUNTA({rev}!I2:I{review_last})"),
+        ("reviewed", "Respuestas revisadas (realista marcado)", f"=COUNTA({rev}!{REV_REALISTIC}2:{REV_REALISTIC}{review_last})"),
         ("yes", "Realista: Sí", f"={realistic('Sí')}"),
         ("no", "Realista: No", f"={realistic('No')}"),
         ("ambiguous", "Realista: Ambiguo", f"={realistic('Ambiguo')}"),
         ("share", "% realista (Sí / total)", f"=IF({total}=0,0,{realistic('Sí')}/{total})"),
-        ("lines", "Líneas distintas a la del juego", f"=SUMPRODUCT(({rev}!J2:J{review_last}<>\"\")*({rev}!J2:J{review_last}<>{rev}!G2:G{review_last}))"),
-        ("translations", "Traducciones marcadas «No»", f"=COUNTIF({rev}!O2:O{review_last},\"No\")"),
-        ("scenes", "Escenas no realistas", f"=COUNTIF({prob}!G2:G{problems_last},\"No\")"),
-        ("best", "Equilibradas que no son la mejor", f"=COUNTIF({prob}!H2:H{problems_last},\"No\")"),
+        ("lines", "Líneas distintas a la del juego", f"=SUMPRODUCT(({rev}!{REV_CORRECT_LINE}2:{REV_CORRECT_LINE}{review_last}<>\"\")*({rev}!{REV_CORRECT_LINE}2:{REV_CORRECT_LINE}{review_last}<>{rev}!{REV_LINE}2:{REV_LINE}{review_last}))"),
+        ("translations", "Traducciones marcadas «No»", f"=COUNTIF({rev}!{REV_TRANSLATION}2:{REV_TRANSLATION}{review_last},\"No\")"),
+        ("scenes", "Escenas no realistas", f"=COUNTIF({prob}!{PROB_SCENE}2:{PROB_SCENE}{problems_last},\"No\")"),
+        ("best", "Equilibradas que no son la mejor", f"=COUNTIF({prob}!{PROB_BEST}2:{PROB_BEST}{problems_last},\"No\")"),
         ("result", "Resultado", f"=IF(AND(B{row['share']}>={APPROVAL_SHARE},B{row['lines']}=0),\"Aprobado\",\"Revisar\")"),
     ]
     sheet["A1"] = "Resumen de la revisión"
@@ -207,8 +218,8 @@ def build_summary(workbook, review_last, problems_last):
         cell.font = Font(name="Calibri", size=10, bold=True)
         cell.border = BORDER
     sheet.cell(row=row["share"], column=2).number_format = "0.0%"
-    break_down(sheet, 16, "Realista por voz", VOICES, "C", review_last)
-    break_down(sheet, 23, "Realista por tipo de respuesta", TYPES, "H", review_last)
+    break_down(sheet, 16, "Realista por voz", VOICES, REV_VOICE, review_last)
+    break_down(sheet, 23, "Realista por tipo de respuesta", TYPES, REV_TYPE, review_last)
 
 
 def break_down(sheet, start, title, names, column, last):
@@ -220,7 +231,7 @@ def break_down(sheet, start, title, names, column, last):
         sheet.cell(row=offset, column=1, value=name).font = BASE_FONT
         sheet.cell(row=offset, column=2, value=f"=COUNTIF({rev}!{column}2:{column}{last},\"{name}\")")
         for column_index, verdict in enumerate(VERDICTS, start=3):
-            sheet.cell(row=offset, column=column_index, value=f"=COUNTIFS({rev}!{column}2:{column}{last},\"{name}\",{rev}!I2:I{last},\"{verdict}\")")
+            sheet.cell(row=offset, column=column_index, value=f"=COUNTIFS({rev}!{column}2:{column}{last},\"{name}\",{rev}!{REV_REALISTIC}2:{REV_REALISTIC}{last},\"{verdict}\")")
 
 
 def main(path):

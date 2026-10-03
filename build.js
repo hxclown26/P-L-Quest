@@ -1,7 +1,7 @@
 'use strict';
 
-// Bundles src/ into one self-contained pl-quest-demo5.html (no network, no other files).
-// The earlier demos (pl-quest.html and pl-quest-demo2.html to pl-quest-demo4.html) are frozen
+// Bundles src/ into one self-contained pl-quest-demo6.html (no network, no other files).
+// The earlier demos (pl-quest.html and pl-quest-demo2.html to pl-quest-demo5.html) are frozen
 // copies: the default output never touches them.
 // The sources are plain CommonJS modules so Node can test them; here each one is wrapped
 // in a tiny module registry and inlined into the page.
@@ -12,7 +12,7 @@ const path = require('node:path');
 const ROOT = __dirname;
 const SRC = path.join(ROOT, 'src');
 const ENTRY = 'main';
-const DEFAULT_OUT = path.join(ROOT, 'pl-quest-demo5.html');
+const DEFAULT_OUT = path.join(ROOT, 'pl-quest-demo6.html');
 const REQUIRE = /require\((['"])(\.{1,2}\/[^'"]+)\1\)/g;
 
 // Everything under src/ except the HTML template and the stylesheet, in a stable order.

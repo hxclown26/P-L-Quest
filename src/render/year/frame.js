@@ -50,10 +50,10 @@ function drawPlate(ctx, label, color) {
 
 const voiceColor = (voice) => P.area[VOICE_AREA[voice]];
 
-function drawArtWindow(ctx, app, theme) {
+function drawArtWindow(ctx, app, theme, mood = screenFx.sceneMood(app)) {
   const { x, y, w, h } = layout.ART;
   ui.windowBox(ctx, x, y, w, h);
-  drawArt(ctx, theme, x + Math.floor((w - ART_W) / 2), y + Math.floor((h - ART_H) / 2), app.t, screenFx.sceneMood(app));
+  drawArt(ctx, theme, x + Math.floor((w - ART_W) / 2), y + Math.floor((h - ART_H) / 2), app.t, mood);
 }
 
 // "Month 3 - 2/4" in the corner of the picture.
@@ -63,14 +63,26 @@ function drawStage(ctx, app) {
   ui.textRight(ctx, label, layout.ART.x + layout.ART.w - 5, layout.ART.y + 35, P.white, { shadow: P.ink });
 }
 
-// Reviewer mode: a badge and the exact meter values over the picture.
+// The segment the problem is about (hotels, hospitals, food, industry), in the top left corner of the picture, on a dark
+// chip so it reads over a pale sky or the snow too.
+const SEGMENT_CHIP_ALPHA = 0.78;
+function drawSegmentTag(ctx, app, problem) {
+  const { x, y } = layout.ART;
+  const label = tx(app, `year.seg.${problem.segment}`);
+  ctx.globalAlpha = SEGMENT_CHIP_ALPHA;
+  rect(ctx, x + 3, y + 3, ui.textWidth(label) + 4, 9, P.ink);
+  ctx.globalAlpha = 1;
+  ui.text(ctx, label, x + 5, y + 4, P.white);
+}
+
+// Reviewer mode: a badge and the exact meter values over the picture, on the right so the segment keeps the left corner.
 function drawReviewBadge(ctx, app) {
   if (!app.review) return;
-  const { x, y } = layout.ART;
-  ui.text(ctx, tx(app, 'year.review.on'), x + 5, y + 4, P.red, { shadow: P.ink });
+  const { x, y, w } = layout.ART;
+  ui.textRight(ctx, tx(app, 'year.review.on'), x + w - 5, y + 4, P.red, { shadow: P.ink });
   const { C, P: plant, E } = app.year.meters;
   const values = [['C', C], ['P', plant], ['E', E]].map(([key, value]) => `${tx(app, `year.meterTag.${key}`)[0]}${Math.round(value)}`).join(' ');
-  ui.text(ctx, values, x + 5, y + 14, P.white, { shadow: P.ink });
+  ui.textRight(ctx, values, x + w - 5, y + 14, P.white, { shadow: P.ink });
 }
 
 function drawGauge(ctx, row, label, fraction, color, marks, blink = false, ghost = null) {
@@ -129,6 +141,7 @@ module.exports = {
   drawPlate,
   drawArtWindow,
   drawStage,
+  drawSegmentTag,
   drawReviewBadge,
   drawMeters,
   voiceColor,

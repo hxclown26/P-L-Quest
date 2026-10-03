@@ -38,7 +38,7 @@ test('analyze keeps the margin after every month and the kind of each decision',
 });
 
 test('a company that went bankrupt keeps a shorter record and says when', () => {
-  const team = analyze(entry('Rapidos', 'short'));
+  const team = analyze(entry('Rapidos', 'passive'));
   assert.equal(team.outcome, 'bankrupt');
   assert.ok(team.decisions.length < 48);
   assert.ok(team.bankruptMonth >= 1 && team.bankruptMonth <= 12);

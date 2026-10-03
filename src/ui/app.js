@@ -34,6 +34,7 @@ const createApp = ({ lang, muted, calm = false, best, bestYear = 0, seed = 1, cr
   sim: false,
   review: false,
   cursor: 0,
+  briefedSlot: -1,
   page: 0,
   menuIdx: 0,
   profileIdx: 0,

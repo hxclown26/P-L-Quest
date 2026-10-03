@@ -28,7 +28,7 @@ function drawHeader(ctx, app, tier) {
   ui.wrapLines([{ text: tx(app, 'ui.subtitle') }], 21).forEach((row, i) => {
     ui.text(ctx, row.text, 10, 38 + i * 10, P.white, { shadow: P.ink });
   });
-  ui.text(ctx, 'DEMO 5', 10, 64, P.orange, { shadow: P.ink });
+  ui.text(ctx, 'DEMO 6', 10, 64, P.orange, { shadow: P.ink });
 }
 
 // A row of a list of modes: its name, a line saying what it is and, on the full year, the best

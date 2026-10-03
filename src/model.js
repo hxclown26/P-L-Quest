@@ -28,6 +28,11 @@ const operatingIncome = (pl) => grossProfit(pl) - pl.sga;
 const ratioOf = (pl, amount) => (netSales(pl) > 0 ? (100 * amount) / netSales(pl) : 0);
 const operatingMargin = (pl) => ratioOf(pl, operatingIncome(pl));
 
+// How many times the gross profit covers the SG&A: 1 means OI is zero, and below 1 the SG&A eats the gross profit.
+const coverage = (pl) => (pl.sga > 0 ? grossProfit(pl) / pl.sga : Infinity);
+// Net sales against the plan, in percent: the growth a CFO reads next to the margin.
+const salesGrowth = (pl, plan = BASE_PL) => (100 * (netSales(pl) - netSales(plan))) / netSales(plan);
+
 function assertNumber(value, name) {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw new Error(`Invalid ${name}: ${value}`);
@@ -41,12 +46,15 @@ function scalePrice(pl, pct) {
   return { ...pl, sales: pl.sales * k, incentives: pl.incentives * k };
 }
 
-// Volume moves every variable line. SG&A is fixed, so it does not scale with volume.
-function scaleVolume(pl, pct) {
+// Volume moves every variable line. SG&A is fixed, so it does not scale with volume. `share` is how much of the
+// freight and direct charges follows it: the service a client needs decides it (a hospital asks for more than a hotel).
+function scaleVolume(pl, pct, share = SERVE_VARIABLE_SHARE) {
   assertNumber(pct, 'pct');
+  assertNumber(share, 'share');
   if (pct <= -100) throw new Error(`Invalid pct: ${pct}`);
+  if (share < 0 || share > 1) throw new Error(`Invalid share: ${share}`);
   const k = 1 + pct / 100;
-  const delivery = 1 + (k - 1) * SERVE_VARIABLE_SHARE;
+  const delivery = 1 + (k - 1) * share;
   return {
     ...pl,
     sales: pl.sales * k,
@@ -57,18 +65,22 @@ function scaleVolume(pl, pct) {
   };
 }
 
+// A deduction is an amount that is spent: it can shrink to nothing, never below.
+const floored = (value) => Math.max(0, value);
+
 function addToLine(pl, line, pts) {
   if (!DEDUCTION_LINES.includes(line)) throw new Error(`Invalid line: ${line}`);
   assertNumber(pts, 'pts');
-  return { ...pl, [line]: pl[line] + pts };
+  return { ...pl, [line]: floored(pl[line] + pts) };
 }
 
-// Moves OI by exactly `pts` through one line: more sales or a smaller deduction.
+// Moves OI by `pts` through one line: more sales or a smaller deduction. A deduction that has run out stops at zero,
+// so the move is then smaller than `pts`.
 function moveOi(pl, line, pts) {
   assertNumber(pts, 'pts');
   if (line === 'sales') return { ...pl, sales: pl.sales + pts };
   if (!DEDUCTION_LINES.includes(line)) throw new Error(`Invalid line: ${line}`);
-  return { ...pl, [line]: pl[line] - pts };
+  return { ...pl, [line]: floored(pl[line] - pts) };
 }
 
 function applyOp(pl, op) {
@@ -76,7 +88,7 @@ function applyOp(pl, op) {
     case 'price':
       return scalePrice(pl, op.pct);
     case 'volume':
-      return scaleVolume(pl, op.pct);
+      return scaleVolume(pl, op.pct, op.share);
     case 'add':
       return addToLine(pl, op.line, op.pts);
     case 'oi':
@@ -109,6 +121,8 @@ module.exports = {
   operatingIncome,
   operatingMargin,
   ratioOf,
+  coverage,
+  salesGrowth,
   applyOp,
   applyOps,
   delta,

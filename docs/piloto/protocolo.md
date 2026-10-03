@@ -1,8 +1,8 @@
-# Protocolo del piloto de P&L Quest (Demo 5)
+# Protocolo del piloto de P&L Quest (Demo 6)
 
 **Qué se decide.** Si el juego enseña lo que dice enseñar y si un líder de finanzas lo acepta, con una
 sesión de 90 minutos para 12 a 15 personas. Si se cumplen las cuatro metas de la sección 6, se evalúa
-el Demo 5; si no, se itera con lo que mostró el piloto. Con ese tamaño el resultado es **descriptivo**,
+el Demo 6; si no, se itera con lo que mostró el piloto. Con ese tamaño el resultado es **descriptivo**,
 no una prueba estadística.
 
 ## 1. Antes de la sesión
@@ -10,14 +10,14 @@ no una prueba estadística.
 | Qué | Detalle |
 |---|---|
 | Participantes | 12 a 15, mezcla de comercial, operaciones y otras áreas, y al menos 3 de finanzas (la meta de «objeción al P&L» solo tiene sentido con ellos). Sin entrenamiento previo en el juego. |
-| Equipo | 1 facilitador y 1 observador. Una sala con proyector; un computador por persona con Chrome, Edge o Safari. El juego es un solo archivo, `pl-quest-demo5.html`, que no necesita internet; también abre en https://hxclown26.github.io/P-L-Quest/ (ahí sí hace falta internet). |
-| Revisión previa | La ficha de dominio (`docs/revision/revision-dominio.xlsx`) revisada por 2 personas del negocio y el test de 5 preguntas (formas A y B) aprobado por ti. El test y su clave se guardan fuera del repositorio público (`docs/piloto/resultados/`, que git ignora) para que nadie vea las preguntas antes. |
-| Modo de juego | **Medio año** para todas las personas (unos 20 minutos). El año completo toma 35 a 50 minutos y no cabe en el bloque de 30. Todas teclean el mismo código de partida de 4 dígitos, así el debrief habla de los mismos 24 problemas. |
-| Efectos | Demo 5 sacude la escena, destella y lanza partículas un instante cuando una respuesta pesa mucho. La tecla **E** los apaga (modo calmo), y el juego ya parte calmo si el equipo tiene activado «reducir movimiento». Que todas las personas jueguen en el mismo modo (el de efectos completos, salvo quien pida el calmo por comodidad o salud) y anota quién usó el calmo. Reglas, números y problemas son idénticos en los dos modos. |
+| Equipo | 1 facilitador y 1 observador. Una sala con proyector; un computador por persona con Chrome, Edge o Safari. El juego es un solo archivo, `pl-quest-demo6.html`, que no necesita internet; también abre en https://hxclown26.github.io/P-L-Quest/ (ahí sí hace falta internet). **Respaldo:** si algo falla en la sala, el Demo 5 sigue disponible, congelado, en `pl-quest-demo5.html` y en https://hxclown26.github.io/P-L-Quest/pl-quest-demo5.html (sus textos, números y finales son los anteriores). |
+| Revisión previa | La ficha de dominio (`docs/revision/revision-dominio.xlsx`, rehecha con el contenido de Demo 6: segmento, efecto de cada respuesta en el P&L y la historia que el juego cuenta) revisada por 2 personas del negocio y el test de 5 preguntas (formas A y B) aprobado por ti. El test y su clave se guardan fuera del repositorio público (`docs/piloto/resultados/`, que git ignora) para que nadie vea las preguntas antes. |
+| Modo de juego | **Medio año** para todas las personas (unos 25 minutos: cada problema abre con una ficha que hay que leer). El año completo toma 45 a 60 minutos y no cabe en el bloque de 30. Todas teclean el mismo código de partida de 4 dígitos, así el debrief habla de los mismos 24 problemas. |
+| Efectos | Demo 6 conserva los efectos de Demo 5: sacude la escena, destella y lanza partículas un instante cuando una respuesta pesa mucho. La tecla **E** los apaga (modo calmo), y el juego ya parte calmo si el equipo tiene activado «reducir movimiento». Que todas las personas jueguen en el mismo modo (el de efectos completos, salvo quien pida el calmo por comodidad o salud) y anota quién usó el calmo. Reglas, números y problemas son idénticos en los dos modos. |
 | Formularios | Las formas A y B del test como cuestionarios con puntaje por pregunta (cada acierto vale 1). Las claves viven solo dentro del formulario. |
 | Grupos | Mitad hace A antes y B después (A→B), mitad al revés (B→A). Asigna alternando: IDs impares A→B, pares B→A. |
 | IDs | P01, P02, etc. No se registran nombres en ningún archivo de análisis. |
-| Prueba técnica | Un día antes, abre el archivo (o el enlace) en 2 equipos de los que se usarán: título, menú, un mes completo y el informe final, en español. Prueba también la tecla E y que el texto con g, j, p, q, y se lea bien en el proyector. |
+| Prueba técnica | Un día antes, abre el archivo (o el enlace) en 2 equipos de los que se usarán: título, menú, un mes completo y el informe final, en español. Prueba también la tecla E y que el texto con g, j, p, q, y se lea bien en el proyector. Mira que cada problema abra con su ficha (Enter muestra las respuestas), que la imagen nombre el segmento del cliente y que el veredicto traiga ventas, OI en US$ M y, si corresponde, «Crece sin margen». |
 
 ## 2. Agenda de 90 minutos
 
@@ -63,7 +63,7 @@ a GitHub** (está en `.gitignore`), o fuera del repositorio. No se publican resp
 | 3 | **Utilidad promedio de 4 sobre 5** o más. | Utilidad promedio |
 | 4 | **Ninguna** persona de finanzas objeta el P&L en pantalla. | Objeciones al P&L |
 
-El Resumen propone una decisión («Evaluar Demo 5» si se cumplen las cuatro; «Iterar con lo que mostró
+El Resumen propone una decisión («Evaluar Demo 6» si se cumplen las cuatro; «Iterar con lo que mostró
 el piloto» si falta alguna; «Faltan datos» si aún no se llena). La decisión final es tuya y se toma
 mirando también las observaciones de la sección 3.
 
@@ -79,9 +79,14 @@ mirando también las observaciones de la sección 3.
   abiertas, y solo mientras la pestaña está a la vista: una pestaña en segundo plano acorta el tiempo.
 - **El medio año no es el año**: son 24 de los 42 problemas que caben en esos meses y cada decisión pesa el
   doble. Mide lo mismo que el año (las notas y los umbrales son los mismos), pero con menos situaciones.
-- **Aspecto distinto al de Demo 4**: Demo 5 cambia gráficos y efectos, no reglas, textos ni números; el
-  contenido que revisaron las dos personas del negocio es el mismo. Quien juegue en modo calmo ve menos
-  énfasis al responder, pero lee la misma información.
+- **Contenido nuevo desde Demo 5**: Demo 6 reescribe las respuestas, agrega la ficha y la historia de cada
+  problema, cambia cómo se mueve el P&L y cómo termina un año (golpes de medidor, plan de
+  reestructuración, quiebra por el P&L, líneas rojas). Las dos personas del negocio deben revisar la ficha
+  rehecha con ese contenido, no la anterior. Quien juegue en modo calmo ve menos énfasis al responder, pero
+  lee la misma información.
+- **El tiempo del medio año con la ficha** es una estimación (unos 25 minutos), todavía sin medir con
+  personas: la meta 2 (30 minutos o menos) se fijó antes de la ficha y puede salir exigente. Tú decides si la
+  subes a 35 minutos antes de la sesión (en `tools/make_pilot_xlsx.py`, `FINISH_MINUTES`).
 - **Español solamente**: la versión en inglés no tiene revisión humana.
 - **Autoría**: las 48 situaciones, el test y las metas las escribí yo; la revisión de dominio y tu
   aprobación del test son las que les dan validez.

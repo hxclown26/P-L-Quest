@@ -24,6 +24,7 @@ module.exports = Object.freeze({
   'ws.setup.needCode': 'Faltan los 4 dígitos del código.',
   'ws.team.default': 'EQUIPO',
   'year.intro.code': 'Código de partida: {code}',
+  'year.intro.code.short': 'Cód. {code}',
 
   // Result code (last page of a workshop year)
   'ws.result.title': 'CÓDIGO DE RESULTADO',

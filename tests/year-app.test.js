@@ -9,15 +9,21 @@ const sim = require('../src/year/simulate');
 const model = require('../src/model');
 const layout = require('../src/ui/layout');
 const { showcaseRun } = require('../src/year/showcase');
+const view = require('../src/ui/year-view');
 
 const fresh = (extra = {}) => ({ ...createApp({ lang: 'es', muted: false, best: 0, bestYear: 0 }), ...extra });
 const press = (app, key) => reduce(app, { type: 'key', key });
 const pressAll = (app, keys) => keys.reduce((state, key) => press(state.app, key), { app, effects: [] });
 const names = (result) => result.effects.map((e) => e.name || e.mode || e.type);
 
-const intoYear = (extra = {}) => pressAll(fresh(extra), ['confirm', 'confirm', 'confirm']).app;
-const withYear = (year, extra = {}) => ({ ...intoYear(), year, ...extra });
+const intoBrief = (extra = {}) => pressAll(fresh(extra), ['confirm', 'confirm', 'confirm']).app;
+// A brief that has been read (it types in, so some seconds in), then Enter: the answers are on screen.
+const readBrief = (app) => press(tick(app, 10), 'confirm');
+// Into the year and past the brief of its first problem.
+const intoYear = (extra = {}) => readBrief(intoBrief(extra)).app;
+const withYear = (year, extra = {}) => ({ ...intoYear(), year, briefedSlot: slotOf(year), ...extra });
 const tick = (app, dt) => reduce(app, { type: 'tick', dt }).app;
+const slotOf = (year) => year.monthIdx * engine.PROBLEMS_PER_MONTH + year.problemIdx;
 
 // The answers are a vertical list: up to the top, then down to the wanted row.
 const cursorKeys = (index) => [...Array(3).fill('up'), ...Array(index).fill('down')];
@@ -25,7 +31,8 @@ const moveTo = (app, index) => pressAll(app, cursorKeys(index)).app;
 const indexOfArchetype = (year, a) => engine.options(year).findIndex((o) => o.a === a);
 
 function answer(app, a) {
-  const moved = moveTo(app, indexOfArchetype(app.year, a));
+  const shown = view.briefing(app) ? readBrief(app).app : app;
+  const moved = moveTo(shown, indexOfArchetype(shown.year, a));
   return press(moved, 'confirm');
 }
 
@@ -36,6 +43,7 @@ function playYear(app, policy, seed = 1) {
   const all = [];
   for (let guard = 0; guard < 800 && state.app.year.phase !== 'final'; guard += 1) {
     if (state.app.year.phase === 'problem') {
+      if (view.briefing(state.app)) state = readBrief(state.app);
       state = { app: moveTo(state.app, policy(state.app.year, rng)), effects: [] };
     }
     state = press(state.app, 'confirm');
@@ -87,10 +95,20 @@ test('four answers close the month and confirm opens the next one', () => {
   assert.equal(app.year.problemIdx, 0);
 });
 
-test('hitting zero opens the rescue screen with a warning sound, and confirm resumes the year', () => {
-  const thin = model.applyOp(model.BASE_PL, { op: 'oi', line: 'sales', pts: -14.8 });
-  const app = withYear({ ...engine.newYear(), monthIdx: 3, pl: thin });
+test('a meter at zero opens the blow screen with a warning sound, and confirm goes on with the month', () => {
+  const app = withYear({ ...engine.newYear(), monthIdx: 1, meters: { C: 1, P: 60, E: 60 } });
   const result = press(answer(app, 'ign').app, 'confirm');
+  assert.equal(result.app.year.phase, 'shock');
+  assert.ok(names(result).includes('bad'));
+  const resumed = press(result.app, 'confirm').app;
+  assert.equal(resumed.year.phase, 'problem');
+  assert.equal(resumed.year.problemIdx, 1);
+});
+
+test('an OI at zero at the close opens the restructuring screen with a warning sound, and confirm resumes the year', () => {
+  const thin = model.applyOp(model.BASE_PL, { op: 'oi', line: 'sales', pts: -15.5 });
+  const app = withYear({ ...engine.newYear(), monthIdx: 3, problemIdx: 3, phase: 'monthClose', pl: thin });
+  const result = press(app, 'confirm');
   assert.equal(result.app.year.phase, 'rescue');
   assert.ok(names(result).includes('bad'));
   const resumed = press(result.app, 'confirm').app;
@@ -108,7 +126,7 @@ test('an expert year ends on the verdict, saves the best year and plays the fanf
 });
 
 test('a bankruptcy plays the defeat sound and saves rank 1', () => {
-  const { app, effects } = playYear(intoYear(), sim.PROFILES.short);
+  const { app, effects } = playYear(intoYear(), sim.PROFILES.passive);
   assert.equal(app.year.outcome, 'bankrupt');
   assert.deepEqual(effects.filter((e) => e.type === 'save').map((e) => e.patch), [{ bestYear: 1 }]);
   assert.ok(names({ effects }).includes('death'));
@@ -269,11 +287,12 @@ test('a played year never throws in any phase, whatever the answers', () => {
 // ---- the play time and the best year of a half year
 test('the play time runs while the year is played, also behind the rules, and stops at the verdict', () => {
   let app = intoYear();
-  assert.equal(app.yearT, 0);
+  const start = app.yearT;
+  assert.equal(start, 10, 'reading the first brief is part of the game');
   app = tick(app, 2);
-  assert.equal(app.yearT, 2);
+  assert.equal(app.yearT, start + 2);
   app = tick(press(app, 'note').app, 1.5);
-  assert.equal(app.yearT, 3.5, 'reading the rules is part of the game');
+  assert.equal(app.yearT, start + 3.5, 'reading the rules is part of the game');
   const result = tick(withYear({ ...engine.newYear(), phase: 'result' }, { yearT: 10 }), 1);
   assert.equal(result.yearT, 11);
   for (const phase of ['final', 'over']) {

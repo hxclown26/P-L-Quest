@@ -6,6 +6,7 @@
 module.exports = Object.freeze({
   ...require('./year.es'),
   ...require('./year-ui.es'),
+  ...require('./year-case.es'),
   ...require('./workshop.es'),
 
   // Interface
@@ -57,7 +58,7 @@ module.exports = Object.freeze({
   'ui.star1': '1: llegas con vida',
   'ui.star2': '2: OI sobre el mínimo ({n}%)',
   'ui.star3': '3: meta ({n}%) con Scan usado',
-  'ui.intro1': 'Diriges una fábrica que le vende a la minería. Tu barra de vida es el OI: la utilidad operacional como % de las ventas netas.',
+  'ui.intro1': 'Diriges una fábrica que le vende a hoteles, hospitales y a la industria. Tu barra de vida es el OI: la utilidad operacional como % de las ventas netas.',
   'ui.intro2': 'Cada piso es una línea del P&L y quiere morder tu margen. Juega cartas, mide el valor del cliente y mantén la fábrica en pie.',
   'ui.oiBar': 'OI proyectado',
   'ui.goalMark': 'meta {n}',
@@ -136,10 +137,10 @@ module.exports = Object.freeze({
   'boss.cost': 'EL COSTO',
   'boss.truck': 'EL CAMIÓN',
   'boss.fixed': 'EL GASTO FIJO',
-  'floor.1.t1': 'Llega el pedido anual de la minera. ¿Cómo entras a la mesa?',
+  'floor.1.t1': 'Llega el pedido anual del cliente grande. ¿Cómo entras a la mesa?',
   'floor.1.t2': 'El cliente pide más volumen por menos.',
   'floor.1.t3': 'Último ajuste antes de firmar el pedido.',
-  'floor.2.t1': 'La minera exige un rebate de 3% para renovar.',
+  'floor.2.t1': 'El cliente grande exige un rebate de 3% para renovar.',
   'floor.2.t2': 'Insisten: la competencia ofrece más.',
   'floor.2.t3': 'Quieren cerrar hoy. El reloj corre.',
   'floor.3.t1': 'El proveedor sube el insumo 8% y el precio de venta no se mueve solo.',

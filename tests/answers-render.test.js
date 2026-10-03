@@ -10,6 +10,7 @@ const engine = require('../src/year/engine');
 const tutorial = require('../src/engine');
 const { PROBLEMS } = require('../src/year/problems');
 const layout = require('../src/ui/layout');
+const { slotOf } = require('../src/ui/year-view');
 const { draw } = require('./helpers/screen');
 
 const CELL = 6;
@@ -34,7 +35,7 @@ test('every answer of every problem fits its row in the year, in both languages'
     const year = { ...engine.newYear(), monthIdx: Math.floor(n / 4), problemIdx: n % 4 };
     for (const lang of LANGS) {
       for (let cursor = 0; cursor < 4; cursor += 1) {
-        const { glyphs } = draw(base({ scene: 'year', year, lang, cursor }));
+        const { glyphs } = draw(base({ scene: 'year', year, lang, cursor, briefedSlot: slotOf(year) }));
         const label = `${lang} ${problem.id} cursor ${cursor}`;
         for (let i = 0; i < 4; i += 1) {
           const row = rowGlyphs(glyphs, i);

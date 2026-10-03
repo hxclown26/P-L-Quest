@@ -4,6 +4,7 @@ const engine = require('../../engine');
 const { tierFor } = require('../../tiers');
 const layout = require('../../ui/layout');
 const { tx, num } = require('../../ui/tx');
+const { briefing } = require('../../ui/year-view');
 const P = require('../palette');
 const { rect } = require('../draw');
 const ui = require('../ui');
@@ -63,6 +64,7 @@ function actionKey(app) {
   if (app.scene === 'play') return DEMO_ACTIONS[app.run.phase] || 'ui.btn.next';
   if (app.scene === 'setup') return app.setup.field === 2 ? 'ui.btn.start' : 'ui.btn.next';
   if (app.scene === 'year') {
+    if (briefing(app)) return 'ui.btn.decide';
     if (app.year.phase === 'final' && app.page < VERDICT_ACTIONS.length) return VERDICT_ACTIONS[app.page];
     return YEAR_ACTIONS[app.year.phase] || 'ui.btn.next';
   }

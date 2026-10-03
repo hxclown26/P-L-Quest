@@ -7,7 +7,8 @@ const engine = require('../year/engine');
 const { decisionsOf } = require('../year/replay');
 const { encode } = require('../year/result-code');
 const layout = require('./layout');
-const { rankOf } = require('./year-view');
+const { rankOf, slotOf, briefing, briefChars } = require('./year-view');
+const { typedChars, TYPE_RATE } = require('./anim');
 const { sfx, music, result, moved, isArrow, listMove, selectIndex, leaveTo } = require('./shared');
 
 const VERDICT_IDLE = 90;
@@ -27,7 +28,7 @@ function verdictEffects(app, run) {
 
 function arrival(app, run) {
   if (run.phase === 'final') return verdictEffects(app, run);
-  if (run.phase === 'rescue') return [sfx('bad')];
+  if (run.phase === 'rescue' || run.phase === 'shock') return [sfx('bad')];
   if (run.phase === 'over') return [sfx('select'), music('off')];
   return [sfx('select')];
 }
@@ -37,6 +38,14 @@ const leaveYear = (app) => leaveTo(app, app.workshop ? 'workshop' : app.sim ? 'e
 function choose(app) {
   const year = engine.choose(app.year, app.cursor);
   return result(moved(app, { year }), [sfx(ANSWER_SOUND[year.last.a])]);
+}
+
+// Enter on the brief of a problem shows its answers; while the brief is still typing it finishes the typing first, so a
+// double press never skips a brief nobody has read.
+const FINISHED = 0.01;
+function readBrief(app) {
+  if (typedChars(app.phaseT) < briefChars(app)) return result({ ...app, phaseT: briefChars(app) / TYPE_RATE + FINISHED }, [sfx('select')]);
+  return result(moved(app, { briefedSlot: slotOf(app.year), cursor: 0 }), [sfx('select')]);
 }
 
 // A workshop team's verdict also carries its result code: the whole year in one line.
@@ -57,7 +66,7 @@ const lastPage = (app) => (app.workshop ? 3 : 2);
 
 function confirm(app) {
   const { phase } = app.year;
-  if (phase === 'problem') return choose(app);
+  if (phase === 'problem') return briefing(app) ? readBrief(app) : choose(app);
   if (phase === 'over') return leaveYear(app);
   if (phase === 'final' && app.page < lastPage(app)) return result(moved(app, { page: app.page + 1 }), [sfx('select')]);
   return advance(app);
@@ -77,7 +86,7 @@ function back(app) {
 }
 
 function move(app, key) {
-  if (app.year.phase !== 'problem') return result(app);
+  if (app.year.phase !== 'problem' || briefing(app)) return result(app);
   return selectIndex(app, 'cursor', listMove(app.cursor, key, ANSWERS));
 }
 
@@ -91,14 +100,14 @@ function key(app, pressed) {
 }
 
 function tap(app, x, y) {
-  if (app.year.phase !== 'problem') return confirm(app);
+  if (app.year.phase !== 'problem' || briefing(app)) return confirm(app);
   const index = layout.hitAnswer(x, y);
   if (index < 0) return result(app);
   return index === app.cursor ? confirm(app) : selectIndex(app, 'cursor', index);
 }
 
 function hover(app, x, y) {
-  if (app.year.phase !== 'problem') return result(app);
+  if (app.year.phase !== 'problem' || briefing(app)) return result(app);
   const index = layout.hitAnswer(x, y);
   return index < 0 ? result(app) : selectIndex(app, 'cursor', index);
 }

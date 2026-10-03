@@ -96,6 +96,7 @@ test('the rescue plan opens with a red flash on the alarm picture, and calm mode
 // ---- the verdict ---------------------------------------------------------------------------------------
 const FACTORY = { x: 4, y: 26, w: 120, h: 64 };
 const verdictApp = (i, extra = {}) => yearApp(showcase.showcaseRun(i), { sim: true, ...extra });
+const RUIN = showcase.SHOWCASE.findIndex((entry) => entry.outcome === 'bankrupt');
 const wantAmbient = (app) => {
   const plan = screenFx.verdictPlan(app);
   return plan && plan.ambient ? fx.ambient(plan.ambient.kind, plan.ambient.seed, plan.ambient.count, app.t, FACTORY).map((p) => ({ x: p.x, y: p.y, w: p.w, h: p.h, color: P[p.tone], alpha: p.alpha })) : [];
@@ -105,7 +106,7 @@ const onScreen = (app) => wantAmbient(app).filter((want) => draw(app).fills.some
 test('a good year rains confetti over its factory, ruin lights embers, a middling year has no weather', () => {
   const excellent = verdictApp(0);
   assert.ok(wantAmbient(excellent).length > 0 && onScreen(excellent).length === wantAmbient(excellent).length, 'confetti for the best year');
-  const ruin = verdictApp(6);
+  const ruin = verdictApp(RUIN);
   assert.ok(wantAmbient(ruin).length > 0 && onScreen(ruin).length === wantAmbient(ruin).length, 'embers for ruin');
   assert.equal(screenFx.verdictPlan(verdictApp(2)).ambient, null, 'a middling year has none');
 });
@@ -118,7 +119,7 @@ test('the weather is only on the first page and never in calm mode', () => {
 });
 
 test('ruin also flashes the factory red when the page opens', () => {
-  const flash = (extra = {}) => draw(verdictApp(6, { phaseT: fx.IMPACT_AT + 0.03, ...extra })).fills.find(isBox(FACTORY));
+  const flash = (extra = {}) => draw(verdictApp(RUIN, { phaseT: fx.IMPACT_AT + 0.03, ...extra })).fills.find(isBox(FACTORY));
   assert.ok(flash() && flash().color === P.red);
   assert.equal(flash({ calm: true }), undefined);
   assert.equal(draw(verdictApp(0, { phaseT: fx.IMPACT_AT + 0.03 })).fills.find(isBox(FACTORY)), undefined, 'a good year does not');

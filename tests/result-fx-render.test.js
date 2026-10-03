@@ -21,7 +21,7 @@ function find(tier, mood) {
     const base = { ...engine.newYear(), monthIdx: Math.floor(slot / 4), problemIdx: slot % 4 };
     for (let i = 0; i < 4; i += 1) {
       const run = engine.choose(base, i);
-      const plan = fx.resultFeedback(run.last.delta, { pace: run.pace });
+      const plan = fx.resultFeedback(run.last.delta, { pace: run.pace, focus: engine.currentProblem(base).focus });
       if (plan.tier === tier && plan.mood === mood) return run;
     }
   }

@@ -17,7 +17,7 @@ test('decisionsOf lists the answer the player picked each time, in the order sho
 });
 
 test('a year ends sooner when the company goes bankrupt, and so does its list of decisions', () => {
-  const run = played('short', 4821);
+  const run = played('passive', 4821);
   assert.equal(run.outcome, 'bankrupt');
   assert.ok(decisionsOf(run).length < 48);
 });

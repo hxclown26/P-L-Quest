@@ -1,14 +1,18 @@
 'use strict';
 
-// The rules of the 12-month year. Three meters (Cliente, Planta, Estrategia) sit next to
-// OI: they decay every month, drag OI when low, and any of them reaching zero ends the
-// company unless a one-time rescue plan is still possible. The numbers were fitted on
-// thousands of simulated years: tests/year-balance.test.js keeps them honest.
+// The rules of the 12-month year. Three meters (Cliente, Planta, Estrategia) sit next to OI: they decay
+// every month and drag OI when low. A meter that reaches zero is a blow, not an ending: the biggest client
+// leaves, the plant stops, the market stops respecting the price, and the P&L takes it. What ends a company is
+// the P&L, in three steps: an alert (OI under the plan), a crisis (OI at zero: the gross profit no longer covers
+// the SG&A), which brings a one-time restructuring plan, and bankruptcy (the gross profit covers 70% of the SG&A
+// or less at two month closes in a row). The numbers were fitted on thousands of simulated years:
+// tests/year-balance.test.js keeps them honest.
 //
 // The half year (6 months) is the same year at double speed: `pace` is 2 and every monthly
 // effect is twice as big, so the grades and the rest of the numbers keep their meaning.
 
-const { BASE_PL, operatingMargin } = require('../model');
+const { BASE_PL, operatingMargin, coverage } = require('../model');
+const { deepFreeze } = require('../freeze');
 
 const PLAN_OI = 15;
 const START_PL = BASE_PL;
@@ -30,9 +34,26 @@ const FLYWHEEL_BONUS = 0.08;
 const CRISIS = 32;
 const CRISIS_FACTOR = 0.4;
 
-// A stressed P&L with OI 2: net sales 100 (103 - 3), less 59, 10 + 7 and 22.
-const RESCUE_PL = Object.freeze({ sales: 103, incentives: 3, cost: 59, freight: 10, direct: 7, sga: 22 });
-const RESCUE_METER = 38;
+// What a meter at zero costs: the P&L takes a structural blow (it stays, it is not a one-off), and the meter restarts
+// where the unit still has something left to defend.
+const SHOCK_METER = 35;
+// The next blow of the same meter is this share of the one before: the second client to leave is a smaller one.
+const SHOCK_FADE = 0.6;
+const SHOCKS = deepFreeze({
+  C: { ops: [{ op: 'volume', pct: -16 }] },
+  P: { ops: [{ op: 'oi', line: 'sales', pts: -4 }, { op: 'oi', line: 'cost', pts: -2 }] },
+  E: { ops: [{ op: 'price', pct: -6 }] },
+});
+
+// The ladder. A crisis is OI at zero or less; bankruptcy is a gross profit that covers 70% of the SG&A or less (a
+// gross margin near 10% when the SG&A is 16) at two month closes in a row.
+const BANKRUPT_COVERAGE = 0.7;
+const BANKRUPT_CLOSES = 2;
+const EPSILON = 1e-9;
+
+// The restructuring plan the board imposes at the first crisis: a share of the SG&A and of the cost goes, and the
+// disruption shakes every meter. It keeps the P&L the unit had: nobody injects capital.
+const RESTRUCTURING = deepFreeze({ sga: 0.15, cost: 0.02, meters: 5 });
 const RESCUE_LAST_MONTH = 9;
 const RESCUE_GOAL = 10;
 const RECOVERY_K = 5;
@@ -72,22 +93,33 @@ const gradeIndex = (value, column) => {
   return found === -1 ? GRADES.length : found;
 };
 
-// The lower of the OI grade and the weakest-meter grade; a rescue caps the result at "fair".
-function classify(oi, meters, rescued) {
+// The lower of the OI grade and the weakest-meter grade. A restructuring plan caps the result at "fair" (it leaves
+// a scar) and a red line, a breach of the rules, at "bad": no result buys that back.
+function classify(oi, meters, restructured, redLines = 0) {
   const weakestValue = Math.min(...METER_KEYS.map((key) => meters[key]));
   const index = Math.max(gradeIndex(oi, 1), gradeIndex(weakestValue, 2));
-  return OUTCOMES[rescued ? Math.max(index, OUTCOMES.indexOf('fair')) : index];
+  const scar = restructured ? OUTCOMES.indexOf('fair') : 0;
+  const breach = redLines > 0 ? OUTCOMES.indexOf('bad') : 0;
+  return OUTCOMES[Math.max(index, scar, breach)];
 }
 
-const isZero = (oi, meters) => oi <= 0 || METER_KEYS.some((key) => meters[key] <= 0);
-
-// What reached zero: 'oi' or the first meter at zero.
-const zeroCause = (oi, meters) => (oi <= 0 ? 'oi' : METER_KEYS.find((key) => meters[key] <= 0) || 'oi');
-
-const rescueState = (meters) => ({
-  pl: RESCUE_PL,
-  meters: Object.fromEntries(METER_KEYS.map((key) => [key, Math.max(meters[key], RESCUE_METER)])),
+// The blow of a meter that has already hit zero `previous` times, as operations on the P&L.
+const shockOps = (key, previous) => SHOCKS[key].ops.map((op) => {
+  const scale = SHOCK_FADE ** previous;
+  return op.op === 'oi' ? { ...op, pts: op.pts * scale } : { ...op, pct: op.pct * scale };
 });
+
+// The first meter at zero (or below), in the order client, plant, strategy; null when none is.
+const zeroMeter = (meters) => METER_KEYS.find((key) => meters[key] <= 0) || null;
+
+const inCrisis = (oi) => oi <= 0;
+const distressed = (pl) => coverage(pl) <= BANKRUPT_COVERAGE + EPSILON;
+
+// What the board does to a P&L in crisis, as operations on it.
+const restructureOps = (pl) => [
+  { op: 'oi', line: 'sga', pts: pl.sga * RESTRUCTURING.sga },
+  { op: 'oi', line: 'cost', pts: pl.cost * RESTRUCTURING.cost },
+];
 
 const canRescue = (month, alreadyRescued, pace = 1) => !alreadyRescued && month <= Math.floor(RESCUE_LAST_MONTH / pace);
 
@@ -106,8 +138,13 @@ module.exports = {
   FLYWHEEL,
   CRISIS,
   CRISIS_FACTOR,
-  RESCUE_PL,
-  RESCUE_METER,
+  SHOCK_METER,
+  SHOCK_FADE,
+  SHOCKS,
+  shockOps,
+  BANKRUPT_COVERAGE,
+  BANKRUPT_CLOSES,
+  RESTRUCTURING,
   RESCUE_LAST_MONTH,
   RESCUE_GOAL,
   RECOVERY_K,
@@ -117,9 +154,10 @@ module.exports = {
   clampMeter,
   monthEnd,
   classify,
-  isZero,
-  zeroCause,
-  rescueState,
+  zeroMeter,
+  inCrisis,
+  distressed,
+  restructureOps,
   canRescue,
   weakest,
   operatingMargin,

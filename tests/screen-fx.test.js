@@ -63,7 +63,7 @@ test('the first page of the verdict has the weather of its ending, and the other
   assert.equal(screenFx.verdictPlan(app(excellent, { sim: true })).ambient.kind, 'confetti');
   assert.equal(screenFx.verdictPlan(app(excellent, { sim: true, page: 1 })), null, 'the report page is calm');
   assert.equal(screenFx.verdictPlan(app(excellent, { sim: true, page: 2 })), null);
-  const ruin = showcase.showcaseRun(6);
+  const ruin = showcase.showcaseRun(showcase.SHOWCASE.findIndex((entry) => entry.outcome === 'bankrupt'));
   assert.equal(ruin.outcome, 'bankrupt');
   const plan = screenFx.verdictPlan(app(ruin, { sim: true }));
   assert.equal(plan.ambient.kind, 'embers');
@@ -73,7 +73,7 @@ test('the first page of the verdict has the weather of its ending, and the other
 });
 
 test('the scene is shaken by whichever plan is on screen, and only while its impact lasts', () => {
-  const ruin = showcase.showcaseRun(6);
+  const ruin = showcase.showcaseRun(showcase.SHOWCASE.findIndex((entry) => entry.outcome === 'bankrupt'));
   const moved = [0.02, 0.05, 0.08, 0.11].map((dt) => app(ruin, { sim: true, phaseT: fx.IMPACT_AT + dt }))
     .some((a) => { const s = screenFx.screenShake(a); return s.dx !== 0 || s.dy !== 0; });
   assert.ok(moved, 'ruin shakes the verdict');

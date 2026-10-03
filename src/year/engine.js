@@ -4,11 +4,13 @@
 // returns a new run and never modifies the one it receives.
 //
 // Phases: problem -> result -> (problem x4) -> monthClose -> (next month) ... -> final -> over.
-// A zero (OI or a meter) found at a result or a month close goes through 'rescue' once, up
-// to month 9; otherwise the company is bankrupt and the run jumps to 'final'.
+// The ladder: a meter found at zero (after an answer or at a close) is a blow to the P&L and goes through
+// 'shock' (the meter restarts at SHOCK_METER); at a close, OI at zero brings the one-time restructuring plan
+// ('rescue' in the code) up to month 9, and a gross profit that covers 70% of the SG&A or less at two
+// closes in a row is bankruptcy, which jumps to 'final'. Nothing else ends a company.
 //
 // A run may also be a half year: 6 months at double pace (`run.months`, `run.pace`), the same
-// year at double speed: the rescue then lasts until month 4.
+// year at double speed: the restructuring plan then lasts until month 4.
 
 const { applyOps, operatingMargin } = require('../model');
 const rules = require('./rules');
@@ -42,6 +44,10 @@ const newYear = (seed = null, months = MONTHS) => ({
   rescued: false,
   rescueMonth: null,
   rescues: [],
+  shock: null,
+  shocks: [],
+  distress: 0,
+  redLines: 0,
   bankruptMonth: null,
   bankruptCause: null,
   pending: [],
@@ -50,7 +56,6 @@ const newYear = (seed = null, months = MONTHS) => ({
   last: null,
   lastClose: null,
   resume: null,
-  zero: false,
   outcome: null,
   attempt: 1,
 });
@@ -92,6 +97,7 @@ function choose(run, index) {
     delta: { oi: operatingMargin(pl) - oiOf(run), C: meters.C - run.meters.C, P: meters.P - run.meters.P, E: meters.E - run.meters.E },
     notes: effect.notes,
     delayed: effect.delayed,
+    redLine: option.redLine,
   };
   const pending = effect.delayed
     ? [...run.pending, { dueMonth: Math.min(run.monthIdx + delayMonths(run.pace), run.months - 1), meters: effect.delayed, because: problem.id }]
@@ -105,7 +111,8 @@ function choose(run, index) {
     pending,
     history: [...run.history, entry],
     last: entry,
-    zero: rules.isZero(operatingMargin(pl), meters),
+    redLines: run.redLines + (option.redLine ? 1 : 0),
+    shock: rules.zeroMeter(meters),
   };
 }
 
@@ -132,46 +139,69 @@ function closeMonth(run) {
     pending: run.pending.filter((p) => p.dueMonth > run.monthIdx),
     closes: [...run.closes, close],
     lastClose: close,
-    zero: rules.isZero(operatingMargin(pl), meters),
+    shock: rules.zeroMeter(meters),
   };
 }
 
+// The gross profit no longer covers the SG&A: the company is gone. The P&L says so, not a meter.
 const bankrupt = (run) => ({
   ...run,
   phase: 'final',
   outcome: 'bankrupt',
   bankruptMonth: run.monthIdx + 1,
-  bankruptCause: rules.zeroCause(oiOf(run), run.meters),
-  zero: false,
+  bankruptCause: 'pl',
 });
 
 const finish = (run) => ({
   ...run,
   phase: 'final',
-  outcome: rules.classify(oiOf(run), run.meters, run.rescued),
+  outcome: rules.classify(oiOf(run), run.meters, run.rescued, run.redLines),
 });
 
-// A zero: rescue once (up to month 9, month 4 in a half year) or go bankrupt.
-function handleZero(run, resume) {
-  const month = run.monthIdx + 1;
-  if (!rules.canRescue(month, run.rescued, run.pace)) return bankrupt(run);
-  const rescued = rules.rescueState(run.meters);
+// A meter at zero: the P&L takes the blow of that meter and the meter restarts. `resume` says where play
+// goes next ('result': the rest of the month, 'close': the judgement of the close, 'after': the next month).
+function applyShock(run, resume) {
+  const meter = run.shock;
+  const plBefore = run.pl;
+  const pl = applyOps(plBefore, rules.shockOps(meter, run.shocks.filter((blow) => blow.meter === meter).length));
+  const meters = { ...run.meters, [meter]: rules.SHOCK_METER };
+  return {
+    ...run,
+    phase: 'shock',
+    pl,
+    meters,
+    shock: rules.zeroMeter(meters),
+    resume,
+    shocks: [...run.shocks, { monthIdx: run.monthIdx, meter, plBefore, oiBefore: operatingMargin(plBefore), oiAfter: operatingMargin(pl) }],
+  };
+}
+
+// The board's restructuring plan, once (up to month 9, month 4 in a half year): the SG&A and the cost are cut and
+// every meter feels the disruption. The P&L it found stays; nothing is injected.
+function restructure(run) {
+  const plBefore = run.pl;
+  const pl = applyOps(plBefore, rules.restructureOps(plBefore));
+  const meters = addMeters(run.meters, Object.fromEntries(rules.METER_KEYS.map((key) => [key, -rules.RESTRUCTURING.meters])));
   return {
     ...run,
     phase: 'rescue',
-    pl: rescued.pl,
-    meters: rescued.meters,
+    pl,
+    meters,
     rescued: true,
-    rescueMonth: month,
-    rescues: [...run.rescues, {
-      monthIdx: run.monthIdx,
-      cause: rules.zeroCause(oiOf(run), run.meters),
-      oiBefore: oiOf(run),
-      oiAfter: operatingMargin(rescued.pl),
-    }],
-    resume,
-    zero: false,
+    rescueMonth: run.monthIdx + 1,
+    rescues: [...run.rescues, { monthIdx: run.monthIdx, cause: 'oi', oiBefore: operatingMargin(plBefore), oiAfter: operatingMargin(pl) }],
+    shock: rules.zeroMeter(meters),
+    resume: 'close',
   };
+}
+
+// The judgement of a month close, once any blow has landed: bankruptcy, the plan, or the next month.
+function judge(run) {
+  const distress = rules.distressed(run.pl) ? run.distress + 1 : 0;
+  const judged = { ...run, distress };
+  if (distress >= rules.BANKRUPT_CLOSES) return bankrupt(judged);
+  if (rules.inCrisis(oiOf(judged)) && rules.canRescue(run.monthIdx + 1, run.rescued, run.pace)) return restructure(judged);
+  return afterClose(judged);
 }
 
 const nextProblem = (run) => ({ ...run, phase: 'problem', problemIdx: run.problemIdx + 1 });
@@ -189,11 +219,14 @@ const afterClose = (run) => {
 function next(run) {
   switch (run.phase) {
     case 'result':
-      return run.zero ? handleZero(run, 'result') : afterResult(run);
+      return run.shock ? applyShock(run, 'result') : afterResult(run);
     case 'monthClose':
-      return run.zero ? handleZero(run, 'close') : afterClose(run);
+      return run.shock ? applyShock(run, 'close') : judge(run);
+    case 'shock':
+      if (run.shock) return applyShock(run, run.resume);
+      return run.resume === 'result' ? afterResult(run) : run.resume === 'close' ? judge(run) : afterClose(run);
     case 'rescue':
-      return run.resume === 'result' ? afterResult(run) : afterClose(run);
+      return run.shock ? applyShock(run, 'after') : afterClose(run);
     case 'final':
       return { ...run, phase: 'over' };
     default:

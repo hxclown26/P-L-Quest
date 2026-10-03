@@ -94,20 +94,72 @@ test('a company that went through a rescue plan can never beat "fair"', () => {
   assert.equal(rules.classify(9, { C: 60, P: 60, E: 60 }, true), 'bad');
 });
 
-test('zero means OI or any meter at or below zero', () => {
-  assert.equal(rules.isZero(0, { C: 50, P: 50, E: 50 }), true);
-  assert.equal(rules.isZero(-1, { C: 50, P: 50, E: 50 }), true);
-  assert.equal(rules.isZero(5, { C: 0, P: 50, E: 50 }), true);
-  assert.equal(rules.isZero(5, { C: 1, P: 1, E: 1 }), false);
+test('a red line caps the year at "bad", whatever the numbers say', () => {
+  const healthy = { C: 90, P: 90, E: 90 };
+  assert.equal(rules.classify(25, healthy, false, 0), 'excellent');
+  assert.equal(rules.classify(25, healthy, false, 1), 'bad');
+  assert.equal(rules.classify(25, healthy, false, 3), 'bad');
+  assert.equal(rules.classify(9, healthy, true, 1), 'bad');
+  assert.equal(rules.classify(5, healthy, false, 1), 'terrible', 'a worse year stays worse');
 });
 
-test('a rescue resets to a fragile but alive company', () => {
-  const rescued = rules.rescueState({ C: 0, P: 55, E: 20 });
-  near(model.operatingIncome(rescued.pl), 2);
-  assert.deepEqual(rescued.meters, { C: 38, P: 55, E: 38 });
+// ---- the ladder: alert, crisis, bankruptcy; and what a meter at zero costs
+test('a meter at zero is the first one found at or below zero, in the order client, plant, strategy', () => {
+  assert.equal(rules.zeroMeter({ C: 50, P: 50, E: 50 }), null);
+  assert.equal(rules.zeroMeter({ C: 1, P: 1, E: 1 }), null);
+  assert.equal(rules.zeroMeter({ C: 0, P: 50, E: 50 }), 'C');
+  assert.equal(rules.zeroMeter({ C: 5, P: 0, E: -1 }), 'P');
+  assert.equal(rules.zeroMeter({ C: 5, P: 9, E: 0 }), 'E');
 });
 
-test('a rescue is possible once, up to month 9', () => {
+test('every meter has its own blow on the P&L, and the meter that took it restarts above the drag line', () => {
+  assert.ok(rules.SHOCK_METER >= rules.CRISIS && rules.SHOCK_METER <= rules.DRAG_BELOW);
+  const after = (key) => model.applyOps(model.BASE_PL, rules.SHOCKS[key].ops);
+  near(model.salesGrowth(after('C')), rules.SHOCKS.C.ops[0].pct, 1e-6);
+  assert.ok(rules.SHOCKS.C.ops[0].pct < 0, 'the client that leaves takes volume with him');
+  assert.ok(model.operatingIncome(after('P')) < model.operatingIncome(model.BASE_PL), 'a stopped plant loses orders and spends in emergencies');
+  assert.ok(model.salesGrowth(after('E')) < 0, 'a market that stops respecting you pays less');
+  for (const key of rules.METER_KEYS) {
+    const loss = model.operatingMargin(model.BASE_PL) - model.operatingMargin(after(key));
+    assert.ok(loss >= 3 && loss <= 8, `${key}: the blow is ${loss.toFixed(1)} points of margin: heavy but not the end`);
+  }
+});
+
+test('the blow of a meter that already hit zero is smaller: the next client is a smaller one', () => {
+  const first = model.applyOps(model.BASE_PL, rules.shockOps('C', 0));
+  const second = model.applyOps(model.BASE_PL, rules.shockOps('C', 1));
+  const third = model.applyOps(model.BASE_PL, rules.shockOps('C', 2));
+  assert.deepEqual(rules.shockOps('C', 0), rules.SHOCKS.C.ops);
+  near(model.salesGrowth(second), rules.SHOCKS.C.ops[0].pct * rules.SHOCK_FADE, 1e-6);
+  assert.ok(model.operatingMargin(first) < model.operatingMargin(second));
+  assert.ok(model.operatingMargin(second) < model.operatingMargin(third));
+  assert.ok(model.operatingMargin(third) < model.operatingMargin(model.BASE_PL), 'but it never becomes nothing');
+  assert.ok(rules.SHOCK_FADE > 0 && rules.SHOCK_FADE < 1);
+});
+
+test('the OI is in crisis at zero or less, and the unit is in distress when the gross profit covers 70% of the SG&A or less', () => {
+  assert.equal(rules.inCrisis(0), true);
+  assert.equal(rules.inCrisis(-3), true);
+  assert.equal(rules.inCrisis(0.1), false);
+  assert.equal(rules.BANKRUPT_COVERAGE, 0.7);
+  assert.equal(rules.BANKRUPT_CLOSES, 2);
+  assert.equal(rules.distressed(model.BASE_PL), false);
+  // gross profit 11.2 against SG&A 16 is exactly 70%: with a gross margin near 10% the SG&A eats it all
+  assert.equal(rules.distressed({ ...model.BASE_PL, cost: 55 + 19.8 }), true);
+  assert.equal(rules.distressed({ ...model.BASE_PL, cost: 55 + 19 }), false);
+});
+
+test('a restructuring plan cuts the SG&A and the cost and shakes every meter, and it keeps the P&L it found', () => {
+  const plan = rules.restructureOps(model.BASE_PL);
+  const after = model.applyOps(model.BASE_PL, plan);
+  near(after.sga, 16 * (1 - rules.RESTRUCTURING.sga));
+  near(after.cost, 55 * (1 - rules.RESTRUCTURING.cost));
+  near(after.sales, model.BASE_PL.sales);
+  assert.ok(rules.RESTRUCTURING.meters > 0);
+  assert.ok(model.operatingMargin(after) > model.operatingMargin(model.BASE_PL));
+});
+
+test('a restructuring plan is possible once, up to month 9', () => {
   assert.equal(rules.canRescue(5, false), true);
   assert.equal(rules.canRescue(9, false), true);
   assert.equal(rules.canRescue(10, false), false);

@@ -4,7 +4,6 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const engine = require('../src/year/engine');
 const rules = require('../src/year/rules');
-const model = require('../src/model');
 
 const near = (actual, expected, eps = 1e-6) =>
   assert.ok(Math.abs(actual - expected) < eps, `expected ${actual} to be near ${expected}`);
@@ -63,9 +62,9 @@ test('a smart answer moves OI and the meters as the rules say, and shows its res
   assert.equal(run.last.a, 'smart');
   near(run.last.delta.oi, (15.1 / 100.1) * 100 - 15);
   assert.equal(run.last.problemId, 'm01c');
-  // The balanced answer of month 1's renewal saves on incentives: the rebate ends up below the ask.
-  near(run.pl.incentives, 1.9);
-  near(run.pl.sales, 102);
+  // The balanced answer of month 1's renewal wins sales and pays a small rebate for them: two lines move, in two directions.
+  near(run.pl.sales, 102.2);
+  near(run.pl.incentives, 2.1);
 });
 
 test('each month has four problems, then the month closes with decay and meter effects', () => {
@@ -102,8 +101,8 @@ test('the measuring answer of month 1 sets the value-measured flag, which helps 
   assert.equal(run.flags.valueMeasured, false);
   run = choose(run, 'smart');
   assert.equal(run.flags.valueMeasured, true);
-  const flagged = at(5, 0, { flags: { valueMeasured: true } });
-  const plain = at(5, 0);
+  const flagged = at(4, 0, { flags: { valueMeasured: true } });
+  const plain = at(4, 0);
   near(engine.preview(flagged, pick(flagged, 'smart')).oi - engine.preview(plain, pick(plain, 'smart')).oi, 0.2 * 1, 1e-9);
   assert.ok(engine.choose(flagged, pick(flagged, 'smart')).last.delta.oi > engine.choose(plain, pick(plain, 'smart')).last.delta.oi);
 });
@@ -120,59 +119,6 @@ test('a shortcut bills half of its meter damage now and half two months later', 
   }
   assert.ok(r.closes[2].delayedApplied.some((d) => d.because === 'm01c'));
   assert.equal(r.pending.length, 0);
-});
-
-test('hitting zero before month 10 triggers a one-time rescue plan, then play resumes', () => {
-  const shaky = at(3, 0, { pl: model.applyOp(model.BASE_PL, { op: 'oi', line: 'sales', pts: -14.8 }) });
-  near(engine.oiOf(shaky), (0.2 / 85.2) * 100);
-  let run = choose(shaky, 'ign');
-  assert.equal(run.zero, true);
-  run = engine.next(run);
-  assert.equal(run.phase, 'rescue');
-  assert.equal(run.rescued, true);
-  assert.equal(run.rescueMonth, 4);
-  near(engine.oiOf(run), 2);
-  assert.ok(Object.values(run.meters).every((m) => m >= 38));
-  run = engine.next(run);
-  assert.equal(run.phase, 'problem');
-  assert.equal(run.problemIdx, 1);
-  assert.equal(run.monthIdx, 3);
-});
-
-test('a meter at zero also triggers the rescue', () => {
-  const run = at(1, 0, { meters: { C: 1, P: 60, E: 60 } });
-  const chosen = choose(run, 'ign');
-  assert.equal(chosen.zero, true);
-  assert.equal(engine.next(chosen).phase, 'rescue');
-});
-
-test('a second zero is bankruptcy', () => {
-  const shaky = at(6, 0, {
-    rescued: true,
-    rescueMonth: 3,
-    pl: model.applyOp(model.BASE_PL, { op: 'oi', line: 'sales', pts: -14.8 }),
-  });
-  const run = engine.next(choose(shaky, 'ign'));
-  assert.equal(run.phase, 'final');
-  assert.equal(run.outcome, 'bankrupt');
-  assert.equal(run.bankruptMonth, 7);
-});
-
-test('a zero from month 10 on is bankruptcy straight away', () => {
-  const shaky = at(9, 0, { pl: model.applyOp(model.BASE_PL, { op: 'oi', line: 'sales', pts: -14.8 }) });
-  const run = engine.next(choose(shaky, 'ign'));
-  assert.equal(run.phase, 'final');
-  assert.equal(run.outcome, 'bankrupt');
-});
-
-test('a zero found at month end also rescues and then moves on to the next month', () => {
-  const closing = { ...at(4, 3), phase: 'monthClose', zero: true };
-  const rescue = engine.next(closing);
-  assert.equal(rescue.phase, 'rescue');
-  const resumed = engine.next(rescue);
-  assert.equal(resumed.phase, 'problem');
-  assert.equal(resumed.monthIdx, 5);
-  assert.equal(resumed.problemIdx, 0);
 });
 
 test('finishing month 12 reaches the final phase with a graded outcome, then game over', () => {
@@ -350,13 +296,3 @@ test('at double pace the month end wears the meters 3.6 and a shortcut bills its
   assert.ok(later.lastClose.delayedApplied.some((d) => d.because === 'm01c'));
 });
 
-test('a half year can rescue a zero up to month 4; later it is bankruptcy', () => {
-  const thin = model.applyOp(model.BASE_PL, { op: 'oi', line: 'sales', pts: -14.8 });
-  const early = engine.next(choose(atHalf(3, 0, { pl: thin }), 'ign'));
-  assert.equal(early.phase, 'rescue');
-  assert.equal(early.rescueMonth, 4);
-  const late = engine.next(choose(atHalf(4, 0, { pl: thin }), 'ign'));
-  assert.equal(late.phase, 'final');
-  assert.equal(late.outcome, 'bankrupt');
-  assert.equal(late.bankruptMonth, 5);
-});

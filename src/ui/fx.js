@@ -42,19 +42,34 @@ function tierOf(oi, meters, pace = 1) {
 
 const moodOf = (oi) => (oi > NEGLIGIBLE ? 'good' : oi < -NEGLIGIBLE ? 'bad' : 'neutral');
 
+// How an answer to a problem feels: a win only when the OI and the meter the problem is about both improve, a loss when
+// both worsen. A shortcut (OI up, meter down) and giving in (OI down, meter up) are mixed: the effects neither celebrate
+// nor punish them, so the sparks never reward the answer that spends the future.
+function moodOfResult(oi, meter) {
+  if (oi > NEGLIGIBLE && meter > METER_NEGLIGIBLE) return 'good';
+  if (oi < -NEGLIGIBLE && meter < -METER_NEGLIGIBLE) return 'bad';
+  return 'neutral';
+}
+
+const TIERS = Object.freeze(['small', 'medium', 'large']);
+const raised = (tier) => TIERS[Math.min(TIERS.indexOf(tier) + 1, TIERS.length - 1)];
+
 // How the voice of a problem feels: by what happened to the meter it is about, not to the OI, so the
 // client does not smile after a shortcut that lifted the OI and hurt him.
 const moodOfMeter = (delta) => (delta > METER_NEGLIGIBLE ? 'good' : delta < -METER_NEGLIGIBLE ? 'bad' : 'neutral');
 
 // What a result adds to the screen: its grade and mood, the shake (trauma 0 to 1), at most one flash
-// and at most one burst of particles. `delta` is the entry of the run: { oi, C, P, E }.
-function resultFeedback(delta, { pace = 1, calm = false, seed = 0, mood: given = null } = {}) {
-  const tier = tierOf(delta.oi, [delta.C, delta.P, delta.E], pace);
-  const mood = given || moodOf(delta.oi);
+// and at most one burst of particles. `delta` is the entry of the run: { oi, C, P, E }. With `focus` (the meter the
+// problem is about) the mood needs the OI and that meter to agree; without it (a month close) the OI alone decides.
+function resultFeedback(delta, { pace = 1, calm = false, seed = 0, mood: given = null, focus = null } = {}) {
+  const mood = given || (focus ? moodOfResult(delta.oi, delta[focus]) : moodOf(delta.oi));
+  const size = tierOf(delta.oi, [delta.C, delta.P, delta.E], pace);
+  // A double win is worth more than its size: the balanced answer is the one the sparks celebrate.
+  const tier = focus && mood === 'good' ? raised(size) : size;
   if (calm) return { tier, mood, trauma: 0, flash: null, burst: null };
   const preset = PRESETS[tier];
   const decided = mood !== 'neutral';
-  const count = mood === 'neutral' ? Math.floor(preset.particles / 2) : preset.particles;
+  const count = !decided && focus ? 0 : mood === 'neutral' ? Math.floor(preset.particles / 2) : preset.particles;
   return {
     tier,
     mood,
@@ -217,6 +232,7 @@ module.exports = {
   PRESETS,
   tierOf,
   moodOf,
+  moodOfResult,
   moodOfMeter,
   resultFeedback,
   shakeOffset,

@@ -24,14 +24,16 @@ function requiredKeys() {
   for (const v of ['cliente', 'planta', 'entorno', 'estrategia']) keys.push(`year.voice.${v}`);
   for (const m of ['C', 'P', 'E']) keys.push(`year.meterTag.${m}`, `year.meterName.${m}`, `year.fb.tip.${m}`, `year.fb.cause.${m}`);
   keys.push('year.fb.cause.oi', 'year.fb.tip.keep');
-  for (const a of ['smart', 'temp', 'plac', 'ign']) keys.push(`year.tag.${a}`, `year.why.${a}`);
-  for (const n of ['crisis', 'recovery', 'value', 'measured']) keys.push(`year.note.${n}`);
+  for (const a of ['smart', 'temp', 'plac', 'ign']) keys.push(`year.tag.${a}`);
+  for (const n of ['crisis', 'recovery', 'value', 'measured', 'redLine']) keys.push(`year.note.${n}`);
   for (const n of [1, 2, 3]) keys.push(`year.rescue.body${n}`);
   keys.push('year.rescue.title', 'year.rescue.cause', 'year.res.chose', 'year.verdict.oi', 'year.walk.title');
   keys.push('year.walk.plan', 'year.walk.real', 'year.verdict.plan');
   for (const o of rules.OUTCOMES) keys.push(`year.verdict.${o}`, `year.fb.sum.${o}`);
   keys.push('year.fb.temp', 'year.fb.plac', 'year.fb.ign', 'year.fb.clean', 'year.fb.mixed');
   keys.push('year.fb.rescued.yes', 'year.fb.rescued.no', 'year.fb.value', 'year.fb.noValue');
+  keys.push('ui.btn.decide', 'year.kpi.growth', 'year.kpi.money', 'year.fb.growth.growthNoMargin', 'year.fb.growth.marginNoGrowth');
+  for (const shape of ['growthNoMargin', 'marginNoGrowth']) keys.push(`year.kpi.tag.${shape}`);
   keys.push('year.over.restart', 'year.over.count', 'year.rules.title');
   keys.push('ui.btn.quit', 'ui.btn.menu', 'ui.btn.report', 'ui.btn.feedback', 'year.quit.title', 'year.quit.body', 'year.quit.hint', 'year.fb.title');
   for (let n = 1; n <= 5; n += 1) keys.push(`year.rules.l${n}`);

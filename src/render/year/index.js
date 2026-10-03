@@ -3,7 +3,7 @@
 // Routes the year-mode scenes (and their overlays) to the modules that draw them.
 
 const { drawProblem, drawResult } = require('./problem');
-const { drawClose, drawRescue } = require('./close');
+const { drawClose, drawRescue, drawShock } = require('./close');
 const { drawVerdict, drawOver } = require('./verdict');
 const menus = require('./menus');
 const overlays = require('./overlays');
@@ -13,6 +13,7 @@ const PHASES = Object.freeze({
   problem: drawProblem,
   result: drawResult,
   monthClose: drawClose,
+  shock: drawShock,
   rescue: drawRescue,
   final: drawVerdict,
   over: drawOver,

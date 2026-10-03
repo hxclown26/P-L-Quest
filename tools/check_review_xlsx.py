@@ -29,23 +29,23 @@ def fill(path, seed=7):
     tally = Counter()
     for row in range(2, review.max_row + 1):
         verdict = rng.choices(VERDICTS, weights=[80, 8, 12])[0]
-        line = review.cell(row=row, column=7).value
+        line = review.cell(row=row, column=9).value
         other = rng.choice([l for l in LINES if l != line]) if rng.random() < 0.06 else None
         translation = "No" if rng.random() < 0.04 else "Sí"
-        review.cell(row=row, column=9, value=verdict)
-        review.cell(row=row, column=10, value=other)
-        review.cell(row=row, column=15, value=translation)
+        review.cell(row=row, column=12, value=verdict)
+        review.cell(row=row, column=13, value=other)
+        review.cell(row=row, column=20, value=translation)
         tally["total"] += 1
         tally[f"yes_{verdict}"] += 1
         tally["lines"] += other is not None
         tally["translations"] += translation == "No"
-        voice, kind = review.cell(row=row, column=3).value, review.cell(row=row, column=8).value
+        voice, kind = review.cell(row=row, column=3).value, review.cell(row=row, column=10).value
         tally[("voice", voice, verdict)] += 1
         tally[("type", kind, verdict)] += 1
     for row in range(2, problems.max_row + 1):
         scene, best = rng.choices(VERDICTS, weights=[85, 5, 10])[0], rng.choices(VERDICTS, weights=[85, 5, 10])[0]
-        problems.cell(row=row, column=7, value=scene)
-        problems.cell(row=row, column=8, value=best)
+        problems.cell(row=row, column=9, value=scene)
+        problems.cell(row=row, column=10, value=best)
         tally["scenes"] += scene == "No"
         tally["best"] += best == "No"
     book.save(path)

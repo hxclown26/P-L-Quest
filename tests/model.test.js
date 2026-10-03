@@ -156,3 +156,36 @@ test('delta reports the OI change as margin points next to the line amounts', ()
   near(d.sales, 10);
   near(d.oi, 25 / 110 * 100 - 15);
 });
+
+// ---- Demo 6: a deduction cannot be negative, volume knows how much service it drags, growth and coverage
+
+test('an improvement never takes a deduction below zero: the line stops at zero', () => {
+  const lean = model.applyOp(model.BASE_PL, { op: 'oi', line: 'incentives', pts: 5 });
+  assert.equal(lean.incentives, 0);
+  const trimmed = model.applyOp(model.BASE_PL, { op: 'add', line: 'direct', pts: -50 });
+  assert.equal(trimmed.direct, 0);
+  // sales are not a deduction, and a worsening still moves the line by what it says
+  near(model.applyOp(model.BASE_PL, { op: 'oi', line: 'sales', pts: -4 }).sales, 98);
+  near(model.applyOp(model.BASE_PL, { op: 'oi', line: 'cost', pts: -3 }).cost, 58);
+});
+
+test('volume can say how much of the freight and direct charges follows it', () => {
+  const light = model.applyOp(model.BASE_PL, { op: 'volume', pct: 10, share: 0.5 });
+  const heavy = model.applyOp(model.BASE_PL, { op: 'volume', pct: 10, share: 1 });
+  near(light.freight, 8 * 1.05);
+  near(heavy.freight, 8 * 1.1);
+  near(heavy.direct, 6 * 1.1);
+  near(model.applyOp(model.BASE_PL, { op: 'volume', pct: 10 }).freight, 8 * (1 + 0.1 * model.SERVE_VARIABLE_SHARE));
+  assert.throws(() => model.applyOp(model.BASE_PL, { op: 'volume', pct: 10, share: 1.5 }), /share/);
+  assert.throws(() => model.applyOp(model.BASE_PL, { op: 'volume', pct: 10, share: -0.1 }), /share/);
+});
+
+test('coverage is the gross profit over the SG&A, and sales growth is the sales against the plan', () => {
+  near(model.coverage(model.BASE_PL), 31 / 16);
+  near(model.coverage({ ...model.BASE_PL, cost: 80 }), 6 / 16);
+  assert.equal(model.coverage({ ...model.BASE_PL, sga: 0 }), Infinity);
+  near(model.salesGrowth(model.BASE_PL), 0);
+  near(model.salesGrowth({ ...model.BASE_PL, sales: 112 }), 10, 1e-9);
+  near(model.salesGrowth({ ...model.BASE_PL, sales: 97 }), -5, 1e-9);
+  near(model.salesGrowth({ ...model.BASE_PL, sales: 110, incentives: 10 }), 0, 1e-9);
+});

@@ -5,6 +5,7 @@
 module.exports = Object.freeze({
   ...require('./year.en'),
   ...require('./year-ui.en'),
+  ...require('./year-case.en'),
   ...require('./workshop.en'),
 
   // Interface
@@ -56,7 +57,7 @@ module.exports = Object.freeze({
   'ui.star1': '1: you survive',
   'ui.star2': '2: OI above the minimum ({n}%)',
   'ui.star3': '3: goal ({n}%) with Scan used',
-  'ui.intro1': 'You run a plant that sells to mining. Your life bar is OI: operating income as a % of net sales.',
+  'ui.intro1': 'You run a plant that sells to hotels, hospitals and industry. Your life bar is OI: operating income as a % of net sales.',
   'ui.intro2': "Each floor is a P&L line that wants to bite your margin. Play cards, measure the client's value and keep the plant standing.",
   'ui.oiBar': 'Projected OI',
   'ui.goalMark': 'goal {n}',
@@ -135,10 +136,10 @@ module.exports = Object.freeze({
   'boss.cost': 'THE COST',
   'boss.truck': 'THE TRUCK',
   'boss.fixed': 'FIXED COST',
-  'floor.1.t1': "The mine's annual order arrives. How do you enter the room?",
+  'floor.1.t1': "The big client's annual order arrives. How do you enter the room?",
   'floor.1.t2': 'The client wants more volume for less.',
   'floor.1.t3': 'Last tweak before the order is signed.',
-  'floor.2.t1': 'The mine demands a 3% rebate to renew.',
+  'floor.2.t1': 'The big client demands a 3% rebate to renew.',
   'floor.2.t2': 'They push back: the competition offers more.',
   'floor.2.t3': 'They want to close today. The clock is ticking.',
   'floor.3.t1': 'The supplier raises input cost 8% and sale price will not move by itself.',

@@ -6,6 +6,7 @@
 
 const { operatingMargin } = require('../model');
 const rules = require('./rules');
+const { kpis, shapeOf } = require('./kpis');
 const { AUTHORING, PROBLEMS } = require('./problems');
 
 const WALK_LINES = Object.freeze(['sales', 'incentives', 'cost', 'freight', 'direct', 'sga']);
@@ -32,11 +33,12 @@ function walk(run) {
 const countAnswers = (run) =>
   Object.fromEntries(AUTHORING.map((a) => [a, run.history.filter((h) => h.a === a).length]));
 
-// The shortcut whose hidden bill (meter damage, now and later) was the biggest.
+// The shortcut whose hidden bill (meter damage, now and later) was the biggest. A red line is not a shortcut: it has
+// no hidden bill (its fine is paid at once) and it is told apart.
 function costliestShortcut(run) {
   const bill = (h) => -sum(rules.METER_KEYS.map((k) => Math.min(0, h.delta[k]) + Math.min(0, h.delayed ? h.delayed[k] : 0)));
   return run.history
-    .filter((h) => h.a === 'temp')
+    .filter((h) => h.a === 'temp' && !h.redLine)
     .reduce((worst, h) => (worst === null || bill(h) > bill(worst) ? h : worst), null);
 }
 
@@ -48,6 +50,7 @@ function patternLine(run, counts) {
   if (counts[dominant] < PATTERN_MIN) return { key: 'year.fb.mixed', params: { n: counts.smart } };
   if (dominant === 'temp') {
     const worst = costliestShortcut(run);
+    if (worst === null) return { key: 'year.fb.mixed', params: { n: counts.smart } };
     return {
       key: 'year.fb.temp',
       params: { n: counts.temp, problem: worst.problemId, month: worst.monthIdx + 1, oiGain: worst.delta.oi, meter: focusOf(worst.problemId) },
@@ -63,6 +66,15 @@ function patternLine(run, counts) {
 function tipLine(run, weakestKey) {
   if (run.meters[weakestKey] < TIP_BELOW) return { key: `year.fb.tip.${weakestKey}`, params: {} };
   return { key: 'year.fb.tip.keep', params: {} };
+}
+
+// A year that grew without earning, or kept its margin by shrinking, gets that lesson in place of the tip: it is the one a
+// CFO would underline.
+function lessonLine(run, weakestKey) {
+  const shape = shapeOf(run.pl);
+  if (shape === null) return tipLine(run, weakestKey);
+  const real = kpis(run.pl);
+  return { key: `year.fb.growth.${shape}`, params: { growth: real.growth, money: real.oiMoney, oi: real.margin } };
 }
 
 function extraLine(run, oi) {
@@ -83,7 +95,7 @@ function feedback(run) {
   return {
     outcome: run.outcome,
     counts,
-    lines: [summary, patternLine(run, counts), tipLine(run, weakestKey), extraLine(run, oi)],
+    lines: [summary, patternLine(run, counts), lessonLine(run, weakestKey), extraLine(run, oi)],
   };
 }
 
