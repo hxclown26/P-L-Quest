@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>P&amp;L Quest - Demo 7 (avance S0)</title>
+<title>P&amp;L Quest - Demo 7 (avance)</title>
 <style>
 html,
 body {
@@ -1784,6 +1784,7 @@ module.exports = Object.freeze({
 
   // Screen furniture
   'year.stage': 'Month {m} - {p}/4',
+  'year.trend': 'OI/mo',
   'year.voice.cliente': 'CLIENT',
   'year.voice.planta': 'PLANT',
   'year.voice.entorno': 'ENVIRON.',
@@ -1977,6 +1978,7 @@ module.exports = Object.freeze({
 
   // Screen furniture
   'year.stage': 'Mes {m} - {p}/4',
+  'year.trend': 'OI/mes',
   'year.voice.cliente': 'CLIENTE',
   'year.voice.planta': 'PLANTA',
   'year.voice.entorno': 'ENTORNO',
@@ -2915,8 +2917,12 @@ const { GAME_CODES } = __r("rng");
 const { createAudio } = __r("audio");
 const { drawFrame } = __r("render/index");
 const surface = __r("render/hd/surface");
+const quality = __r("render/hd/quality");
+const type = __r("render/hd/type");
 
 const MAX_DT = 0.1;
+// The first frames are slow for reasons that pass (the strips of letters are built, the code warms up): they are not counted.
+const WARM_FRAMES = 30;
 
 // Reading window.localStorage can itself throw (blocked cookies, some file:// setups).
 function safeStorage() {
@@ -3050,13 +3056,28 @@ function bindInput(canvas, runtime) {
   window.addEventListener('resize', () => fitCanvas(canvas));
 }
 
-function startLoop(ctx, runtime) {
+function startLoop(canvas, ctx, runtime) {
   let last = performance.now();
+  let frames = 0;
+  let history = [];
   const frame = (now) => {
-    const dt = Math.min(MAX_DT, (now - last) / 1000);
+    const interval = now - last;
+    const dt = Math.min(MAX_DT, interval / 1000);
     last = now;
     runtime.dispatch({ type: 'tick', dt });
     drawFrame(ctx, runtime.current());
+    frames += 1;
+    if (frames > WARM_FRAMES) {
+      history = quality.record(history, interval);
+      const wanted = quality.next(surface.quality(), history);
+      if (wanted !== surface.quality()) {
+        // A machine that cannot keep up gives up half of the resolution for good.
+        surface.setQuality(wanted);
+        type.reset();
+        fitCanvas(canvas);
+        history = [];
+      }
+    }
     requestAnimationFrame(frame);
   };
   requestAnimationFrame(frame);
@@ -3069,7 +3090,7 @@ function start() {
   const runtime = createRuntime(storage.load(), audio, storage);
   bindInput(canvas, runtime);
   fitCanvas(canvas);
-  startLoop(canvas.getContext('2d'), runtime);
+  startLoop(canvas, canvas.getContext('2d'), runtime);
 }
 
 start();
@@ -3498,9 +3519,18 @@ function line(ctx, x0, y0, x1, y1, color) {
   }
 }
 
-const hexToRgb = (hex) => {
-  const n = parseInt(hex.slice(1), 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+// A colour as [r, g, b]: a hex colour, or the rgb() colour that mix gives back, so mixes can be mixed again. Anything else is refused: a
+// colour that cannot be read would otherwise be drawn as whatever the canvas had before.
+const HEX = /^#[0-9a-f]{6}$/i;
+const RGB = /^rgb\((\d+),(\d+),(\d+)\)$/;
+const hexToRgb = (color) => {
+  if (HEX.test(color)) {
+    const n = parseInt(color.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+  const found = RGB.exec(color);
+  if (found) return [Number(found[1]), Number(found[2]), Number(found[3])];
+  throw new Error(`not a colour this module can read: ${color}`);
 };
 
 const mixCache = new Map();
@@ -3515,13 +3545,15 @@ function mix(a, b, t) {
   return mixCache.get(key);
 }
 
-// A colour with transparency, for gradients and soft light: tint(hex, 0.4) is the colour at 40 %.
+// A colour with transparency, for gradients and soft light: tint(hex, 0.4) is the colour at 40 %. The alpha is kept to two decimals,
+// so a light that fades smoothly asks for at most 101 strings per colour, however long the game runs.
 const tintCache = new Map();
 function tint(hex, alpha) {
-  const key = `${hex}|${alpha}`;
+  const a = Math.round(Math.min(1, Math.max(0, alpha)) * 100) / 100;
+  const key = `${hex}|${a}`;
   if (!tintCache.has(key)) {
     const [r, g, b] = hexToRgb(hex);
-    tintCache.set(key, `rgba(${r},${g},${b},${alpha})`);
+    tintCache.set(key, `rgba(${r},${g},${b},${a})`);
   }
   return tintCache.get(key);
 }
@@ -4123,6 +4155,23 @@ function beam(ctx, from, to, color, a) {
   });
 }
 
+// A wedge of light from (x, y) towards `angle` (radians, 0 is to the right, positive turns down), `length` long and `spread` radians either side of
+// its axis; the beam of a lighthouse or a spotlight that turns.
+function ray(ctx, x, y, angle, length, spread, color, alpha) {
+  additive(ctx, () => {
+    const gradient = ctx.createLinearGradient(x, y, x + Math.cos(angle) * length, y + Math.sin(angle) * length);
+    gradient.addColorStop(0, tint(color, alpha));
+    gradient.addColorStop(1, tint(color, 0));
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + Math.cos(angle - spread) * length, y + Math.sin(angle - spread) * length);
+    ctx.lineTo(x + Math.cos(angle + spread) * length, y + Math.sin(angle + spread) * length);
+    ctx.closePath();
+    ctx.fill();
+  });
+}
+
 // The corners of the picture fall into the dark, which is where the eye is not asked to look.
 function vignette(ctx, w, h, a) {
   const gradient = ctx.createRadialGradient(w / 2, h / 2, h * 0.45, w / 2, h / 2, w * 0.62);
@@ -4171,7 +4220,7 @@ function drawMotes(ctx, list, color) {
   });
 }
 
-module.exports = { glow, beam, vignette, haze, motes, drawMotes };
+module.exports = { glow, beam, ray, vignette, haze, motes, drawMotes, unit };
 
 });
 __d("render/hd/outline", function (module, exports, __r) {
@@ -4356,6 +4405,38 @@ function bar(ctx, x, y, w, h, fraction, color) {
   ctx.globalCompositeOperation = before;
 }
 
+// A small history chart: the plan as a dotted line, one point for each month that has closed joined by a line, and the current month marked
+// at its place. `slots` is how many months the year has; `min` and `max` are the values at the bottom and the top of the box.
+function sparkline(ctx, { x, y, w, h }, { values, slots, plan, min = 0, max, now, color }) {
+  const at = (i, value) => ({ x: x + ((i + 0.5) * w) / slots, y: y + h - ((Math.min(Math.max(value, min), max) - min) / (max - min)) * h });
+  ctx.fillStyle = tint(P.hd.glassEdge, 0.25);
+  ctx.fillRect(x, y + h, w, 0.5);
+  const dotted = at(0, plan).y;
+  for (let dx = 0; dx < w; dx += 4) {
+    ctx.fillStyle = tint(P.hd.glassSelect, 0.55);
+    ctx.fillRect(x + dx, dotted, 2, 0.5);
+  }
+  if (values.length > 0) {
+    ctx.strokeStyle = tint(P.white, 0.8);
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    values.forEach((value, i) => {
+      const p = at(i, value);
+      if (i === 0) ctx.moveTo(p.x, p.y);
+      else ctx.lineTo(p.x, p.y);
+    });
+    ctx.stroke();
+    values.forEach((value, i) => {
+      const p = at(i, value);
+      ctx.fillStyle = P.white;
+      ctx.fillRect(p.x - 0.8, p.y - 0.8, 1.6, 1.6);
+    });
+  }
+  const current = at(values.length, now);
+  ctx.fillStyle = color;
+  ctx.fillRect(current.x - 1.4, current.y - 1.4, 2.8, 2.8);
+}
+
 // The box of a label over a scene: dark glass with a tab of the label's own colour at its left.
 function chipBox(ctx, x, y, w, color, { h = 10 } = {}) {
   ctx.save();
@@ -4367,7 +4448,7 @@ function chipBox(ctx, x, y, w, color, { h = 10 } = {}) {
   ctx.restore();
 }
 
-module.exports = { glass, rule, vrule, bar, chipBox, roundPath };
+module.exports = { glass, rule, vrule, bar, sparkline, chipBox, roundPath };
 
 });
 __d("render/hd/pixels", function (module, exports, __r) {
@@ -4428,6 +4509,7 @@ function stroke(g, x0, y0, x1, y1, material) {
 // on its bottom or right, the shadow tone in the opposite case, and the base tone elsewhere.
 function shade(g, materials, { bevel = 1, outline = P.ink } = {}) {
   const px = new Array(g.w * g.h).fill(null);
+  const edge = new Array(g.w * g.h).fill(false);
   const at = (x, y) => (x >= 0 && y >= 0 && x < g.w && y < g.h ? g.cells[y * g.w + x] : null);
   for (let y = 0; y < g.h; y += 1) {
     for (let x = 0; x < g.w; x += 1) {
@@ -4445,11 +4527,31 @@ function shade(g, materials, { bevel = 1, outline = P.ink } = {}) {
         px[y * g.w + x] = ramp[lit < dark && lit < bevel ? 2 : dark < lit && dark < bevel ? 0 : 1];
       } else {
         const next = [at(x - 1, y), at(x + 1, y), at(x, y - 1), at(x, y + 1)].find(Boolean);
-        if (next) px[y * g.w + x] = typeof outline === 'function' ? outline(next) : outline;
+        if (next) {
+          px[y * g.w + x] = typeof outline === 'function' ? outline(next) : outline;
+          edge[y * g.w + x] = true;
+        }
       }
     }
   }
-  return { w: g.w, h: g.h, px };
+  return { w: g.w, h: g.h, px, edge };
+}
+
+// The cells just inside the silhouette on each side: where a strong light from that side would catch the edge. A cell is on the
+// left rim when the one at its left is outline or empty, and on the right rim when the one at its right is.
+function rim(sprite) {
+  const open = (x, y) => x < 0 || y < 0 || x >= sprite.w || y >= sprite.h || sprite.px[y * sprite.w + x] === null || sprite.edge[y * sprite.w + x];
+  const left = [];
+  const right = [];
+  for (let y = 0; y < sprite.h; y += 1) {
+    for (let x = 0; x < sprite.w; x += 1) {
+      if (sprite.px[y * sprite.w + x] !== null && !sprite.edge[y * sprite.w + x]) {
+        if (open(x - 1, y)) left.push({ x, y });
+        if (open(x + 1, y)) right.push({ x, y });
+      }
+    }
+  }
+  return { left, right };
 }
 
 // ---- baking
@@ -4489,48 +4591,175 @@ function draw(ctx, sprite, x, y) {
   ctx.drawImage(sprite, x, y, sprite.lw, sprite.lh);
 }
 
-module.exports = { ellipse, box, poly, union, meet, minus, grid, fill, put, stroke, shade, bake, draw };
+module.exports = { ellipse, box, poly, union, meet, minus, grid, fill, put, stroke, shade, rim, bake, draw };
+
+});
+__d("render/hd/quality", function (module, exports, __r) {
+'use strict';
+
+// A slow machine must not make the game stutter. The game keeps the time between its last frames and, when most of them are slow, gives up half
+// of the resolution (lite quality) for good: going back up would make the picture jump between two sizes.
+
+const WINDOW = 45;
+const SLOW_MS = 32;
+const SLOW_SHARE = 0.6;
+// An interval this long is the tab having been in the background, not a slow frame.
+const PAUSE_MS = 250;
+
+// The history with one more interval: the last WINDOW of them, without pauses and without zeros.
+function record(history, interval) {
+  if (interval <= 0 || interval >= PAUSE_MS) return history;
+  return [...history, interval].slice(-WINDOW);
+}
+
+// The quality to draw at, given the one in use and the recent intervals.
+function next(current, history) {
+  if (current === 'lite' || history.length < WINDOW) return current;
+  const slow = history.filter((interval) => interval > SLOW_MS).length;
+  return slow / history.length >= SLOW_SHARE ? 'lite' : current;
+}
+
+module.exports = { WINDOW, SLOW_MS, SLOW_SHARE, PAUSE_MS, record, next };
 
 });
 __d("render/hd/scene", function (module, exports, __r) {
 'use strict';
 
-// The pictures behind the decision screens. A theme with its own HD scene draws it full-bleed; until the others are redone, their
-// old picture (116 by 42, from render/year/art) sits in a glass frame in the middle of the clear zone on a quiet backdrop.
+// The pictures behind the decision screens: every theme has an HD scene that fills the whole surface (render/hd/scenes). A theme without one (a test,
+// or a new theme in the making) gets a quiet night backdrop instead of failing.
 
 const layout = __r("ui/layout-hd");
 const P = __r("render/palette");
-const { drawArt, THEMES, ART_W, ART_H } = __r("render/year/art/index");
 const client = __r("render/hd/scenes/client");
+const plant = __r("render/hd/scenes/plant");
+const strategy = __r("render/hd/scenes/strategy");
+const economy = __r("render/hd/scenes/economy");
+const rain = __r("render/hd/scenes/rain");
+const snow = __r("render/hd/scenes/snow");
+const water = __r("render/hd/scenes/water");
+const politics = __r("render/hd/scenes/politics");
+const protest = __r("render/hd/scenes/protest");
+const truck = __r("render/hd/scenes/truck");
+const safety = __r("render/hd/scenes/safety");
+const alert = __r("render/hd/scenes/alert");
 const light = __r("render/hd/light");
-const panel = __r("render/hd/panel");
 
-const HD_SCENES = Object.freeze({ client: client.draw });
+const HD_SCENES = Object.freeze({ client, plant, strategy, economy, rain, snow, water, politics, protest, truck, safety, alert });
 const HD_THEMES = Object.freeze(Object.keys(HD_SCENES));
 
-function interim(ctx, theme, t, mood, { calm = false } = {}) {
-  const { W, H, FOCUS } = layout;
+function backdrop(ctx) {
+  const { W, H } = layout;
   const sky = ctx.createLinearGradient(0, 0, 0, H);
   sky.addColorStop(0, P.hd.night[0]);
   sky.addColorStop(1, P.hd.night[1]);
   ctx.fillStyle = sky;
   ctx.fillRect(-8, -8, W + 16, H + 16);
   light.glow(ctx, W / 2, H * 0.4, 230, P.hd.day[0], 0.2, { squash: 0.8 });
-  if (!THEMES.includes(theme)) return;
-  const x = FOCUS.x + Math.floor((FOCUS.w - ART_W) / 2);
-  const y = FOCUS.y + Math.floor((FOCUS.h - ART_H) / 2);
-  panel.glass(ctx, { x: x - 4, y: y - 4, w: ART_W + 8, h: ART_H + 8 }, { alpha: 0.9 });
-  drawArt(ctx, theme, x, y, calm ? 0 : t, mood);
   light.vignette(ctx, W, H, 0.5);
 }
 
 // Draws the scene of `theme` over the whole surface at time `t` in `mood`; `options` are { calm, quality }.
 function draw(ctx, theme, t, mood, options = {}) {
-  if (HD_SCENES[theme]) HD_SCENES[theme](ctx, t, mood, options);
-  else interim(ctx, theme, t, mood, options);
+  if (HD_SCENES[theme]) HD_SCENES[theme].draw(ctx, t, mood, options);
+  else backdrop(ctx);
 }
 
-module.exports = { draw, HD_THEMES };
+module.exports = { draw, HD_THEMES, HD_SCENES };
+
+});
+__d("render/hd/scenes/alert", function (module, exports, __r) {
+'use strict';
+
+// The alert of the rescue plan: a dark control room under a red beacon that turns, a big zero and an arrow that keeps falling. It is not a voice with
+// a mood: it sounds the same whatever the answer was, so the mood it is given changes nothing. A function of time only.
+
+const P = __r("render/palette");
+const layout = __r("ui/layout-hd");
+const { tint } = __r("render/draw");
+const light = __r("render/hd/light");
+const kit = __r("render/hd/scenes/kit");
+
+const R = P.ramp;
+const HD = P.hd;
+const { W } = layout;
+const { dim, fillRect } = kit;
+
+const FLOOR = 136;
+const BEACON = Object.freeze({ x: 252, y: 50 });
+const ZERO = Object.freeze({ x: 204, y: 108 });
+const ARROW = Object.freeze({ x: 300, y: 98 });
+const FOCAL = Object.freeze({ x: 252, y: 100 });
+
+function room(ctx) {
+  kit.gradient(ctx, -8, FLOOR + 4, [[0, dim(P.sky.alarm[1], 0.3)], [0.55, P.sky.alarm[1]], [1, P.sky.alarm[0]]]);
+  for (let y = 0; y < FLOOR; y += 4) fillRect(ctx, -8, y, W + 16, 0.5, tint(P.ink, 0.22));
+  for (let x = -20; x < W + 20; x += 60) fillRect(ctx, x, 0, 0.5, FLOOR, tint(HD.alarm, 0.08));
+  kit.gradient(ctx, FLOOR, 270, [[0, dim(R.floor[0], 0.2)], [1, dim(R.floor[0], 0.8)]]);
+  fillRect(ctx, -8, FLOOR, W + 16, 0.75, tint(HD.alarm, 0.5));
+}
+
+// The beacon: a metal base, a red dome and two beams that turn around it.
+function beacon(ctx, t, calm) {
+  const angle = calm ? 0.5 : t * 1.7;
+  fillRect(ctx, BEACON.x - 13, BEACON.y + 8, 26, 6, R.metal[0]);
+  fillRect(ctx, BEACON.x - 13, BEACON.y + 8, 26, 1.5, R.metal[2]);
+  kit.softDisc(ctx, BEACON.x, BEACON.y, 15, R.tie[1], 1);
+  kit.softDisc(ctx, BEACON.x - 3, BEACON.y - 3, 6, R.tie[2], 0.9);
+  [angle, angle + Math.PI].forEach((a) => light.ray(ctx, BEACON.x, BEACON.y, a, 210, 0.14, HD.alarm, 0.3));
+  light.glow(ctx, BEACON.x, BEACON.y, 70, HD.alarm, 0.5);
+  light.glow(ctx, BEACON.x, BEACON.y + 70, 120, HD.alarm, 0.12, { squash: 0.3 });
+}
+
+// A big zero: a thick ring in red with a glow.
+function zero(ctx, t, calm) {
+  const pulse = calm ? 1 : 0.85 + 0.15 * Math.sin(t * 2.2);
+  ctx.strokeStyle = tint(R.tie[1], 1);
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+  ctx.ellipse(ZERO.x, ZERO.y, 17, 25, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = tint(R.tie[2], 0.8);
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.ellipse(ZERO.x - 1, ZERO.y - 1, 14, 22, 0, Math.PI * 1.05, Math.PI * 1.7);
+  ctx.stroke();
+  light.glow(ctx, ZERO.x, ZERO.y, 60, HD.alarm, 0.4 * pulse);
+}
+
+// A big arrow that points down and keeps falling: it drops a few pixels and starts again.
+function arrow(ctx, t, calm) {
+  const drop = calm ? 0 : ((t * 0.9) % 1) * 9;
+  const x = ARROW.x;
+  const y = ARROW.y + drop;
+  ctx.fillStyle = R.tie[1];
+  ctx.beginPath();
+  ctx.moveTo(x, y + 26);
+  ctx.lineTo(x + 22, y);
+  ctx.lineTo(x + 8, y);
+  ctx.lineTo(x + 8, y - 28);
+  ctx.lineTo(x - 8, y - 28);
+  ctx.lineTo(x - 8, y);
+  ctx.lineTo(x - 22, y);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = P.ink;
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  fillRect(ctx, x - 8, y - 28, 3, 28, tint(R.tie[2], 0.55));
+  light.glow(ctx, x, y, 50, HD.alarm, 0.4);
+}
+
+function draw(ctx, t, mood = 'neutral', { calm = false, quality = 'full' } = {}) {
+  const time = calm ? 0 : t;
+  room(ctx);
+  zero(ctx, time, calm);
+  arrow(ctx, time, calm);
+  beacon(ctx, time, calm);
+  if (quality !== 'lite') light.drawMotes(ctx, light.motes(141, 22, time, { x: 120, y: 20, w: 260, h: 130 }), R.tie[2]);
+  kit.finish(ctx, time, 'neutral', { calm, quality, focal: FOCAL, hazeBox: { x: 0, y: FLOOR - 12, w: W, h: 30 } });
+}
+
+module.exports = { draw, FOCAL };
 
 });
 __d("render/hd/scenes/client-sprite", function (module, exports, __r) {
@@ -4627,27 +4856,7 @@ function build() {
   head(g);
   glasses(g);
   const sprite = pixels.shade(g, MATERIALS, { bevel: 1, outline: (m) => mix(MATERIALS[m][0], P.ink, 0.6) });
-  return { ...sprite, rim: rimCells(sprite) };
-}
-
-// The outline colours the shading may have used: any cell of one of them is the edge of the silhouette, not its body.
-const OUTLINES = new Set(Object.values(MATERIALS).map((ramp) => mix(ramp[0], P.ink, 0.6)));
-
-// The cells just inside the silhouette on each side: where a strong light from that side would catch the edge.
-function rimCells(sprite) {
-  const at = (x, y) => (x >= 0 && y >= 0 && x < sprite.w && y < sprite.h ? sprite.px[y * sprite.w + x] : null);
-  const edge = (x, y) => at(x, y) === null || OUTLINES.has(at(x, y));
-  const left = [];
-  const right = [];
-  for (let y = 0; y < sprite.h; y += 1) {
-    for (let x = 0; x < sprite.w; x += 1) {
-      if (at(x, y) !== null && !OUTLINES.has(at(x, y))) {
-        if (edge(x - 1, y)) left.push({ x, y });
-        if (edge(x + 1, y)) right.push({ x, y });
-      }
-    }
-  }
-  return { left, right };
+  return { ...sprite, rim: pixels.rim(sprite) };
 }
 
 module.exports = { build, FACE, HEAD_AT, W, H };
@@ -4662,14 +4871,13 @@ __d("render/hd/scenes/client", function (module, exports, __r) {
 // mood: lamp, sky, chart and face change. Everything is a function of the time and the mood; nothing is kept between frames.
 
 const P = __r("render/palette");
-const ui = __r("render/ui");
 const layout = __r("ui/layout-hd");
 const { tint, mix } = __r("render/draw");
 const light = __r("render/hd/light");
-const panel = __r("render/hd/panel");
 const pixels = __r("render/hd/pixels");
 const surface = __r("render/hd/surface");
 const client = __r("render/hd/scenes/client-sprite");
+const kit = __r("render/hd/scenes/kit");
 
 const R = P.ramp;
 const HD = P.hd;
@@ -4942,52 +5150,9 @@ function shelf(ctx) {
 
 // ---- soft light and mood
 
-function glows(ctx, t, mood) {
+function glows(ctx) {
   light.glow(ctx, LAPTOP.x + LAPTOP.w / 2, LAPTOP.y + 8, 52, HD.day[0], 0.3);
   light.glow(ctx, 232, DESK_Y + 4, 76, HD.day[1], 0.13, { squash: 0.22 });
-  if (mood === 'good') light.glow(ctx, HEAD.x, HEAD.y - 6, 150, HD.gold, 0.11);
-}
-
-function bubble(ctx, t, mood, calm) {
-  const bob = calm ? 0 : Math.round(Math.sin(t * 1.6) * 1.5);
-  const box = { ...BUBBLE, y: BUBBLE.y + bob };
-  const accent = mood === 'good' ? R.leaf[2] : mood === 'bad' ? R.tie[2] : HD.gold;
-  panel.glass(ctx, box, { radius: 5, alpha: 0.95 });
-  ctx.fillStyle = tint(P.hd.glass[0], 0.95);
-  ctx.beginPath();
-  ctx.moveTo(box.x + 9, box.y + box.h - 1);
-  ctx.lineTo(box.x + 14, box.y + box.h + 7);
-  ctx.lineTo(box.x + 19, box.y + box.h - 1);
-  ctx.closePath();
-  ctx.fill();
-  const cx = box.x + box.w / 2;
-  if (mood === 'good') {
-    ctx.strokeStyle = accent;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(cx - 7, box.y + 12);
-    ctx.lineTo(cx - 2, box.y + 17);
-    ctx.lineTo(cx + 8, box.y + 5);
-    ctx.stroke();
-  } else {
-    ui.textCenter(ctx, mood === 'bad' ? '!' : '$', cx, box.y + 4, accent, { scale: 2, shadow: P.ink });
-  }
-  light.glow(ctx, cx, box.y + box.h / 2, 26, accent, 0.18);
-}
-
-function grade(ctx, t, mood, calm, quality) {
-  const { dark, tint: color } = MOODS[mood];
-  if (dark > 0) fillRect(ctx, -8, -8, W + 16, H + 16, tint(HD.night[1], dark));
-  if (color && mood === 'bad') {
-    const pulse = calm ? 0.14 : 0.12 + 0.04 * Math.sin(t * 1.4);
-    const gradient = ctx.createRadialGradient(W / 2, H / 2, H * 0.4, W / 2, H / 2, W * 0.6);
-    gradient.addColorStop(0, tint(color, 0));
-    gradient.addColorStop(1, tint(color, pulse));
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, W, H);
-  }
-  if (quality !== 'lite') light.haze(ctx, { x: 0, y: 140, w: W, h: 36 }, HD.haze, 0.07, t);
-  light.vignette(ctx, W, H, 0.5);
 }
 
 // The scene at time t (seconds) in a mood ('neutral', 'good' or 'bad'; anything else is neutral). `calm` holds everything still.
@@ -5006,13 +5171,2180 @@ function draw(ctx, t, mood = 'neutral', { calm = false, quality = 'full' } = {})
   mug(ctx, time, calm);
   papers(ctx);
   lamp(ctx, time, felt);
-  glows(ctx, time, felt);
+  glows(ctx);
   if (quality !== 'lite') light.drawMotes(ctx, light.motes(7, 20, time, { x: 120, y: 40, w: 190, h: 76 }), HD.day[2]);
-  bubble(ctx, time, felt, calm);
-  grade(ctx, time, felt, calm, quality);
+  kit.bubble(ctx, time, felt, BUBBLE, calm);
+  kit.finish(ctx, time, felt, { calm, quality, focal: { x: HEAD.x, y: HEAD.y - 6 } });
 }
 
-module.exports = { draw, HEAD, BUBBLE, DESK_Y };
+module.exports = { draw, FOCAL: HEAD, HEAD, BUBBLE, DESK_Y };
+
+});
+__d("render/hd/scenes/economy", function (module, exports, __r) {
+'use strict';
+
+// Economy: a trading hall at night with a big lit chart on the wall: the bars sway, a line runs through their tops, a coin spins on its
+// pedestal and a rack of lights blinks. After an answer, when it went well the bars climb in green with an arrow up; when it went badly they fall in
+// red with an arrow down. A function of time and mood only.
+
+const P = __r("render/palette");
+const layout = __r("ui/layout-hd");
+const { tint, mix } = __r("render/draw");
+const light = __r("render/hd/light");
+const pixels = __r("render/hd/pixels");
+const surface = __r("render/hd/surface");
+const kit = __r("render/hd/scenes/kit");
+
+const R = P.ramp;
+const HD = P.hd;
+const { W } = layout;
+const { dim, fillRect } = kit;
+
+const PANEL = Object.freeze({ x: 180, y: 30, w: 148, h: 100 });
+const FOCAL = Object.freeze({ x: 254, y: 80 });
+const FLOOR = 138;
+const BARS = 8;
+const COIN = Object.freeze({ x: 344, y: 108 });
+const COIN_FRAMES = Object.freeze([9, 7, 4, 1.4, 4, 7]);
+
+// The color of the chart for each mood, and which way its bars lean.
+const CHART = Object.freeze({
+  neutral: { color: R.city, glow: HD.day[0], trend: 0 },
+  good: { color: R.leaf, glow: R.leaf[2], trend: 1 },
+  bad: { color: R.tie, glow: HD.alarm, trend: -1 },
+});
+const BASE = Object.freeze([34, 44, 32, 52, 40, 48, 34, 46]);
+
+const flat = (color) => [color, color, color];
+const COIN_MATERIALS = Object.freeze({ gold: R.hazard, edge: flat(dim(R.hazard[0], 0.2)) });
+const coinOutline = (material) => mix(COIN_MATERIALS[material][0], P.ink, 0.55);
+
+function buildCoin(rx) {
+  const g = pixels.grid(20, 20);
+  pixels.fill(g, pixels.ellipse(10, 10, rx, 9), 'edge');
+  if (rx > 3) pixels.fill(g, pixels.ellipse(10, 10, rx - 1.6, 7.4), 'gold');
+  return pixels.shade(g, COIN_MATERIALS, { bevel: 1, outline: coinOutline });
+}
+
+let coins = null;
+const coinFrames = () => {
+  if (!coins) coins = COIN_FRAMES.map(buildCoin);
+  return coins;
+};
+
+// The height of each bar: where it rests, the lean of the mood and a slow sway.
+function heights(t, mood, calm) {
+  const { trend } = CHART[mood];
+  return BASE.map((base, i) => {
+    const lean = trend * (i - (BARS - 1) / 2) * 6.5 + trend * 6;
+    const sway = calm ? 0 : Math.sin(t * 1.3 + i * 0.9) * 3;
+    return Math.max(8, Math.min(78, base * 0.7 + 14 + lean + sway));
+  });
+}
+
+function hall(ctx) {
+  kit.gradient(ctx, -8, FLOOR + 6, [[0, dim(R.wall[0], 0.75)], [1, dim(R.wall[0], 0.4)]]);
+  for (let x = -20; x < W + 20; x += 44) {
+    fillRect(ctx, x, 0, 0.5, FLOOR, tint(P.ink, 0.3));
+    fillRect(ctx, x + 0.5, 0, 0.5, FLOOR, tint(R.wall[2], 0.08));
+  }
+  kit.gradient(ctx, FLOOR, 270, [[0, dim(R.floor[1], 0.05)], [1, dim(R.floor[0], 0.75)]]);
+  fillRect(ctx, -8, FLOOR, W + 16, 0.75, tint(R.floor[2], 0.8));
+}
+
+function chart(ctx, t, mood, calm) {
+  const { x, y, w, h } = PANEL;
+  const style = CHART[mood];
+  kit.propBox(ctx, x - 4, y - 4, w + 8, h + 8, R.metal.map((c) => dim(c, 0.4)));
+  fillRect(ctx, x, y, w, h, dim(R.glass[0], 0.78));
+  for (let k = 1; k < 6; k += 1) fillRect(ctx, x + 2, y + k * 16, w - 4, 0.5, tint(style.glow, 0.16));
+  for (let k = 1; k < 7; k += 1) fillRect(ctx, x + k * 21, y + 2, 0.5, h - 4, tint(style.glow, 0.1));
+  const base = y + h - 8;
+  const list = heights(t, mood, calm);
+  list.forEach((bar, i) => {
+    const bx = x + 10 + i * 17;
+    fillRect(ctx, bx, base - bar, 11, bar, style.color[1]);
+    fillRect(ctx, bx, base - bar, 11, 1.5, style.color[2]);
+    fillRect(ctx, bx + 9, base - bar, 2, bar, style.color[0]);
+  });
+  ctx.strokeStyle = tint(P.white, 0.85);
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  list.forEach((bar, i) => (i === 0 ? ctx.moveTo(x + 15, base - bar - 4) : ctx.lineTo(x + 15 + i * 17, base - bar - 4)));
+  ctx.stroke();
+  list.forEach((bar, i) => light.glow(ctx, x + 15 + i * 17, base - bar - 4, 7, style.glow, 0.5));
+  const ticker = calm ? 0 : (t * 14) % 16;
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x + 3, y + h - 6, w - 6, 5);
+  ctx.clip();
+  for (let k = -1; k < 10; k += 1) {
+    const up = light.unit(41, k + Math.floor(calm ? 0 : t * 0.875), 0) > 0.45;
+    fillRect(ctx, x + 4 + k * 16 - ticker, y + h - 5, 12, 2, up ? R.leaf[1] : R.tie[1]);
+  }
+  ctx.restore();
+  fillRect(ctx, x, y, 3, h, dim(R.glass[0], 0.78));
+  fillRect(ctx, x + w - 3, y, 3, h, dim(R.glass[0], 0.78));
+  light.glow(ctx, x + w / 2, y + h / 2, 130, style.glow, 0.2 * (mood === 'bad' ? 0.85 : 1));
+  light.glow(ctx, x + w / 2, FLOOR + 6, 100, style.glow, 0.13, { squash: 0.18 });
+}
+
+// A big arrow beside the chart: up in green, down in red; nothing while the question is open.
+function arrow(ctx, t, mood, calm) {
+  if (mood === 'neutral') return;
+  const up = mood === 'good';
+  const bob = calm ? 0 : Math.sin(t * 2.2) * 2 * (up ? -1 : 1);
+  const color = up ? R.leaf[1] : R.tie[1];
+  const cx = 168;
+  const cy = 92 + bob;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  if (up) {
+    ctx.moveTo(cx, cy - 14);
+    ctx.lineTo(cx + 11, cy);
+    ctx.lineTo(cx + 4, cy);
+    ctx.lineTo(cx + 4, cy + 14);
+    ctx.lineTo(cx - 4, cy + 14);
+    ctx.lineTo(cx - 4, cy);
+    ctx.lineTo(cx - 11, cy);
+  } else {
+    ctx.moveTo(cx, cy + 14);
+    ctx.lineTo(cx + 11, cy);
+    ctx.lineTo(cx + 4, cy);
+    ctx.lineTo(cx + 4, cy - 14);
+    ctx.lineTo(cx - 4, cy - 14);
+    ctx.lineTo(cx - 4, cy);
+    ctx.lineTo(cx - 11, cy);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = P.ink;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  light.glow(ctx, cx, cy, 24, up ? R.leaf[2] : HD.alarm, 0.5);
+}
+
+function coin(ctx, t, mood, calm) {
+  const frames = coinFrames();
+  const k = calm ? 0 : Math.floor(t * 6) % frames.length;
+  fillRect(ctx, COIN.x - 9, COIN.y + 10, 18, 22, dim(R.stone[0], 0.4));
+  fillRect(ctx, COIN.x - 11, COIN.y + 8, 22, 3, dim(R.stone[1], 0.3));
+  pixels.draw(ctx, pixels.bake(frames[k], surface.K()), COIN.x - 10, COIN.y - 10);
+  light.glow(ctx, COIN.x, COIN.y, 22, HD.lamp[0], 0.35 * kit.MOODS[mood].lamp);
+}
+
+// A rack of blinking lights to the right, so the hall goes on beyond the chart.
+function rack(ctx, t, mood, calm) {
+  const x = 378;
+  kit.propBox(ctx, x, 96, 44, 42, R.metal.map((c) => dim(c, 0.5)));
+  for (let row = 0; row < 4; row += 1) {
+    fillRect(ctx, x + 4, 102 + row * 8, 36, 1, tint(P.ink, 0.5));
+    for (let col = 0; col < 8; col += 1) {
+      const on = light.unit(51, row * 8 + col, Math.floor(calm ? 0 : t * 1.4)) > 0.45;
+      const color = mood === 'bad' && on ? R.tie[2] : on ? R.leaf[2] : dim(R.metal[0], 0.2);
+      fillRect(ctx, x + 6 + col * 4, 104 + row * 8, 2, 2, color);
+    }
+  }
+  light.glow(ctx, x + 22, 116, 40, mood === 'bad' ? HD.alarm : R.leaf[2], 0.1);
+}
+
+function draw(ctx, t, mood = 'neutral', { calm = false, quality = 'full' } = {}) {
+  const felt = kit.moodOf(mood);
+  const time = calm ? 0 : t;
+  hall(ctx);
+  rack(ctx, time, felt, calm);
+  chart(ctx, time, felt, calm);
+  arrow(ctx, time, felt, calm);
+  coin(ctx, time, felt, calm);
+  if (quality !== 'lite') light.drawMotes(ctx, light.motes(13, 18, time, { x: 170, y: 30, w: 170, h: 100 }), CHART[felt].glow);
+  kit.finish(ctx, time, felt, { calm, quality, focal: FOCAL, hazeBox: { x: 0, y: FLOOR - 10, w: W, h: 30 } });
+}
+
+module.exports = { draw, FOCAL };
+
+});
+__d("render/hd/scenes/kit", function (module, exports, __r) {
+'use strict';
+
+// The pieces every HD scene is built from: the three moods, weather and smoke (as pure functions of time, then drawn), ridges for
+// mountains, stars, clouds, the box of a pixel prop, the thought bubble and the finish every scene ends with. Nothing here keeps
+// state: a scene asks for what it needs at the time it is drawing.
+
+const P = __r("render/palette");
+const ui = __r("render/ui");
+const layout = __r("ui/layout-hd");
+const { tint, mix } = __r("render/draw");
+const light = __r("render/hd/light");
+const panel = __r("render/hd/panel");
+const pixels = __r("render/hd/pixels");
+
+const HD = P.hd;
+const { W, H } = layout;
+const { unit } = light;
+
+// How each mood changes a room: how dark it gets, what tints it and how bright its lights burn.
+const MOODS = Object.freeze({
+  neutral: { dark: 0, tint: null, lamp: 1 },
+  good: { dark: 0, tint: HD.gold, lamp: 1.3 },
+  bad: { dark: 0.3, tint: HD.alarm, lamp: 0.7 },
+});
+const moodOf = (mood) => (Object.prototype.hasOwnProperty.call(MOODS, mood) ? mood : 'neutral');
+
+const dim = (hex, amount) => mix(hex, P.ink, amount);
+const lift = (hex, amount) => mix(hex, P.white, amount);
+const wrap = (value, size) => ((value % size) + size) % size;
+// pixels.box takes two corners; this takes a corner and a size.
+const rectShape = (x, y, w, h) => pixels.box(x, y, x + w, y + h);
+const flat = (color) => [color, color, color];
+
+function fillRect(ctx, x, y, w, h, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, w, h);
+}
+
+// A vertical gradient across the whole width, from y0 to y1; `stops` are [position, colour].
+function gradient(ctx, y0, y1, stops) {
+  const g = ctx.createLinearGradient(0, y0, 0, y1);
+  stops.forEach(([at, color]) => g.addColorStop(at, color));
+  ctx.fillStyle = g;
+  ctx.fillRect(-8, y0, W + 16, y1 - y0);
+}
+
+// ---- weather and smoke, as functions of time
+
+// Rain: where each streak is at time t. A streak falls from the top of the box, leans as it goes and starts again at the top.
+function rainDrops(t, box, { count = 60, speed = 260, slant = 0.25, length = 7, seed = 1 } = {}) {
+  return Array.from({ length: count }, (_, i) => {
+    const fall = (unit(seed, i, 1) * box.h + t * speed * (0.75 + 0.5 * unit(seed, i, 0))) % box.h;
+    return {
+      x: box.x + wrap(unit(seed, i, 2) * box.w - slant * fall, box.w),
+      y: box.y + fall,
+      dx: -slant * length,
+      dy: length,
+      alpha: 0.35 + 0.5 * unit(seed, i, 3),
+    };
+  });
+}
+
+// Snow: each flake drifts down and sideways, swaying a little, and starts again at the top.
+function snowFlakes(t, box, { count = 60, speed = 18, wind = 6, size = 1, seed = 2 } = {}) {
+  return Array.from({ length: count }, (_, i) => ({
+    x: box.x + wrap(unit(seed, i, 0) * box.w + t * wind * (0.4 + unit(seed, i, 1)) + Math.sin(t * 0.8 + i) * 3, box.w),
+    y: box.y + ((unit(seed, i, 2) * box.h + t * speed * (0.5 + unit(seed, i, 3))) % box.h),
+    size: size * (0.7 + 0.8 * unit(seed, i, 4)),
+    alpha: 0.45 + 0.5 * unit(seed, i, 5),
+  }));
+}
+
+// Smoke: puffs that rise from a source, spread as they climb and fade; each is at its own point of the climb.
+function smokePuffs(t, source, { count = 6, rise = 38, spread = 9, speed = 0.45, size = 5, drift = 8 } = {}) {
+  return Array.from({ length: count }, (_, i) => {
+    const phase = (t * speed + i / count) % 1;
+    return {
+      x: source.x + Math.sin(i * 2.3 + t * 0.9) * spread * phase + drift * phase,
+      y: source.y - rise * phase,
+      r: size * (0.6 + 1.4 * phase),
+      alpha: 0.55 * (1 - phase),
+    };
+  });
+}
+
+function drawRain(ctx, drops, color, width = 0.6) {
+  ctx.strokeStyle = tint(color, 0.55);
+  ctx.lineWidth = width;
+  ctx.beginPath();
+  drops.forEach((d) => {
+    ctx.moveTo(d.x, d.y);
+    ctx.lineTo(d.x + d.dx, d.y + d.dy);
+  });
+  ctx.stroke();
+}
+
+function drawSnow(ctx, flakes, color) {
+  flakes.forEach((f) => fillRect(ctx, f.x, f.y, f.size, f.size, tint(color, f.alpha)));
+}
+
+// Soft puffs: a round gradient that is `alpha` strong at its heart and nothing at its edge.
+function softDisc(ctx, x, y, r, color, alpha) {
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, tint(color, alpha));
+  g.addColorStop(0.6, tint(color, alpha * 0.55));
+  g.addColorStop(1, tint(color, 0));
+  ctx.fillStyle = g;
+  ctx.fillRect(x - r, y - r, r * 2, r * 2);
+}
+
+function drawSmoke(ctx, puffs, color) {
+  puffs.forEach((p) => softDisc(ctx, p.x, p.y, p.r, color, p.alpha));
+}
+
+// A cloud: five overlapping soft discs.
+function cloud(ctx, x, y, r, color, alpha) {
+  [[-0.9, 0.15, 0.7], [-0.35, -0.2, 0.9], [0.35, -0.1, 0.85], [0.95, 0.2, 0.65], [0, 0.3, 1]].forEach(([dx, dy, k]) => softDisc(ctx, x + dx * r, y + dy * r, r * k, color, alpha));
+}
+
+// ---- land and sky
+
+// Twinkling stars scattered in a box.
+function drawStars(ctx, t, box, count, seed) {
+  for (let i = 0; i < count; i += 1) {
+    const twinkle = 0.45 + 0.55 * Math.sin(t * (0.5 + unit(seed, i, 3)) + unit(seed, i, 4) * 6.28);
+    fillRect(ctx, box.x + unit(seed, i, 0) * box.w, box.y + unit(seed, i, 1) * box.h, 0.8 + unit(seed, i, 2) * 0.8, 0.8 + unit(seed, i, 2) * 0.8, tint(P.white, 0.25 + 0.6 * twinkle));
+  }
+}
+
+// The points of a jagged ridge (mountains, a rocky skyline): one every `step` pixels, between base - amp and base.
+function ridgePoints({ x0, x1, base, amp, step, seed }) {
+  const count = Math.ceil((x1 - x0) / step);
+  return Array.from({ length: count + 1 }, (_, k) => ({
+    x: Math.min(x1, x0 + k * step),
+    y: base - amp * (0.2 + 0.55 * unit(seed, k, 0) + 0.25 * unit(seed, Math.floor(k / 2), 1)),
+  }));
+}
+
+function drawRidge(ctx, points, bottom, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(points[0].x, points[0].y);
+  points.slice(1).forEach((p) => ctx.lineTo(p.x, p.y));
+  ctx.lineTo(points[points.length - 1].x, bottom);
+  ctx.lineTo(points[0].x, bottom);
+  ctx.closePath();
+  ctx.fill();
+}
+
+// A pixel prop: a 1 px outline, the base tone, the light tone along the top and left edges and the shadow tone along the bottom and right.
+function propBox(ctx, x, y, w, h, ramp) {
+  fillRect(ctx, x, y, w, h, P.ink);
+  fillRect(ctx, x + 1, y + 1, w - 2, h - 2, ramp[1]);
+  fillRect(ctx, x + 1, y + 1, w - 2, 1, ramp[2]);
+  fillRect(ctx, x + 1, y + 1, 1, h - 2, ramp[2]);
+  fillRect(ctx, x + 1, y + h - 2, w - 2, 1, ramp[0]);
+  fillRect(ctx, x + w - 2, y + 1, 1, h - 2, ramp[0]);
+}
+
+// ---- mood
+
+// A glass bubble over the subject: a coin (or the sign given) while the question is open, a tick when it went well, an alarm when it did not.
+function bubble(ctx, t, mood, box, calm, neutral = '$') {
+  const bob = calm ? 0 : Math.round(Math.sin(t * 1.6) * 1.5);
+  const at = { ...box, y: box.y + bob };
+  const accent = mood === 'good' ? P.ramp.leaf[2] : mood === 'bad' ? P.ramp.tie[2] : HD.gold;
+  panel.glass(ctx, at, { radius: 5, alpha: 0.95 });
+  ctx.fillStyle = tint(HD.glass[0], 0.95);
+  ctx.beginPath();
+  ctx.moveTo(at.x + 9, at.y + at.h - 1);
+  ctx.lineTo(at.x + 14, at.y + at.h + 7);
+  ctx.lineTo(at.x + 19, at.y + at.h - 1);
+  ctx.closePath();
+  ctx.fill();
+  const cx = at.x + at.w / 2;
+  if (mood === 'good') {
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(cx - 7, at.y + 12);
+    ctx.lineTo(cx - 2, at.y + 17);
+    ctx.lineTo(cx + 8, at.y + 5);
+    ctx.stroke();
+  } else {
+    ui.textCenter(ctx, mood === 'bad' ? '!' : neutral, cx, at.y + 4, accent, { scale: 2, shadow: P.ink });
+  }
+  light.glow(ctx, cx, at.y + at.h / 2, 26, accent, 0.18);
+}
+
+// What every scene ends with: the darkening and red edge of the bad mood, the warm bloom of the good one around the subject, haze at
+// the foot of the picture (not in lite quality) and a vignette.
+function finish(ctx, t, mood, { calm = false, quality = 'full', hazeBox = { x: 0, y: 140, w: W, h: 36 }, focal = null } = {}) {
+  const { dark } = MOODS[mood];
+  if (dark > 0) fillRect(ctx, -8, -8, W + 16, H + 16, tint(HD.night[1], dark));
+  if (mood === 'bad') {
+    const pulse = calm ? 0.14 : 0.12 + 0.04 * Math.sin(t * 1.4);
+    const g = ctx.createRadialGradient(W / 2, H / 2, H * 0.4, W / 2, H / 2, W * 0.6);
+    g.addColorStop(0, tint(HD.alarm, 0));
+    g.addColorStop(1, tint(HD.alarm, pulse));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+  }
+  if (mood === 'good' && focal) light.glow(ctx, focal.x, focal.y, 150, HD.gold, 0.11);
+  if (quality !== 'lite') light.haze(ctx, hazeBox, HD.haze, 0.07, t);
+  light.vignette(ctx, W, H, 0.5);
+}
+
+module.exports = {
+  MOODS,
+  moodOf,
+  dim,
+  lift,
+  wrap,
+  rectShape,
+  flat,
+  fillRect,
+  gradient,
+  rainDrops,
+  snowFlakes,
+  smokePuffs,
+  drawRain,
+  drawSnow,
+  drawSmoke,
+  softDisc,
+  cloud,
+  drawStars,
+  ridgePoints,
+  drawRidge,
+  propBox,
+  bubble,
+  finish,
+};
+
+});
+__d("render/hd/scenes/plant", function (module, exports, __r) {
+'use strict';
+
+// The plant: a brick factory with sawtooth roofs at dusk, a chimney that smokes, a big gear and a status lamp on the roof. After an
+// answer the plant wears the mood: when it went well the smoke is white, every window is lit and the lamp is green; when it went badly the
+// smoke is dark and rises, the windows go out, the gear stutters and the lamp blinks red. A function of time and mood only.
+
+const P = __r("render/palette");
+const layout = __r("ui/layout-hd");
+const { tint, mix } = __r("render/draw");
+const light = __r("render/hd/light");
+const pixels = __r("render/hd/pixels");
+const surface = __r("render/hd/surface");
+const kit = __r("render/hd/scenes/kit");
+
+const R = P.ramp;
+const HD = P.hd;
+const { W } = layout;
+const { dim, fillRect } = kit;
+
+const GROUND = 126;
+const FACTORY = Object.freeze({ x: 196, y: 32 });
+const FOCAL = Object.freeze({ x: 258, y: 84 });
+const GEAR_AT = Object.freeze({ x: 170, y: 92 });
+const CHIMNEY = Object.freeze({ x: 303, y: 32 });
+const LAMP = Object.freeze({ x: 237, y: 52 });
+const TEETH = 10;
+const GEAR_FRAMES = 6;
+
+const flat = (color) => [color, color, color];
+const MATERIALS = Object.freeze({
+  brick: R.brick.map((c) => dim(c, 0.22)),
+  roof: R.roof.map((c) => dim(c, 0.2)),
+  trim: R.stone,
+  stone: [dim(R.stone[0], 0.5), dim(R.stone[1], 0.5), dim(R.stone[2], 0.45)],
+  glass: flat(dim(R.glass[0], 0.55)),
+  door: flat(dim(R.wood[0], 0.35)),
+  gear: R.metal,
+  hub: R.hazard,
+});
+const outline = (material) => mix(MATERIALS[material][0], P.ink, 0.6);
+
+// Where the lit windows go, in sprite cells: five along each of two rows of the hall, and the glazed face of every sawtooth.
+const WINDOWS = Object.freeze([
+  ...[52, 66].flatMap((y) => [0, 1, 2, 3, 4].filter((i) => !(y === 66 && i === 2)).map((i) => ({ x: 6 + i * 23, y, w: 15, h: 9 }))),
+  ...[0, 41, 82].map((x) => ({ x: x + 38, y: 27, w: 3, h: 17 })),
+]);
+
+const HALL_WINDOWS = 9;
+const unit = (a, b) => light.unit(a, b, 0);
+// pixels.box takes two corners; this one takes a corner and a size.
+const rect = (x, y, w, h) => pixels.box(x, y, x + w, y + h);
+
+function buildFactory() {
+  const g = pixels.grid(124, 94);
+  pixels.fill(g, rect(0, 44, 124, 48), 'brick');
+  [0, 41, 82].forEach((x) => {
+    pixels.fill(g, pixels.poly([[x, 44], [x + 41, 44], [x + 41, 24]]), 'roof');
+    pixels.fill(g, rect(x + 38, 27, 3, 17), 'glass');
+  });
+  pixels.fill(g, rect(100, 0, 14, 50), 'brick');
+  pixels.fill(g, rect(98, 0, 18, 4), 'trim');
+  pixels.fill(g, rect(100, 14, 14, 2), 'trim');
+  WINDOWS.slice(0, HALL_WINDOWS).forEach((w) => {
+    pixels.fill(g, rect(w.x, w.y, w.w, w.h), 'glass');
+    pixels.fill(g, rect(w.x - 1, w.y + w.h, w.w + 2, 2), 'trim');
+  });
+  pixels.fill(g, rect(50, 64, 26, 3), 'trim');
+  pixels.fill(g, rect(52, 67, 22, 25), 'door');
+  pixels.stroke(g, 63, 68, 63, 91, 'trim');
+  pixels.fill(g, rect(0, 90, 124, 4), 'stone');
+  return pixels.shade(g, MATERIALS, { bevel: 1, outline });
+}
+
+// The gear in six positions, a sixth of a tooth apart, so a turn of the wheel is a loop of six images.
+function buildGear(frame) {
+  const g = pixels.grid(34, 34);
+  const turn = (frame * Math.PI * 2) / TEETH / GEAR_FRAMES;
+  pixels.fill(g, (x, y) => {
+    const dx = x + 0.5 - 17;
+    const dy = y + 0.5 - 17;
+    const r = Math.hypot(dx, dy);
+    if (r < 5.5 || r > 16.5) return false;
+    return r <= (Math.cos((Math.atan2(dy, dx) + turn) * TEETH) > 0.15 ? 16.5 : 12.5);
+  }, 'gear');
+  pixels.fill(g, pixels.ellipse(17, 17, 3.2, 3.2), 'hub');
+  return pixels.shade(g, MATERIALS, { bevel: 1, outline });
+}
+
+let factory = null;
+let gears = null;
+const sprites = () => {
+  if (!factory) {
+    factory = buildFactory();
+    gears = Array.from({ length: GEAR_FRAMES }, (_, k) => buildGear(k));
+  }
+  return { factory, gears };
+};
+
+// How the sky looks outside: dusk, a warm morning, or a storm.
+const SKIES = Object.freeze({ neutral: P.sky.dusk, good: P.sky.hot, bad: P.sky.storm });
+
+function backdrop(ctx, t, mood, sway) {
+  const sky = SKIES[mood];
+  kit.gradient(ctx, -8, GROUND + 6, [[0, dim(sky[0], 0.55)], [0.55, dim(sky[0], 0.1)], [1, sky[1]]]);
+  if (mood !== 'bad') {
+    kit.drawStars(ctx, t, { x: 0, y: 0, w: W, h: 70 }, 36, 5);
+    light.glow(ctx, 190, 36, 46, HD.day[1], 0.35);
+    kit.softDisc(ctx, 190, 36, 6, P.white, 0.9);
+  }
+  light.glow(ctx, 258, GROUND - 8, 150, mood === 'bad' ? HD.haze : HD.lamp[0], 0.2, { squash: 0.25 });
+  kit.drawRidge(ctx, kit.ridgePoints({ x0: -8, x1: W + 8, base: GROUND - 4, amp: 30, step: 14, seed: 11 }).map((p) => ({ ...p, x: p.x + sway })), GROUND, dim(R.rock[0], 0.6));
+  [[110, 34], [404, 40]].forEach(([x, h]) => {
+    fillRect(ctx, x + sway, GROUND - h, 3, h, dim(R.rock[0], 0.7));
+    fillRect(ctx, x - 1 + sway, GROUND - h, 5, 2, dim(R.rock[1], 0.7));
+  });
+  kit.drawRidge(ctx, kit.ridgePoints({ x0: -8, x1: W + 8, base: GROUND, amp: 14, step: 10, seed: 12 }), GROUND + 4, dim(R.rock[0], 0.75));
+  kit.gradient(ctx, GROUND, 270, [[0, dim(R.asphalt[1], 0.1)], [1, dim(R.asphalt[0], 0.7)]]);
+  fillRect(ctx, -8, GROUND, W + 16, 0.75, tint(R.asphalt[2], 0.8));
+  [GROUND + 18, GROUND + 23].forEach((y) => fillRect(ctx, -8, y, W + 16, 1, tint(R.metal[1], 0.55)));
+  for (let x = -6; x < W; x += 11) fillRect(ctx, x, GROUND + 16, 5, 9, tint(P.ink, 0.45));
+}
+
+function litWindows(ctx, t, mood) {
+  const lit = (i) => (mood === 'good' ? true : mood === 'bad' ? unit(i, Math.floor(t * 0.5)) < 0.12 : unit(i, 3) < 0.7);
+  const before = ctx.globalCompositeOperation;
+  WINDOWS.forEach((w, i) => {
+    if (!lit(i)) return;
+    fillRect(ctx, FACTORY.x + w.x, FACTORY.y + w.y, w.w, w.h, tint(R.hazard[2], 0.92));
+    fillRect(ctx, FACTORY.x + w.x, FACTORY.y + w.y, w.w, 1, tint(P.white, 0.5));
+  });
+  ctx.globalCompositeOperation = before;
+  WINDOWS.forEach((w, i) => {
+    if (!lit(i)) return;
+    light.glow(ctx, FACTORY.x + w.x + w.w / 2, FACTORY.y + w.y + w.h / 2, w.w > 5 ? 14 : 9, HD.lamp[0], 0.32);
+    if (i < HALL_WINDOWS) light.beam(ctx, { x0: FACTORY.x + w.x, x1: FACTORY.x + w.x + w.w, y: GROUND + 1 }, { x0: FACTORY.x + w.x - 2, x1: FACTORY.x + w.x + w.w + 2, y: GROUND + 26 }, HD.lamp[0], 0.1);
+  });
+}
+
+// A dim warehouse far to the right, a lamp post and two barrels: the yard goes on beyond the factory, in less light the farther it is.
+function warehouse(ctx, sway) {
+  const x = 404 + sway;
+  fillRect(ctx, x, GROUND - 34, 72, 34, dim(R.brick[0], 0.6));
+  fillRect(ctx, x - 2, GROUND - 38, 76, 4, dim(R.roof[1], 0.55));
+  fillRect(ctx, x + 28, GROUND - 22, 18, 22, dim(R.wood[0], 0.6));
+  [8, 54].forEach((dx) => {
+    fillRect(ctx, x + dx, GROUND - 26, 9, 6, tint(R.hazard[1], 0.75));
+    light.glow(ctx, x + dx + 4, GROUND - 23, 12, HD.lamp[0], 0.25);
+  });
+}
+
+function lampPost(ctx, t, mood) {
+  const x = 374;
+  const strength = kit.MOODS[mood].lamp * (mood === 'bad' ? 0.9 + 0.1 * Math.sin(t * 2.1) : 1);
+  fillRect(ctx, x, 62, 3, GROUND - 62, dim(R.metal[0], 0.35));
+  fillRect(ctx, x - 14, 62, 16, 2, dim(R.metal[1], 0.2));
+  fillRect(ctx, x - 20, 63, 9, 3, R.metal[1]);
+  light.beam(ctx, { x0: x - 20, x1: x - 11, y: 66 }, { x0: x - 56, x1: x + 24, y: GROUND + 2 }, HD.lamp[0], 0.14 * strength);
+  light.glow(ctx, x - 15, 67, 40, HD.lamp[0], 0.55 * strength);
+  light.glow(ctx, x - 15, 66, 7, HD.lamp[2], 0.8 * strength);
+  light.glow(ctx, x - 16, GROUND + 5, 58, HD.lamp[0], 0.26 * strength, { squash: 0.18 });
+}
+
+function barrels(ctx) {
+  [[330, 106, 13, 20], [345, 112, 12, 14]].forEach(([x, y, w, h]) => {
+    kit.propBox(ctx, x, y, w, h, R.clay);
+    fillRect(ctx, x + 1, y + 4, w - 2, 1, tint(P.ink, 0.45));
+    fillRect(ctx, x + 1, y + h - 5, w - 2, 1, tint(P.ink, 0.45));
+  });
+}
+
+function statusLamp(ctx, t, mood) {
+  const on = mood !== 'bad' || Math.floor(t * 2.4) % 2 === 0;
+  const color = mood === 'good' ? R.leaf[2] : mood === 'bad' ? R.tie[2] : R.hazard[1];
+  fillRect(ctx, LAMP.x - 2, LAMP.y + 2, 6, 3, R.metal[0]);
+  fillRect(ctx, LAMP.x - 1, LAMP.y, 4, 3, on ? color : dim(color, 0.6));
+  if (on) {
+    light.glow(ctx, LAMP.x + 1, LAMP.y + 1, 20, color, 0.7);
+    light.glow(ctx, LAMP.x + 1, LAMP.y + 1, 5, P.white, 0.6);
+  }
+}
+
+function draw(ctx, t, mood = 'neutral', { calm = false, quality = 'full' } = {}) {
+  const felt = kit.moodOf(mood);
+  const time = calm ? 0 : t;
+  const sway = calm ? 0 : Math.sin(t * 0.35);
+  const { factory: building, gears: wheels } = sprites();
+  backdrop(ctx, time, felt, sway * 0.6);
+  warehouse(ctx, sway * 0.8);
+  lampPost(ctx, time, felt);
+  const stutter = felt === 'bad' && (time * 1.6) % 1 < 0.45;
+  const turn = Math.floor((stutter ? Math.floor(time * 1.6) / 1.6 : time) * 5);
+  const baked = (sprite) => pixels.bake(sprite, surface.K());
+  pixels.draw(ctx, baked(building), FACTORY.x, FACTORY.y);
+  litWindows(ctx, time, felt);
+  barrels(ctx);
+  pixels.draw(ctx, baked(wheels[turn % GEAR_FRAMES]), GEAR_AT.x, GEAR_AT.y);
+  statusLamp(ctx, time, felt);
+  const dark = felt === 'bad';
+  kit.drawSmoke(ctx, kit.smokePuffs(time, CHIMNEY, { count: 8, rise: dark ? 62 : 44, spread: 11, size: dark ? 9 : 7, drift: dark ? 14 : 9 }), dark ? dim(R.asphalt[1], 0.2) : R.cloud[2]);
+  kit.drawSmoke(ctx, kit.smokePuffs(time + 0.5, { x: 214, y: GROUND - 2 }, { count: 4, rise: 18, size: 3, speed: 0.6, drift: 3 }), R.cloud[2]);
+  light.glow(ctx, 258, GROUND - 10, 34, HD.lamp[0], 0.5 * kit.MOODS[felt].lamp, { squash: 0.45 });
+  if (quality !== 'lite') {
+    light.drawMotes(ctx, light.motes(9, felt === 'bad' ? 16 : 8, time, { x: 290, y: 20, w: 40, h: 96 }), HD.lamp[0]);
+  }
+  kit.finish(ctx, time, felt, { calm, quality, focal: FOCAL, hazeBox: { x: 0, y: GROUND - 14, w: W, h: 30 } });
+}
+
+module.exports = { draw, FOCAL };
+
+});
+__d("render/hd/scenes/politics", function (module, exports, __r) {
+'use strict';
+
+// Politics: a government building with a pediment and columns, floodlit at dusk, a flag that waves and a bubble with a question over it. After an
+// answer, when it went well the flag flies high in a golden evening and the bubble shows a tick; when it went badly a storm gathers, the flag drops
+// to half mast and the bubble shows an alarm. A function of time and mood only.
+
+const P = __r("render/palette");
+const layout = __r("ui/layout-hd");
+const { tint, mix } = __r("render/draw");
+const light = __r("render/hd/light");
+const pixels = __r("render/hd/pixels");
+const surface = __r("render/hd/surface");
+const kit = __r("render/hd/scenes/kit");
+
+const R = P.ramp;
+const HD = P.hd;
+const { W } = layout;
+const { dim, fillRect } = kit;
+
+const GROUND = 136;
+const BUILDING = Object.freeze({ x: 177, y: 50 });
+const POLE = Object.freeze({ x: 252, top: 26, base: 56 });
+const BUBBLE = Object.freeze({ x: 300, y: 26, w: 28, h: 22 });
+const FOCAL = Object.freeze({ x: 252, y: 92 });
+
+const flat = (color) => [color, color, color];
+const MATERIALS = Object.freeze({
+  step: R.stone.map((c) => dim(c, 0.3)),
+  wall: R.stone.map((c) => dim(c, 0.18)),
+  column: R.stone.map((c) => dim(c, 0.04)),
+  cap: R.stone,
+  shade: flat(dim(R.stone[0], 0.65)),
+  pediment: R.stone.map((c) => dim(c, 0.12)),
+  field: flat(dim(R.stone[0], 0.5)),
+  relief: R.hazard,
+  door: flat(dim(R.wood[0], 0.55)),
+});
+const outline = (material) => mix(MATERIALS[material][0], P.ink, 0.6);
+
+function buildBuilding() {
+  const g = pixels.grid(150, 88);
+  pixels.fill(g, kit.rectShape(0, 80, 150, 8), 'step');
+  pixels.fill(g, kit.rectShape(8, 74, 134, 6), 'step');
+  pixels.fill(g, kit.rectShape(14, 28, 122, 46), 'wall');
+  pixels.fill(g, kit.rectShape(20, 32, 110, 40), 'shade');
+  pixels.fill(g, pixels.poly([[8, 28], [75, 4], [142, 28]]), 'pediment');
+  pixels.fill(g, pixels.poly([[24, 26], [75, 10], [126, 26]]), 'field');
+  pixels.fill(g, pixels.ellipse(75, 20, 4.5, 4.5), 'relief');
+  pixels.fill(g, kit.rectShape(66, 50, 18, 24), 'door');
+  for (let i = 0; i < 6; i += 1) {
+    const x = 22 + i * 20;
+    pixels.fill(g, kit.rectShape(x, 32, 8, 38), 'column');
+    pixels.fill(g, kit.rectShape(x - 1, 29, 10, 3), 'cap');
+    pixels.fill(g, kit.rectShape(x - 1, 70, 10, 4), 'cap');
+  }
+  return pixels.shade(g, MATERIALS, { bevel: 1, outline });
+}
+
+let building = null;
+const sprite = () => {
+  if (!building) building = buildBuilding();
+  return building;
+};
+
+const SKIES = Object.freeze({
+  neutral: [dim(P.sky.dusk[0], 0.5), mix(P.sky.dusk[0], R.tie[0], 0.3), mix(HD.lamp[0], P.sky.dusk[1], 0.55)],
+  good: [dim(P.sky.hot[0], 0.35), P.sky.hot[0], mix(HD.lamp[1], P.sky.hot[1], 0.4)],
+  bad: [dim(P.sky.storm[0], 0.6), dim(P.sky.storm[0], 0.3), dim(P.sky.storm[1], 0.4)],
+});
+
+function sky(ctx, t, mood) {
+  const [top, mid, low] = SKIES[mood];
+  kit.gradient(ctx, -8, GROUND + 4, [[0, top], [0.6, mid], [1, low]]);
+  if (mood !== 'bad') kit.drawStars(ctx, t, { x: 0, y: 0, w: W, h: 50 }, 26, 121);
+  const dark = mood === 'bad';
+  [[190, 34, 30, 3], [330, 24, 34, 4], [420, 46, 28, 3], [260, 16, 26, 5]].forEach(([x, y, r, speed]) => {
+    kit.cloud(ctx, kit.wrap(x - t * speed + 80, W + 160) - 80, y, r, dark ? dim(R.cloud[0], 0.62) : mood === 'good' ? mix(R.cloud[2], mid, 0.3) : mix(R.cloud[0], mid, 0.55), dark ? 0.9 : mood === 'good' ? 0.5 : 0.4);
+  });
+  light.glow(ctx, 252, GROUND - 10, 170, mood === 'bad' ? HD.haze : HD.lamp[0], 0.2, { squash: 0.25 });
+}
+
+function plaza(ctx) {
+  kit.gradient(ctx, GROUND, 270, [[0, dim(R.stone[0], 0.35)], [1, dim(R.stone[0], 0.75)]]);
+  fillRect(ctx, -8, GROUND, W + 16, 0.75, tint(R.stone[2], 0.4));
+  ctx.strokeStyle = tint(P.ink, 0.28);
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  for (let k = 1; k < 6; k += 1) {
+    const y = GROUND + k * k * 1.8 + k * 2;
+    ctx.moveTo(-8, y);
+    ctx.lineTo(W + 8, y);
+  }
+  for (let x = -120; x < W + 120; x += 44) {
+    ctx.moveTo(252 + (x - 252) * 0.35, GROUND);
+    ctx.lineTo(x, 176);
+  }
+  ctx.stroke();
+}
+
+function flag(ctx, t, mood, calm) {
+  const lowered = mood === 'bad' ? 15 : 0;
+  const top = POLE.top - (mood === 'good' ? 4 : 0) + lowered;
+  fillRect(ctx, POLE.x - 0.75, POLE.top - 6, 1.5, POLE.base - POLE.top + 6, R.metal[1]);
+  kit.softDisc(ctx, POLE.x, POLE.top - 6, 2.4, HD.lamp[1], 0.9);
+  const amp = mood === 'bad' ? 0.5 : mood === 'good' ? 2 : 1.4;
+  const bands = [R.tie[1], P.white, R.city[1]];
+  for (let i = 0; i < 14; i += 1) {
+    const wave = calm ? 0 : Math.sin(t * 4 - i * 0.7) * amp * (i / 13);
+    bands.forEach((color, b) => fillRect(ctx, POLE.x + 1.5 + i * 1.8, top + b * 4 + wave, 1.9, 4, color));
+  }
+  fillRect(ctx, POLE.x + 1.5, top - 0.5, 25.5, 0.6, tint(P.white, 0.3));
+}
+
+function floodlights(ctx, mood) {
+  const strength = kit.MOODS[mood].lamp;
+  [[196, 1], [308, -1]].forEach(([x, side]) => {
+    fillRect(ctx, x - 5, GROUND - 4, 10, 4, R.metal[0]);
+    light.ray(ctx, x, GROUND - 4, -Math.PI / 2 + side * 0.42, 118, 0.15, HD.lamp[0], 0.26 * strength);
+    light.glow(ctx, x, GROUND - 5, 22, HD.lamp[1], 0.6 * strength);
+  });
+  light.glow(ctx, 252, GROUND + 4, 120, HD.lamp[0], 0.14 * strength, { squash: 0.15 });
+}
+
+// Small figures crossing the plaza; a few in the neutral mood, many when it went badly.
+function people(ctx, t, mood, calm) {
+  const count = mood === 'bad' ? 12 : mood === 'good' ? 5 : 7;
+  for (let i = 0; i < count; i += 1) {
+    const row = i % 3;
+    const dir = i % 2 === 0 ? 1 : -1;
+    const x = kit.wrap(light.unit(123, i, 0) * 340 + (calm ? 0 : t * (4 + row * 2)) * dir, 340) + 150;
+    const y = GROUND + 8 + row * 8;
+    const step = calm ? 0 : Math.sin(t * 6 + i) * 0.6;
+    fillRect(ctx, x, y - 9 + step, 3.5, 6, dim([R.suit[1], R.leaf[0], R.tie[0], R.clay[0]][i % 4], 0.1));
+    fillRect(ctx, x + 0.4, y - 12 + step, 2.6, 2.6, R.skin[1]);
+    fillRect(ctx, x, y - 3, 3.5, 3, dim(R.asphalt[0], 0.3));
+  }
+}
+
+function draw(ctx, t, mood = 'neutral', { calm = false, quality = 'full' } = {}) {
+  const felt = kit.moodOf(mood);
+  const time = calm ? 0 : t;
+  sky(ctx, time, felt);
+  plaza(ctx);
+  floodlights(ctx, felt);
+  pixels.draw(ctx, pixels.bake(sprite(), surface.K()), BUILDING.x, BUILDING.y);
+  [[BUILDING.x + 69, BUILDING.y + 61], [BUILDING.x + 79, BUILDING.y + 61]].forEach(([x, y]) => fillRect(ctx, x, y, 2, 12, tint(HD.lamp[1], felt === 'bad' ? 0.35 : 0.8)));
+  [[BUILDING.x + 44, BUILDING.y + 40], [BUILDING.x + 104, BUILDING.y + 40]].forEach(([x, y]) => light.glow(ctx, x, y, 22, HD.lamp[0], 0.2 * kit.MOODS[felt].lamp));
+  flag(ctx, time, felt, calm);
+  people(ctx, time, felt, calm);
+  kit.bubble(ctx, time, felt, BUBBLE, calm, '?');
+  if (quality !== 'lite') light.drawMotes(ctx, light.motes(125, 14, time, { x: 170, y: 40, w: 170, h: 100 }), HD.lamp[1]);
+  kit.finish(ctx, time, felt, { calm, quality, focal: FOCAL, hazeBox: { x: 0, y: GROUND - 14, w: W, h: 32 } });
+}
+
+module.exports = { draw, FOCAL, BUBBLE };
+
+});
+__d("render/hd/scenes/protest", function (module, exports, __r) {
+'use strict';
+
+// Protest: a street at night under a city skyline, two street lamps and a crowd with signs that sway. After an answer, when it went well the crowd
+// thins out and the signs show ticks; when it went badly the crowd grows, the signs shout, flares burn and the horizon glows red.
+// A function of time and mood only.
+
+const P = __r("render/palette");
+const layout = __r("ui/layout-hd");
+const { tint, mix } = __r("render/draw");
+const light = __r("render/hd/light");
+const pixels = __r("render/hd/pixels");
+const surface = __r("render/hd/surface");
+const kit = __r("render/hd/scenes/kit");
+
+const R = P.ramp;
+const HD = P.hd;
+const { W } = layout;
+const { dim, flat, fillRect } = kit;
+
+const BASE = 124;
+const SIDEWALK = 140;
+const FOCAL = Object.freeze({ x: 252, y: 118 });
+const ROWS = Object.freeze([138, 132, 126]);
+const CROWD = Object.freeze({ neutral: 15, good: 9, bad: 28 });
+
+const JACKETS = Object.freeze([R.suit, R.leaf, R.tie, R.clay].map((ramp) => ramp.map((c) => dim(c, 0.28))));
+const materialsOf = (variant) => ({ skin: R.skin.map((c) => dim(c, 0.2)), jacket: JACKETS[variant], pants: flat(dim(R.asphalt[0], 0.35)) });
+const OUTLINE = mix(R.asphalt[0], P.ink, 0.5);
+const outline = () => OUTLINE;
+
+function buildPerson(variant) {
+  const g = pixels.grid(12, 26);
+  pixels.fill(g, pixels.ellipse(6, 5, 3.2, 3.6), 'skin');
+  pixels.fill(g, kit.rectShape(2, 9, 8, 11), 'jacket');
+  pixels.fill(g, kit.rectShape(0, 10, 2, 9), 'jacket');
+  pixels.fill(g, kit.rectShape(10, 10, 2, 9), 'jacket');
+  pixels.fill(g, kit.rectShape(3, 20, 3, 6), 'pants');
+  pixels.fill(g, kit.rectShape(6, 20, 3, 6), 'pants');
+  return pixels.shade(g, materialsOf(variant), { bevel: 1, outline });
+}
+
+let people = null;
+const sprites = () => {
+  if (!people) people = JACKETS.map((_, v) => buildPerson(v));
+  return people;
+};
+
+// Who is in the crowd, found once: where each person stands, which jacket, whether there is a sign and how they sway.
+const SLOTS = Object.freeze(Array.from({ length: 28 }, (_, i) => Object.freeze({
+  row: i % 3,
+  x: 176 + ((i * 53) % 150) + light.unit(131, i, 0) * 10,
+  variant: Math.floor(light.unit(131, i, 1) * 4),
+  sign: light.unit(131, i, 2) < 0.6,
+  phase: light.unit(131, i, 3) * 6.28,
+})));
+
+function skyline(ctx, mood) {
+  kit.gradient(ctx, -8, BASE + 4, [[0, HD.night[1]], [0.7, dim(R.city[0], 0.55)], [1, mood === 'bad' ? dim(R.tie[0], 0.4) : dim(R.city[0], 0.4)]]);
+  for (let k = 0; k < 17; k += 1) {
+    const x = -10 + k * 30 + (k % 3) * 3;
+    const w = 24 + (k % 4) * 3;
+    const h = 40 + light.unit(133, k, 0) * 58;
+    fillRect(ctx, x, BASE - h, w, h + 4, dim(R.city[0], 0.74));
+    for (let row = 0; row < Math.floor(h / 7) - 1; row += 1) {
+      for (let col = 0; col < Math.floor(w / 6); col += 1) {
+        if (light.unit(135 + k, row, col) < (mood === 'bad' ? 0.55 : 0.4)) fillRect(ctx, x + 3 + col * 6, BASE - h + 5 + row * 7, 2.5, 3, tint(mood === 'bad' ? R.tie[2] : HD.lamp[1], 0.75));
+      }
+    }
+  }
+  light.glow(ctx, 252, BASE - 4, 210, mood === 'bad' ? HD.alarm : mood === 'good' ? HD.day[0] : HD.lamp[0], mood === 'bad' ? 0.34 : 0.2, { squash: 0.3 });
+}
+
+function street(ctx, mood) {
+  kit.gradient(ctx, BASE, 270, [[0, dim(R.asphalt[2], 0.15)], [0.2, dim(R.asphalt[1], 0.2)], [1, dim(R.asphalt[0], 0.7)]]);
+  fillRect(ctx, -8, BASE, W + 16, SIDEWALK - BASE, dim(R.stone[0], 0.55));
+  fillRect(ctx, -8, SIDEWALK - 2, W + 16, 2, dim(R.stone[1], 0.4));
+  fillRect(ctx, -8, BASE, W + 16, 0.75, tint(R.stone[2], 0.4));
+  for (let x = -4; x < W; x += 60) fillRect(ctx, x, SIDEWALK + 12, 26, 1.5, tint(HD.lamp[2], 0.35));
+}
+
+function lamps(ctx, t, mood) {
+  const strength = kit.MOODS[mood].lamp;
+  [214, 330].forEach((x) => {
+    fillRect(ctx, x, 70, 2.5, BASE - 70, dim(R.metal[0], 0.4));
+    fillRect(ctx, x - 10, 70, 12, 2.5, dim(R.metal[1], 0.2));
+    light.ray(ctx, x - 8, 73, Math.PI / 2, 66, 0.4, HD.lamp[0], 0.18 * strength);
+    light.glow(ctx, x - 8, 74, 22, HD.lamp[1], 0.7 * strength);
+    light.glow(ctx, x - 8, BASE + 8, 44, HD.lamp[0], 0.2 * strength, { squash: 0.2 });
+  });
+}
+
+function sign(ctx, t, mood, x, y, calm) {
+  const wave = calm ? 0 : Math.sin(t * 2.4 + x) * 1.2;
+  fillRect(ctx, x + 5.5, y - 30, 1, 14, dim(R.wood[1], 0.2));
+  const board = mood === 'bad' ? dim(R.tie[2], 0.1) : dim(R.paper[1], 0.2);
+  fillRect(ctx, x - 1, y - 41 + wave, 14, 11, P.ink);
+  fillRect(ctx, x, y - 40 + wave, 12, 9, board);
+  if (mood === 'good') {
+    ctx.strokeStyle = R.leaf[1];
+    ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    ctx.moveTo(x + 2, y - 35 + wave);
+    ctx.lineTo(x + 5, y - 32 + wave);
+    ctx.lineTo(x + 10, y - 39 + wave);
+    ctx.stroke();
+  } else if (mood === 'bad') {
+    fillRect(ctx, x + 5, y - 39 + wave, 2, 5, P.white);
+    fillRect(ctx, x + 5, y - 33 + wave, 2, 2, P.white);
+  } else {
+    fillRect(ctx, x + 2, y - 38 + wave, 8, 1, tint(P.ink, 0.55));
+    fillRect(ctx, x + 2, y - 35 + wave, 6, 1, tint(P.ink, 0.45));
+  }
+}
+
+function crowd(ctx, t, mood, calm) {
+  const baked = sprites().map((sprite) => pixels.bake(sprite, surface.K()));
+  SLOTS.slice(0, CROWD[mood]).sort((a, b) => a.row - b.row).forEach((s) => {
+    const sway = calm ? 0 : Math.sin(t * 2.2 + s.phase) * 0.9;
+    const hop = mood === 'bad' && !calm ? -Math.abs(Math.sin(t * 4.5 + s.phase)) * 1.8 : 0;
+    const y = ROWS[2 - s.row] || ROWS[0];
+    pixels.draw(ctx, baked[s.variant], s.x + sway - 6, y - 26 + hop);
+    if (s.sign) sign(ctx, t, mood, s.x + sway - 6, y + hop, calm);
+  });
+}
+
+function flares(ctx, t, mood, calm) {
+  if (mood !== 'bad') return;
+  [[196, 134], [304, 130], [346, 138]].forEach(([x, y], i) => {
+    const flicker = calm ? 1 : 0.8 + 0.2 * Math.sin(t * 7 + i * 2);
+    light.glow(ctx, x, y - 8, 34, R.tie[2], 0.55 * flicker);
+    light.glow(ctx, x, y - 8, 9, HD.lamp[2], 0.9 * flicker);
+    fillRect(ctx, x - 1, y - 8, 2, 8, dim(R.tie[0], 0.2));
+  });
+  if (!calm) light.drawMotes(ctx, light.motes(137, 24, t, { x: 180, y: 70, w: 180, h: 70 }), HD.lamp[0]);
+}
+
+function draw(ctx, t, mood = 'neutral', { calm = false, quality = 'full' } = {}) {
+  const felt = kit.moodOf(mood);
+  const time = calm ? 0 : t;
+  skyline(ctx, felt);
+  street(ctx, felt);
+  lamps(ctx, time, felt);
+  crowd(ctx, time, felt, calm);
+  flares(ctx, time, felt, calm);
+  if (quality !== 'lite' && felt !== 'bad') light.drawMotes(ctx, light.motes(139, 12, time, { x: 180, y: 70, w: 180, h: 70 }), HD.lamp[1]);
+  kit.finish(ctx, time, felt, { calm, quality, focal: FOCAL, hazeBox: { x: 0, y: BASE - 16, w: W, h: 36 } });
+}
+
+module.exports = { draw, FOCAL };
+
+});
+__d("render/hd/scenes/rain", function (module, exports, __r) {
+'use strict';
+
+// Rain: a storm over a coast road. A lighthouse sweeps its beam across the clouds, the sea heaves, rain falls in three layers on a wet road and a
+// delivery truck waits with its hazard lights on. After an answer, when it went well the rain thins, the sun breaks through and a rainbow
+// shows; when it went badly it pours and lightning strikes. A function of time and mood only.
+
+const P = __r("render/palette");
+const layout = __r("ui/layout-hd");
+const { tint, mix } = __r("render/draw");
+const light = __r("render/hd/light");
+const pixels = __r("render/hd/pixels");
+const surface = __r("render/hd/surface");
+const kit = __r("render/hd/scenes/kit");
+const rig = __r("render/hd/scenes/truck-sprite");
+
+const R = P.ramp;
+const HD = P.hd;
+const { W, H } = layout;
+const { dim, fillRect } = kit;
+
+const SEA = Object.freeze({ top: 108, bottom: 130 });
+const ROAD = Object.freeze({ top: 132, bottom: 164 });
+const LIGHTHOUSE = Object.freeze({ x: 198, base: 128, height: 54 });
+const TRUCK = Object.freeze({ x: 238, y: 111 });
+const FOCAL = Object.freeze({ x: 284, y: 128 });
+const CLOUDS = Object.freeze([[40, 24, 38, 5], [120, 38, 46, 3], [210, 20, 40, 6], [300, 32, 50, 4], [380, 18, 42, 7], [450, 36, 36, 3], [262, 56, 34, 5], [170, 62, 30, 4]]);
+const RAIN = Object.freeze({ neutral: 1, good: 0.3, bad: 2.2 });
+
+const flat = (color) => [color, color, color];
+const MATERIALS = Object.freeze({ white: R.paper.map((c) => dim(c, 0.2)), red: R.tie, metal: R.metal, lamp: flat(HD.lamp[1]) });
+const outline = (material) => mix(MATERIALS[material][0], P.ink, 0.6);
+
+function buildLighthouse() {
+  const g = pixels.grid(16, LIGHTHOUSE.height);
+  const tower = pixels.poly([[3, 56], [13, 56], [11, 11], [5, 11]]);
+  pixels.fill(g, tower, 'white');
+  [14, 28, 42].forEach((y) => pixels.fill(g, pixels.meet(tower, kit.rectShape(0, y, 16, 7)), 'red'));
+  pixels.fill(g, kit.rectShape(2, 8, 12, 3), 'metal');
+  pixels.fill(g, kit.rectShape(5, 2, 6, 6), 'lamp');
+  pixels.fill(g, pixels.poly([[4, 2], [8, 0], [12, 2]]), 'red');
+  return pixels.shade(g, MATERIALS, { bevel: 1, outline });
+}
+
+let tower = null;
+const lighthouse = () => {
+  if (!tower) tower = buildLighthouse();
+  return tower;
+};
+
+const SKIES = Object.freeze({ neutral: P.sky.storm, good: P.sky.cold, bad: P.sky.storm });
+
+function sky(ctx, mood) {
+  const [top, bottom] = SKIES[mood];
+  kit.gradient(ctx, -8, SEA.top + 4, [[0, dim(top, mood === 'bad' ? 0.6 : mood === 'good' ? 0.15 : 0.38)], [0.65, dim(top, mood === 'bad' ? 0.3 : 0.05)], [1, mood === 'bad' ? dim(bottom, 0.35) : bottom]]);
+}
+
+function clouds(ctx, t, mood) {
+  CLOUDS.forEach(([x, y, r, speed]) => {
+    const at = kit.wrap(x - t * speed + 80, W + 160) - 80;
+    kit.cloud(ctx, at, y, r, mood === 'bad' ? dim(R.cloud[0], 0.55) : mood === 'good' ? R.cloud[1] : dim(R.cloud[0], 0.3), mood === 'bad' ? 0.9 : 0.8);
+  });
+}
+
+function sweepingBeam(ctx, t, mood, calm) {
+  const lamp = { x: LIGHTHOUSE.x + 8, y: LIGHTHOUSE.base - LIGHTHOUSE.height + 6 };
+  const angle = calm ? 0.3 : t * 0.55;
+  [angle, angle + Math.PI].forEach((a) => light.ray(ctx, lamp.x, lamp.y, a, 230, 0.07, HD.lamp[2], mood === 'good' ? 0.1 : 0.2));
+  light.glow(ctx, lamp.x, lamp.y, 20, HD.lamp[2], 0.8);
+}
+
+function sea(ctx, t, mood) {
+  kit.gradient(ctx, SEA.top, SEA.bottom + 2, [[0, dim(R.water[0], 0.5)], [1, dim(R.water[0], 0.75)]]);
+  const crests = mood === 'bad' ? 34 : 20;
+  ctx.strokeStyle = tint(P.white, mood === 'bad' ? 0.45 : 0.28);
+  ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  for (let i = 0; i < crests; i += 1) {
+    const x = kit.wrap(light.unit(95, i, 0) * (W + 20) + t * (4 + light.unit(95, i, 1) * 6), W + 20) - 10;
+    const y = SEA.top + 3 + light.unit(95, i, 2) * (SEA.bottom - SEA.top - 5);
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + 3 + light.unit(95, i, 3) * 4, y);
+  }
+  ctx.stroke();
+  kit.drawRidge(ctx, kit.ridgePoints({ x0: 150, x1: 250, base: LIGHTHOUSE.base + 2, amp: 22, step: 10, seed: 91 }), SEA.bottom + 4, dim(R.rock[0], 0.55));
+  pixels.draw(ctx, pixels.bake(lighthouse(), surface.K()), LIGHTHOUSE.x, LIGHTHOUSE.base - LIGHTHOUSE.height);
+}
+
+function road(ctx, t, mood) {
+  kit.gradient(ctx, ROAD.top - 2, 270, [[0, dim(R.asphalt[2], 0.15)], [0.3, dim(R.asphalt[1], 0.2)], [1, dim(R.asphalt[0], 0.65)]]);
+  fillRect(ctx, -8, ROAD.top - 8, W + 16, 7, dim(R.metal[1], 0.5));
+  for (let x = -4; x < W; x += 36) fillRect(ctx, x, ROAD.top - 11, 2.5, 12, dim(R.metal[0], 0.5));
+  fillRect(ctx, -8, ROAD.top - 8, W + 16, 0.75, tint(R.metal[2], 0.45));
+  [[262, 12, 40], [350, 14, 54], [430, 12, 46]].forEach(([x, y, w]) => {
+    const g = ctx.createLinearGradient(x, 0, x + w, 0);
+    g.addColorStop(0, tint(SKIES[mood][1], 0));
+    g.addColorStop(0.5, tint(SKIES[mood][1], mood === 'bad' ? 0.18 : 0.32));
+    g.addColorStop(1, tint(SKIES[mood][1], 0));
+    ctx.fillStyle = g;
+    ctx.fillRect(x, ROAD.top + y, w, 3);
+  });
+  const period = 52;
+  for (let k = -1; k < W / period + 2; k += 1) fillRect(ctx, kit.wrap(k * period - t * 30, W + period) - period, ROAD.top + 20, 22, 1.5, tint(HD.lamp[2], 0.5));
+}
+
+function truck(ctx, t, mood, calm) {
+  const { body, wheels } = rig.build();
+  const baked = (sprite) => pixels.bake(sprite, surface.K());
+  pixels.draw(ctx, baked(body), TRUCK.x, TRUCK.y);
+  rig.ANCHORS.wheels.forEach((a) => pixels.draw(ctx, baked(wheels[0]), TRUCK.x + a.x - rig.WHEEL / 2, TRUCK.y + a.y - rig.WHEEL / 2));
+  const on = calm || Math.floor(t * 2.4) % 2 === 0;
+  [rig.ANCHORS.head, rig.ANCHORS.tail].forEach((a, i) => {
+    if (on === (i === 0)) light.glow(ctx, TRUCK.x + a.x, TRUCK.y + a.y - 4, 15, R.hazard[1], 0.8);
+  });
+  light.glow(ctx, TRUCK.x + 50, ROAD.top + 20, 80, R.hazard[1], 0.08, { squash: 0.14 });
+}
+
+function warningSign(ctx) {
+  const x = 396;
+  fillRect(ctx, x, 114, 2, ROAD.top - 114, dim(R.metal[0], 0.4));
+  ctx.fillStyle = R.hazard[1];
+  ctx.beginPath();
+  ctx.moveTo(x + 1, 94);
+  ctx.lineTo(x + 13, 114);
+  ctx.lineTo(x - 11, 114);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = P.ink;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  fillRect(ctx, x + 0.2, 101, 1.6, 6, P.ink);
+  fillRect(ctx, x + 0.2, 109, 1.6, 1.6, P.ink);
+  light.glow(ctx, x + 1, 106, 22, R.hazard[1], 0.18);
+}
+
+function weather(ctx, t, mood, calm) {
+  const k = RAIN[mood];
+  const box = { x: -8, y: 0, w: W + 16, h: ROAD.bottom };
+  kit.drawRain(ctx, kit.rainDrops(t, box, { count: Math.round(70 * k), speed: 200, slant: 0.12, length: 5, seed: 1 }), HD.day[1], 0.5);
+  kit.drawRain(ctx, kit.rainDrops(t, box, { count: Math.round(70 * k), speed: 290, slant: 0.14, length: 8, seed: 2 }), P.white, 0.6);
+  kit.drawRain(ctx, kit.rainDrops(t, box, { count: Math.round(28 * k), speed: 380, slant: 0.16, length: 12, seed: 3 }), P.white, 0.8);
+  const splashes = Math.round(14 * k);
+  for (let i = 0; i < splashes; i += 1) {
+    const phase = (t * 3 + light.unit(97, i, 0)) % 1;
+    ctx.strokeStyle = tint(P.white, 0.45 * (1 - phase));
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.ellipse(light.unit(97, i, 1) * W, ROAD.top + 6 + light.unit(97, i, 2) * 24, 1 + phase * 3.5, 0.5 + phase * 1.2, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  if (mood === 'bad' && !calm) lightning(ctx, t);
+}
+
+// A bolt now and then: a flash of the whole sky for a moment and a jagged line from the clouds to the sea.
+function lightning(ctx, t) {
+  const phase = t % 7;
+  if (phase > 0.14) return;
+  const strike = Math.floor(t / 7);
+  const x0 = 220 + light.unit(99, strike, 0) * 100;
+  fillRect(ctx, -8, -8, W + 16, H + 16, tint(P.white, 0.2 * (1 - phase / 0.14)));
+  ctx.strokeStyle = tint(P.white, 0.95);
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  ctx.moveTo(x0, 30);
+  for (let k = 1; k <= 7; k += 1) ctx.lineTo(x0 + (light.unit(99, strike, k) - 0.5) * 26, 30 + k * 12);
+  ctx.stroke();
+  light.glow(ctx, x0, 80, 60, P.white, 0.3);
+}
+
+function brightWeather(ctx, t, calm) {
+  const sun = { x: 430, y: -14 };
+  [1.82, 1.98, 2.14, 2.3].forEach((a, i) => light.ray(ctx, sun.x, sun.y, a, 200, 0.045 + i * 0.01, HD.lamp[1], 0.14));
+  ['tie', 'hazard', 'hazard', 'leaf', 'glass', 'city'].forEach((name, i) => {
+    ctx.strokeStyle = tint(R[name][2], 0.16);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(332, 146, 70 + i * 2.2, Math.PI, Math.PI * 2);
+    ctx.stroke();
+  });
+  if (!calm) light.drawMotes(ctx, light.motes(98, 10, t, { x: 280, y: 20, w: 180, h: 110 }), HD.lamp[2]);
+}
+
+function draw(ctx, t, mood = 'neutral', { calm = false, quality = 'full' } = {}) {
+  const felt = kit.moodOf(mood);
+  const time = calm ? 0 : t;
+  sky(ctx, felt);
+  clouds(ctx, time, felt);
+  sweepingBeam(ctx, time, felt, calm);
+  sea(ctx, time, felt);
+  road(ctx, time, felt);
+  warningSign(ctx);
+  truck(ctx, time, felt, calm);
+  if (felt === 'good') brightWeather(ctx, time, calm);
+  if (quality !== 'lite') weather(ctx, time, felt, calm);
+  else kit.drawRain(ctx, kit.rainDrops(time, { x: -8, y: 0, w: W + 16, h: ROAD.bottom }, { count: Math.round(60 * RAIN[felt]), speed: 290, slant: 0.14, length: 8, seed: 2 }), P.white, 0.6);
+  kit.finish(ctx, time, felt, { calm, quality, focal: FOCAL, hazeBox: { x: 0, y: SEA.top - 8, w: W, h: 34 } });
+}
+
+module.exports = { draw, FOCAL };
+
+});
+__d("render/hd/scenes/safety", function (module, exports, __r) {
+'use strict';
+
+// Safety: a factory floor under cold lamps, a press that thumps, a hazard sign that glows over a worker in a hard hat and vest. After an answer,
+// when it went well the sign turns green with a tick and the worker gives a thumbs up; when it went badly the sign blinks red, sparks fly from
+// the press and the worker clutches his head. A function of time and mood only.
+
+const P = __r("render/palette");
+const layout = __r("ui/layout-hd");
+const { tint, mix } = __r("render/draw");
+const light = __r("render/hd/light");
+const pixels = __r("render/hd/pixels");
+const surface = __r("render/hd/surface");
+const kit = __r("render/hd/scenes/kit");
+
+const R = P.ramp;
+const HD = P.hd;
+const { W } = layout;
+const { dim, flat, fillRect } = kit;
+
+const FLOOR = 134;
+const WORKER = Object.freeze({ x: 240, y: 90 });
+const SIGN = Object.freeze({ x: 252, y: 40 });
+const PRESS = Object.freeze({ x: 316, y: 112 });
+const FOCAL = Object.freeze({ x: 252, y: 108 });
+
+const VEST = [mix(R.clay[0], R.hazard[0], 0.5), mix(R.clay[1], R.hazard[1], 0.5), mix(R.clay[2], R.hazard[2], 0.5)];
+const MATERIALS = Object.freeze({
+  skin: R.skin,
+  helmet: R.hazard,
+  vest: VEST,
+  stripe: flat(R.paper[2]),
+  shirt: R.suit,
+  pants: flat(dim(R.asphalt[1], 0.1)),
+  boot: flat(dim(R.asphalt[0], 0.4)),
+});
+const OUTLINE = mix(R.asphalt[0], P.ink, 0.55);
+const outline = () => OUTLINE;
+
+// The worker in three poses: arms down while the question is open, a thumb up when it went well, hands on his head when it did not.
+function buildWorker(pose) {
+  const g = pixels.grid(32, 46);
+  pixels.fill(g, pixels.ellipse(12, 11, 5, 5.6), 'skin');
+  pixels.fill(g, pixels.meet(pixels.ellipse(12, 9, 7, 6), (x, y) => y < 10), 'helmet');
+  pixels.fill(g, kit.rectShape(4, 9, 16, 2), 'helmet');
+  pixels.fill(g, kit.rectShape(10, 16, 4, 2), 'skin');
+  pixels.fill(g, kit.rectShape(5, 18, 14, 15), 'vest');
+  pixels.fill(g, kit.rectShape(5, 23, 14, 2), 'stripe');
+  pixels.fill(g, kit.rectShape(5, 28, 14, 2), 'stripe');
+  pixels.fill(g, kit.rectShape(6, 33, 5, 10), 'pants');
+  pixels.fill(g, kit.rectShape(13, 33, 5, 10), 'pants');
+  pixels.fill(g, kit.rectShape(5, 42, 7, 3), 'boot');
+  pixels.fill(g, kit.rectShape(12, 42, 7, 3), 'boot');
+  if (pose === 'good') {
+    pixels.fill(g, kit.rectShape(1, 19, 4, 13), 'shirt');
+    pixels.fill(g, kit.rectShape(1, 32, 4, 3), 'skin');
+    pixels.fill(g, pixels.poly([[19, 19], [23, 19], [28, 9], [24, 7]]), 'shirt');
+    pixels.fill(g, kit.rectShape(24, 3, 5, 5), 'skin');
+    pixels.fill(g, kit.rectShape(25, 0, 2, 4), 'skin');
+  } else if (pose === 'bad') {
+    pixels.fill(g, kit.rectShape(2, 10, 3, 10), 'shirt');
+    pixels.fill(g, kit.rectShape(3, 6, 5, 5), 'skin');
+    pixels.fill(g, kit.rectShape(19, 10, 3, 10), 'shirt');
+    pixels.fill(g, kit.rectShape(17, 6, 5, 5), 'skin');
+  } else {
+    pixels.fill(g, kit.rectShape(1, 19, 4, 13), 'shirt');
+    pixels.fill(g, kit.rectShape(1, 32, 4, 3), 'skin');
+    pixels.fill(g, kit.rectShape(19, 19, 4, 13), 'shirt');
+    pixels.fill(g, kit.rectShape(19, 32, 4, 3), 'skin');
+  }
+  return pixels.shade(g, MATERIALS, { bevel: 1, outline });
+}
+
+let workers = null;
+const worker = (pose) => {
+  if (!workers) workers = { neutral: buildWorker('neutral'), good: buildWorker('good'), bad: buildWorker('bad') };
+  return workers[pose];
+};
+
+function hall(ctx) {
+  kit.gradient(ctx, -8, FLOOR + 4, [[0, dim(R.wall[0], 0.7)], [1, dim(R.wall[0], 0.4)]]);
+  for (let x = -20; x < W + 20; x += 40) {
+    fillRect(ctx, x, 14, 0.5, FLOOR - 14, tint(P.ink, 0.3));
+    fillRect(ctx, x + 0.5, 14, 0.5, FLOOR - 14, tint(R.wall[2], 0.08));
+  }
+  fillRect(ctx, -8, 8, W + 16, 6, dim(R.metal[0], 0.35));
+  fillRect(ctx, -8, 8, W + 16, 1, tint(R.metal[2], 0.4));
+  for (let x = -6; x < W; x += 34) fillRect(ctx, x, 8, 2, 6, dim(R.metal[0], 0.6));
+  kit.gradient(ctx, FLOOR, 270, [[0, dim(R.floor[1], 0.05)], [1, dim(R.floor[0], 0.75)]]);
+  fillRect(ctx, -8, FLOOR, W + 16, 0.75, tint(R.floor[2], 0.7));
+  // the hazard stripes along the floor: yellow and black slanted bands
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(-8, FLOOR + 14, W + 16, 7);
+  ctx.clip();
+  fillRect(ctx, -8, FLOOR + 14, W + 16, 7, dim(R.asphalt[0], 0.3));
+  ctx.fillStyle = dim(R.hazard[1], 0.1);
+  for (let x = -12; x < W + 12; x += 16) {
+    ctx.beginPath();
+    ctx.moveTo(x, FLOOR + 21);
+    ctx.lineTo(x + 8, FLOOR + 21);
+    ctx.lineTo(x + 15, FLOOR + 14);
+    ctx.lineTo(x + 7, FLOOR + 14);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function lamps(ctx, mood) {
+  const strength = kit.MOODS[mood].lamp;
+  [210, 300].forEach((x) => {
+    fillRect(ctx, x - 12, 14, 24, 5, dim(R.metal[1], 0.2));
+    fillRect(ctx, x - 12, 14, 24, 1, tint(R.metal[2], 0.6));
+    light.ray(ctx, x, 19, Math.PI / 2, 125, 0.27, HD.day[2], 0.14 * strength);
+    light.glow(ctx, x, 19, 22, HD.day[2], 0.7 * strength);
+    light.glow(ctx, x, FLOOR + 6, 54, HD.day[1], 0.16 * strength, { squash: 0.18 });
+  });
+}
+
+// The press at the right: a base with hazard stripes, a column and a ram that thumps up and down.
+function press(ctx, t, mood, calm) {
+  const { x, y } = PRESS;
+  const speed = mood === 'bad' ? 3 : 2.1;
+  const ram = calm ? 8 : ((Math.sin(t * speed) + 1) / 2) * 16;
+  kit.propBox(ctx, x, y + 6, 66, 16, R.metal.map((c) => dim(c, 0.3)));
+  kit.propBox(ctx, x + 24, y - 42, 18, 50, R.metal.map((c) => dim(c, 0.35)));
+  kit.propBox(ctx, x + 10, y - 46, 46, 14, R.metal.map((c) => dim(c, 0.25)));
+  fillRect(ctx, x + 29, y - 32, 8, 22 + ram, dim(R.metal[1], 0.1));
+  kit.propBox(ctx, x + 18, y - 10 + ram, 30, 8, R.metal.map((c) => dim(c, 0.2)));
+  const led = mood === 'bad' ? R.tie[2] : R.leaf[2];
+  fillRect(ctx, x + 14, y - 42, 3, 3, led);
+  light.glow(ctx, x + 15, y - 41, 12, led, 0.6);
+  return { x: x + 33, y: y - 2 + ram };
+}
+
+function sparks(ctx, t, at) {
+  for (let i = 0; i < 16; i += 1) {
+    const tau = (t * 1.9 + i / 16) % 1;
+    const x = at.x + (light.unit(151, i, 0) - 0.5) * 70 * tau;
+    const y = at.y - 24 * tau * (0.4 + light.unit(151, i, 1)) + 70 * tau * tau;
+    fillRect(ctx, x, y, 1.4, 1.4, tint(i % 2 ? HD.lamp[2] : R.hazard[2], 1 - tau));
+  }
+  light.glow(ctx, at.x, at.y, 22, HD.lamp[0], 0.5);
+}
+
+// The sign over the worker: an amber triangle with an exclamation mark, a green disc with a tick when it went well, a red blinking triangle when it did not.
+function hazardSign(ctx, t, mood, calm) {
+  const { x, y } = SIGN;
+  const pulse = calm ? 1 : mood === 'bad' ? 0.55 + 0.45 * (Math.sin(t * 7) > 0 ? 1 : 0.25) : 0.8 + 0.2 * Math.sin(t * 2.4);
+  ctx.strokeStyle = tint(dim(R.metal[1], 0.2), 1);
+  ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  ctx.moveTo(x - 13, 19);
+  ctx.lineTo(x - 11, y + 2);
+  ctx.moveTo(x + 13, 19);
+  ctx.lineTo(x + 11, y + 2);
+  ctx.stroke();
+  const color = mood === 'good' ? R.leaf[1] : mood === 'bad' ? R.tie[1] : R.hazard[1];
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  if (mood === 'good') {
+    ctx.arc(x, y + 22, 21, 0, Math.PI * 2);
+  } else {
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + 24, y + 42);
+    ctx.lineTo(x - 24, y + 42);
+    ctx.closePath();
+  }
+  ctx.fill();
+  ctx.strokeStyle = P.ink;
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  if (mood === 'good') {
+    ctx.strokeStyle = P.white;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(x - 9, y + 22);
+    ctx.lineTo(x - 2, y + 29);
+    ctx.lineTo(x + 10, y + 14);
+    ctx.stroke();
+  } else {
+    fillRect(ctx, x - 1.6, y + 14, 3.2, 14, P.ink);
+    fillRect(ctx, x - 1.6, y + 32, 3.2, 3.4, P.ink);
+  }
+  light.glow(ctx, x, y + 24, 54, color === R.hazard[1] ? HD.lamp[0] : color, 0.4 * pulse);
+}
+
+function draw(ctx, t, mood = 'neutral', { calm = false, quality = 'full' } = {}) {
+  const felt = kit.moodOf(mood);
+  const time = calm ? 0 : t;
+  hall(ctx);
+  lamps(ctx, felt);
+  const contact = press(ctx, time, felt, calm);
+  hazardSign(ctx, time, felt, calm);
+  pixels.draw(ctx, pixels.bake(worker(felt), surface.K()), WORKER.x, WORKER.y);
+  light.glow(ctx, WORKER.x + 12, WORKER.y + 26, 40, HD.day[1], 0.12);
+  if (felt === 'bad') sparks(ctx, time, contact);
+  kit.drawSmoke(ctx, kit.smokePuffs(time, { x: 372, y: 62 }, { count: 5, rise: 30, size: 3.5, drift: 6 }), R.cloud[2]);
+  if (quality !== 'lite') light.drawMotes(ctx, light.motes(153, 20, time, { x: 190, y: 20, w: 140, h: 112 }), HD.day[2]);
+  kit.finish(ctx, time, felt, { calm, quality, focal: FOCAL, hazeBox: { x: 0, y: FLOOR - 12, w: W, h: 30 } });
+}
+
+module.exports = { draw, FOCAL };
+
+});
+__d("render/hd/scenes/snow", function (module, exports, __r) {
+'use strict';
+
+// Snow: a mountain pass at night. Ridges of snow-capped peaks fade into the haze, pines stand on the slopes, a cabin glows in the valley and an
+// aurora ripples over the sky while flakes fall in three layers. After an answer, when it went well the sun rises behind the peaks and the snow
+// glints; when it went badly the blizzard thickens and the wind blows. A function of time and mood only.
+
+const P = __r("render/palette");
+const layout = __r("ui/layout-hd");
+const { tint, mix } = __r("render/draw");
+const light = __r("render/hd/light");
+const pixels = __r("render/hd/pixels");
+const surface = __r("render/hd/surface");
+const kit = __r("render/hd/scenes/kit");
+
+const R = P.ramp;
+const HD = P.hd;
+const { W, H } = layout;
+const { dim, fillRect } = kit;
+
+const BASE = 130;
+const SUN = Object.freeze({ x: 292, y: 112 });
+const CABIN = Object.freeze({ x: 250, y: 114 });
+const FOCAL = Object.freeze({ x: 262, y: 112 });
+const PINES = Object.freeze([[184, 140, 1], [200, 144, 0], [216, 138, 2], [322, 140, 1], [338, 144, 0], [354, 138, 2], [376, 142, 1], [394, 146, 0], [414, 140, 2], [436, 144, 1], [456, 140, 0], [470, 146, 2]]);
+
+const flat = (color) => [color, color, color];
+const MATERIALS = Object.freeze({
+  pine: R.leaf.map((c) => dim(c, 0.55)),
+  snow: R.snow,
+  wood: R.wood.map((c) => dim(c, 0.2)),
+  roof: R.snow,
+  door: flat(dim(R.wood[0], 0.5)),
+  glass: flat(dim(R.glass[0], 0.55)),
+  brick: R.brick.map((c) => dim(c, 0.3)),
+});
+const outline = (material) => mix(MATERIALS[material][0], P.ink, 0.55);
+
+// A pine of `tiers` tiers: stacked triangles on a trunk, with a cap of snow on each tier.
+function buildPine(tiers) {
+  const w = 14 + tiers * 3;
+  const h = 14 + tiers * 9;
+  const g = pixels.grid(w, h);
+  const c = w / 2;
+  pixels.fill(g, kit.rectShape(c - 1, h - 5, 2, 5), 'wood');
+  for (let k = 0; k < tiers; k += 1) {
+    const top = 2 + k * 8;
+    const half = 4 + k * 2.6;
+    pixels.fill(g, pixels.poly([[c, top], [c + half + 2, top + 13], [c - half - 2, top + 13]]), 'pine');
+    pixels.fill(g, pixels.poly([[c, top], [c + 3, top + 4], [c - 3, top + 4]]), 'snow');
+  }
+  return pixels.shade(g, MATERIALS, { bevel: 1, outline });
+}
+
+function buildCabin() {
+  const g = pixels.grid(38, 30);
+  pixels.fill(g, kit.rectShape(2, 12, 32, 17), 'wood');
+  pixels.fill(g, kit.rectShape(26, 0, 5, 12), 'brick');
+  pixels.fill(g, pixels.poly([[0, 13], [18, 2], [36, 13]]), 'roof');
+  pixels.fill(g, kit.rectShape(14, 18, 8, 11), 'door');
+  pixels.fill(g, kit.rectShape(5, 16, 6, 6), 'glass');
+  pixels.fill(g, kit.rectShape(25, 16, 6, 6), 'glass');
+  return pixels.shade(g, MATERIALS, { bevel: 1, outline });
+}
+
+let built = null;
+const sprites = () => {
+  if (!built) built = { pines: [2, 3, 4].map(buildPine), cabin: buildCabin() };
+  return built;
+};
+
+function aurora(ctx, t, calm) {
+  [[28, R.leaf[2], 0.12], [44, R.glass[1], 0.09], [58, R.leaf[1], 0.07]].forEach(([y, color, alpha], b) => {
+    const g = ctx.createLinearGradient(0, y - 18, 0, y + 30);
+    g.addColorStop(0, tint(color, 0));
+    g.addColorStop(0.45, tint(color, alpha));
+    g.addColorStop(1, tint(color, 0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    for (let x = -8; x <= W + 8; x += 12) {
+      const wave = Math.sin(x * 0.02 + (calm ? 0 : t * 0.3) + b * 1.7) * 11;
+      if (x === -8) ctx.moveTo(x, y + wave - 18);
+      else ctx.lineTo(x, y + wave - 18);
+    }
+    for (let x = W + 8; x >= -8; x -= 12) ctx.lineTo(x, y + Math.sin(x * 0.02 + (calm ? 0 : t * 0.3) + b * 1.7) * 11 + 30);
+    ctx.closePath();
+    ctx.fill();
+  });
+}
+
+function sky(ctx, t, mood, calm) {
+  if (mood === 'good') {
+    kit.gradient(ctx, -8, BASE + 6, [[0, dim(P.sky.cold[0], 0.35)], [0.55, mix(HD.lamp[0], R.tie[0], 0.55)], [1, HD.lamp[1]]]);
+    light.glow(ctx, SUN.x, SUN.y, 150, HD.lamp[2], 0.55, { squash: 0.7 });
+    for (let k = 0; k < 6; k += 1) light.ray(ctx, SUN.x, SUN.y, -Math.PI / 2 + (k - 2.5) * 0.28, 170, 0.07, HD.lamp[2], 0.16);
+    return;
+  }
+  const gray = mood === 'bad';
+  kit.gradient(ctx, -8, BASE + 6, gray
+    ? [[0, dim(P.sky.cold[0], 0.3)], [1, dim(P.sky.cold[1], 0.3)]]
+    : [[0, HD.night[1]], [0.5, dim(P.sky.cold[0], 0.5)], [1, dim(P.sky.cold[1], 0.4)]]);
+  if (!gray) {
+    kit.drawStars(ctx, t, { x: 0, y: 0, w: W, h: 90 }, 50, 61);
+    aurora(ctx, t, calm);
+  }
+}
+
+// A ridge with its snow: the whole ridge in snow, then the rock below the cap drawn over it a few pixels lower.
+function mountains(ctx, mood, sway) {
+  const rock = mood === 'good' ? mix(R.rock[0], HD.lamp[0], 0.25) : R.rock[0];
+  const layers = [
+    { base: 124, amp: 82, step: 20, seed: 61, cap: 26, fade: 0.55 },
+    { base: 130, amp: 62, step: 15, seed: 62, cap: 17, fade: 0.4 },
+  ];
+  layers.forEach(({ base, amp, step, seed, cap, fade }) => {
+    const points = kit.ridgePoints({ x0: -8, x1: W + 8, base, amp, step, seed }).map((p) => ({ ...p, x: p.x + sway * (fade < 0.5 ? 1.4 : 0.7) }));
+    kit.drawRidge(ctx, points, BASE + 8, dim(mix(R.snow[1], HD.haze, fade * 0.25), mood === 'bad' ? 0.35 : 0.12));
+    kit.drawRidge(ctx, points.map((p) => ({ x: p.x, y: p.y + cap + (p.x % 7) })), BASE + 8, dim(mix(rock, HD.haze, fade * 0.3), 0.38));
+  });
+  kit.drawRidge(ctx, kit.ridgePoints({ x0: -8, x1: W + 8, base: 138, amp: 34, step: 11, seed: 63 }), BASE + 20, dim(R.leaf[0], 0.62));
+}
+
+function valley(ctx, t, mood) {
+  kit.drawRidge(ctx, kit.ridgePoints({ x0: -8, x1: W + 8, base: 154, amp: 12, step: 14, seed: 65 }), 270, mix(R.snow[0], HD.night[0], mood === 'good' ? 0.15 : 0.4));
+  kit.gradient(ctx, 152, 270, [[0, tint(R.snow[1], 0)], [1, tint(HD.night[1], 0.65)]]);
+}
+
+function cabin(ctx, t, mood) {
+  const { cabin: house, pines } = sprites();
+  const baked = (sprite) => pixels.bake(sprite, surface.K());
+  const lit = tint(HD.lamp[1], 0.95);
+  pixels.draw(ctx, baked(house), CABIN.x, CABIN.y);
+  [[5, 16], [25, 16]].forEach(([dx, dy]) => {
+    fillRect(ctx, CABIN.x + dx, CABIN.y + dy, 6, 6, lit);
+    light.glow(ctx, CABIN.x + dx + 3, CABIN.y + dy + 3, 16, HD.lamp[0], 0.45 * kit.MOODS[mood].lamp);
+  });
+  light.glow(ctx, CABIN.x + 18, CABIN.y + 32, 46, HD.lamp[0], 0.2 * kit.MOODS[mood].lamp, { squash: 0.25 });
+  kit.drawSmoke(ctx, kit.smokePuffs(t, { x: CABIN.x + 28.5, y: CABIN.y }, { count: 6, rise: 28, spread: 4, size: 4, drift: mood === 'bad' ? 16 : 8 }), R.cloud[2]);
+  PINES.forEach(([x, y, k]) => pixels.draw(ctx, baked(pines[k]), x - pines[k].w / 2, y - pines[k].h));
+}
+
+function weather(ctx, t, mood, calm) {
+  const box = { x: -8, y: 0, w: W + 16, h: 170 };
+  const count = mood === 'bad' ? 2.4 : mood === 'good' ? 0.5 : 1;
+  const wind = mood === 'bad' ? 34 : 6;
+  kit.drawSnow(ctx, kit.snowFlakes(t, box, { count: Math.round(50 * count), speed: 12, wind: wind * 0.5, size: 0.9, seed: 3 }), HD.haze);
+  kit.drawSnow(ctx, kit.snowFlakes(t, box, { count: Math.round(50 * count), speed: 20, wind, size: 1.4, seed: 4 }), P.white);
+  kit.drawSnow(ctx, kit.snowFlakes(t, box, { count: Math.round(18 * count), speed: 34, wind: wind * 1.4, size: 2.2, seed: 5 }), P.white);
+  if (mood === 'bad') {
+    ctx.strokeStyle = tint(P.white, 0.2);
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    for (let i = 0; i < 26; i += 1) {
+      const x = kit.wrap(light.unit(66, i, 0) * (W + 120) - t * 90, W + 120) - 60;
+      const y = 10 + light.unit(66, i, 1) * 140;
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + 18 + light.unit(66, i, 2) * 24, y + 1.5);
+    }
+    ctx.stroke();
+    fillRect(ctx, -8, -8, W + 16, H + 16, tint(P.white, calm ? 0.12 : 0.1 + 0.03 * Math.sin(t * 0.9)));
+  }
+}
+
+function draw(ctx, t, mood = 'neutral', { calm = false, quality = 'full' } = {}) {
+  const felt = kit.moodOf(mood);
+  const time = calm ? 0 : t;
+  const sway = calm ? 0 : Math.sin(t * 0.3);
+  sky(ctx, time, felt, calm);
+  mountains(ctx, felt, sway);
+  valley(ctx, time, felt);
+  cabin(ctx, time, felt);
+  if (felt === 'good') light.glow(ctx, SUN.x, SUN.y + 6, 80, HD.lamp[2], 0.4, { squash: 0.5 });
+  if (quality !== 'lite') weather(ctx, time, felt, calm);
+  else kit.drawSnow(ctx, kit.snowFlakes(time, { x: -8, y: 0, w: W + 16, h: 170 }, { count: Math.round(50 * (felt === 'bad' ? 2.4 : 1)), speed: 20, wind: 6, size: 1.4, seed: 4 }), P.white);
+  kit.finish(ctx, time, felt, { calm, quality, focal: FOCAL, hazeBox: { x: 0, y: BASE - 20, w: W, h: 36 } });
+}
+
+module.exports = { draw, FOCAL };
+
+});
+__d("render/hd/scenes/strategy", function (module, exports, __r) {
+'use strict';
+
+// Strategy: a dartboard on its backboard in a dark hall, a spotlight with dust drifting in its beam, and a dart that flies in, sticks and
+// shivers. After an answer, when it went well the dart lands in the bullseye and a glint shines; when it went badly it misses the board and a
+// red cross marks the spot on the backboard. A function of time and mood only.
+
+const P = __r("render/palette");
+const layout = __r("ui/layout-hd");
+const { tint, mix } = __r("render/draw");
+const light = __r("render/hd/light");
+const pixels = __r("render/hd/pixels");
+const surface = __r("render/hd/surface");
+const kit = __r("render/hd/scenes/kit");
+
+const R = P.ramp;
+const HD = P.hd;
+const { W } = layout;
+const { dim, fillRect } = kit;
+
+const CENTER = Object.freeze({ x: 252, y: 78 });
+const FOCAL = CENTER;
+const BACKBOARD = Object.freeze({ x: 198, y: 24, w: 108, h: 108 });
+const FLOOR = 136;
+const TARGETS = Object.freeze({ neutral: { x: 271, y: 88 }, good: { x: 252, y: 78 }, bad: { x: 295, y: 40 } });
+const CYCLE = 5;
+const FLIGHT = 0.38;
+const START = Object.freeze({ x: 172, dy: 30 });
+
+const flat = (color) => [color, color, color];
+const BOARD = Object.freeze({
+  rim: flat(dim(R.asphalt[1], 0.25)),
+  white: flat(dim(R.paper[1], 0.12)),
+  red: flat(R.tie[1]),
+  gold: flat(R.hazard[1]),
+  shaft: R.wood,
+  tip: R.metal,
+  flight: R.tie,
+});
+const outline = (material) => mix(BOARD[material][0], P.ink, 0.65);
+const rect = (x, y, w, h) => pixels.box(x, y, x + w, y + h);
+
+// Rings out to in: radius and material.
+const RINGS = Object.freeze([[33, 'rim'], [30, 'white'], [26, 'red'], [19.7, 'white'], [14.6, 'red'], [8.2, 'white'], [4, 'gold']]);
+const DISC = 72;
+
+function buildBoard() {
+  const g = pixels.grid(DISC, DISC);
+  RINGS.forEach(([r, material]) => pixels.fill(g, pixels.ellipse(DISC / 2, DISC / 2, r, r), material));
+  return pixels.shade(g, BOARD, { bevel: 0, outline });
+}
+
+function buildDart() {
+  const g = pixels.grid(32, 8);
+  pixels.fill(g, rect(9, 3, 16, 2), 'shaft');
+  pixels.fill(g, rect(25, 3, 7, 2), 'tip');
+  pixels.fill(g, pixels.poly([[0, 0], [11, 3], [11, 5], [0, 8]]), 'flight');
+  return pixels.shade(g, BOARD, { bevel: 0, outline });
+}
+
+let board = null;
+let dart = null;
+const sprites = () => {
+  if (!board) {
+    board = buildBoard();
+    dart = buildDart();
+  }
+  return { board, dart };
+};
+
+// Where the dart is, how far it shivers and how visible it is: it flies in, sticks, shivers, rests and fades before the next one.
+function dartAt(t, mood, calm) {
+  const target = TARGETS[mood];
+  if (calm) return { x: target.x, y: target.y, alpha: 1 };
+  const c = t % CYCLE;
+  if (c < FLIGHT) {
+    const k = 1 - (1 - c / FLIGHT) ** 3;
+    return { x: START.x + (target.x - START.x) * k, y: target.y + START.dy * (1 - k) ** 2, alpha: 1 };
+  }
+  const since = c - FLIGHT;
+  const shiver = since < 0.6 ? Math.sin(since * 55) * (1 - since / 0.6) * 1.2 : 0;
+  return { x: target.x, y: target.y + shiver, alpha: c > CYCLE - 0.4 ? (CYCLE - c) / 0.4 : 1 };
+}
+
+// A four-pointed glint of light.
+function glint(ctx, x, y, size, color, alpha) {
+  const before = ctx.globalCompositeOperation;
+  ctx.globalCompositeOperation = 'lighter';
+  fillRect(ctx, x - size, y - 0.4, size * 2, 0.8, tint(color, alpha));
+  fillRect(ctx, x - 0.4, y - size, 0.8, size * 2, tint(color, alpha));
+  ctx.globalCompositeOperation = before;
+  light.glow(ctx, x, y, size * 1.4, color, alpha * 0.7);
+}
+
+function hall(ctx, t, mood) {
+  kit.gradient(ctx, -8, FLOOR + 6, [[0, HD.night[1]], [0.7, dim(R.wall[0], 0.6)], [1, dim(R.wall[0], 0.4)]]);
+  kit.drawStars(ctx, t, { x: 0, y: 0, w: W, h: 40 }, 20, 21);
+  for (let i = 0; i < 16; i += 1) {
+    const x = 20 + light.unit(31, i, 0) * (W - 40);
+    light.glow(ctx, x, FLOOR - 6 - light.unit(31, i, 1) * 14, 4 + light.unit(31, i, 2) * 5, i % 3 === 0 ? HD.lamp[0] : HD.day[0], 0.28);
+  }
+  kit.gradient(ctx, FLOOR, 270, [[0, dim(R.floor[1], 0.1)], [1, dim(R.floor[0], 0.7)]]);
+  fillRect(ctx, -8, FLOOR, W + 16, 0.75, tint(R.floor[2], 0.8));
+  light.glow(ctx, CENTER.x, FLOOR + 8, 110, mood === 'bad' ? HD.alarm : HD.lamp[2], 0.12 * kit.MOODS[mood].lamp, { squash: 0.2 });
+}
+
+// A whiteboard to the right with a diagram of boxes and arrows: the hall of a strategy team, not just a target.
+function whiteboard(ctx) {
+  const x = 350;
+  const y = 92;
+  kit.propBox(ctx, x, y, 108, 42, R.metal.map((c) => dim(c, 0.45)));
+  fillRect(ctx, x + 3, y + 3, 102, 36, dim(R.paper[1], 0.32));
+  [[8, 6], [46, 6], [76, 20]].forEach(([dx, dy]) => {
+    fillRect(ctx, x + dx, y + dy, 24, 9, tint(R.city[1], 0.55));
+    fillRect(ctx, x + dx, y + dy, 24, 1, tint(P.white, 0.3));
+  });
+  ctx.strokeStyle = tint(P.ink, 0.6);
+  ctx.lineWidth = 0.75;
+  ctx.beginPath();
+  ctx.moveTo(x + 32, y + 10);
+  ctx.lineTo(x + 46, y + 10);
+  ctx.moveTo(x + 70, y + 10);
+  ctx.lineTo(x + 88, y + 10);
+  ctx.lineTo(x + 88, y + 20);
+  ctx.moveTo(x + 12, y + 32);
+  ctx.lineTo(x + 36, y + 26);
+  ctx.lineTo(x + 62, y + 32);
+  ctx.lineTo(x + 92, y + 28);
+  ctx.stroke();
+  fillRect(ctx, x + 6, y + 36, 30, 1.5, tint(R.tie[1], 0.8));
+  light.glow(ctx, x + 54, y + 20, 70, HD.day[0], 0.08);
+}
+
+function backboard(ctx, mood) {
+  const { x, y, w, h } = BACKBOARD;
+  kit.propBox(ctx, x, y, w, h, R.wood.map((c) => dim(c, 0.45)));
+  fillRect(ctx, x + 3, y + 3, w - 6, h - 6, dim(R.wood[0], 0.55));
+  for (let k = 0; k < 8; k += 1) fillRect(ctx, x + 3, y + 8 + k * 13, w - 6, 0.5, tint(P.ink, 0.35));
+  // the dents of old darts
+  [[212, 40], [286, 122], [222, 120], [298, 100], [208, 88], [292, 56]].forEach(([dx, dy]) => fillRect(ctx, dx, dy, 1.5, 1.5, tint(P.ink, 0.6)));
+  light.glow(ctx, CENTER.x, CENTER.y, 70, mood === 'bad' ? HD.alarm : HD.lamp[0], 0.1 * kit.MOODS[mood].lamp);
+}
+
+function dartboard(ctx, t, mood, calm) {
+  const { board: disc, dart: arrow } = sprites();
+  const baked = (sprite) => pixels.bake(sprite, surface.K());
+  pixels.draw(ctx, baked(disc), CENTER.x - DISC / 2, CENTER.y - DISC / 2);
+  ctx.strokeStyle = tint(P.ink, 0.35);
+  ctx.lineWidth = 0.5;
+  ctx.beginPath();
+  for (let a = 0; a < 20; a += 1) {
+    const angle = (a * Math.PI) / 10;
+    ctx.moveTo(CENTER.x + Math.cos(angle) * 8.2, CENTER.y + Math.sin(angle) * 8.2);
+    ctx.lineTo(CENTER.x + Math.cos(angle) * 30, CENTER.y + Math.sin(angle) * 30);
+  }
+  ctx.stroke();
+  ctx.strokeStyle = tint(P.white, 0.28);
+  ctx.lineWidth = 0.75;
+  ctx.beginPath();
+  ctx.arc(CENTER.x, CENTER.y, 31.5, Math.PI * 1.05, Math.PI * 1.5);
+  ctx.stroke();
+  const at = dartAt(t, mood, calm);
+  ctx.globalAlpha = at.alpha;
+  pixels.draw(ctx, baked(arrow), at.x - 32, at.y - 4);
+  ctx.globalAlpha = 1;
+  return at;
+}
+
+// The reflection of the lit backboard on the floor, flipped and faint.
+function reflection(ctx, sprite) {
+  ctx.save();
+  ctx.transform(1, 0, 0, -1, 0, 2 * FLOOR);
+  ctx.globalAlpha = 0.08;
+  pixels.draw(ctx, sprite, CENTER.x - DISC / 2, CENTER.y - DISC / 2);
+  ctx.restore();
+}
+
+function draw(ctx, t, mood = 'neutral', { calm = false, quality = 'full' } = {}) {
+  const felt = kit.moodOf(mood);
+  const time = calm ? 0 : t;
+  const flicker = felt === 'bad' ? 0.85 + 0.1 * Math.sin(time * 2.2) : 1;
+  hall(ctx, time, felt);
+  whiteboard(ctx);
+  backboard(ctx, felt);
+  light.beam(ctx, { x0: 150, x1: 168, y: -6 }, { x0: 206, x1: 308, y: 128 }, felt === 'bad' ? HD.haze : HD.lamp[2], 0.12 * kit.MOODS[felt].lamp * flicker);
+  dartboard(ctx, time, felt, calm);
+  if (quality !== 'lite') reflection(ctx, pixels.bake(sprites().board, surface.K()));
+  light.glow(ctx, CENTER.x - 6, CENTER.y - 6, 62, HD.lamp[2], 0.3 * kit.MOODS[felt].lamp * flicker);
+  if (felt === 'good') {
+    const pulse = calm ? 1 : 0.75 + 0.25 * Math.sin(time * 3);
+    glint(ctx, TARGETS.good.x, TARGETS.good.y, 11 * pulse, HD.gold, 0.9);
+    glint(ctx, TARGETS.good.x + 9, TARGETS.good.y - 8, 5 * pulse, P.white, 0.7);
+  }
+  if (felt === 'bad') {
+    const t2 = TARGETS.bad;
+    const pulse = calm ? 1 : 0.7 + 0.3 * Math.sin(time * 2.4);
+    ctx.strokeStyle = tint(HD.alarm, 0.95 * pulse);
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(t2.x - 6, t2.y - 6);
+    ctx.lineTo(t2.x + 6, t2.y + 6);
+    ctx.moveTo(t2.x + 6, t2.y - 6);
+    ctx.lineTo(t2.x - 6, t2.y + 6);
+    ctx.stroke();
+    light.glow(ctx, t2.x, t2.y, 20, HD.alarm, 0.4 * pulse);
+  }
+  if (quality !== 'lite') light.drawMotes(ctx, light.motes(17, 22, time, { x: 190, y: 14, w: 120, h: 108 }), HD.lamp[2]);
+  kit.finish(ctx, time, felt, { calm, quality, focal: FOCAL, hazeBox: { x: 0, y: FLOOR - 10, w: W, h: 30 } });
+}
+
+module.exports = { draw, FOCAL };
+
+});
+__d("render/hd/scenes/truck-sprite", function (module, exports, __r) {
+'use strict';
+
+// The delivery truck, side on, facing right: a white cargo box with a blue stripe, a red cab, a stack behind it, and wheels that are drawn
+// separately in six positions so they can turn. Shared by the truck scene and the road in the storm.
+
+const P = __r("render/palette");
+const pixels = __r("render/hd/pixels");
+const { mix } = __r("render/draw");
+const kit = __r("render/hd/scenes/kit");
+
+const R = P.ramp;
+const { dim, flat, rectShape: rect } = kit;
+
+const W = 94;
+const H = 38;
+// Where things are on the truck, in sprite cells.
+const ANCHORS = Object.freeze({
+  wheels: [{ x: 18, y: 31 }, { x: 74, y: 31 }],
+  head: { x: 94, y: 24 },
+  tail: { x: 0, y: 26 },
+  stack: { x: 61, y: 2 },
+  side: { x: 8, y: 6, w: 46, h: 20 },
+  cab: { x: 70, y: 4 },
+});
+const WHEEL = 16;
+const FRAMES = 6;
+
+const MATERIALS = Object.freeze({
+  box: R.paper.map((c) => dim(c, 0.12)),
+  stripe: R.city,
+  cab: R.tie,
+  glass: flat(dim(R.glass[0], 0.3)),
+  chassis: R.asphalt,
+  metal: R.metal,
+  tire: flat(dim(R.asphalt[0], 0.3)),
+  hub: R.metal,
+  spoke: flat(R.metal[2]),
+});
+const outline = (material) => mix(MATERIALS[material][0], P.ink, 0.6);
+
+function body() {
+  const g = pixels.grid(W, H);
+  pixels.fill(g, rect(0, 0, 62, 32), 'box');
+  pixels.fill(g, rect(0, 22, 62, 4), 'stripe');
+  pixels.stroke(g, 30, 1, 30, 21, 'chassis');
+  pixels.fill(g, pixels.poly([[62, 10], [80, 10], [94, 22], [94, 32], [62, 32]]), 'cab');
+  pixels.fill(g, pixels.poly([[82, 12], [91, 22], [79, 22], [79, 12]]), 'glass');
+  pixels.fill(g, rect(0, 32, 94, 4), 'chassis');
+  pixels.fill(g, rect(60, 0, 3, 12), 'metal');
+  return pixels.shade(g, MATERIALS, { bevel: 1, outline });
+}
+
+// A wheel turned a sixth of the way between two spokes more than the one before.
+function wheel(frame) {
+  const g = pixels.grid(WHEEL, WHEEL);
+  const c = WHEEL / 2;
+  pixels.fill(g, pixels.ellipse(c, c, 8, 8), 'tire');
+  pixels.fill(g, pixels.ellipse(c, c, 5, 5), 'hub');
+  const turn = (frame * Math.PI) / 2 / FRAMES;
+  for (let k = 0; k < 4; k += 1) {
+    const a = turn + (k * Math.PI) / 2;
+    pixels.stroke(g, Math.round(c + Math.cos(a) * 1), Math.round(c + Math.sin(a) * 1), Math.round(c + Math.cos(a) * 4.5), Math.round(c + Math.sin(a) * 4.5), 'spoke');
+  }
+  return pixels.shade(g, MATERIALS, { bevel: 0, outline });
+}
+
+let built = null;
+function build() {
+  if (!built) built = { body: body(), wheels: Array.from({ length: FRAMES }, (_, k) => wheel(k)) };
+  return built;
+}
+
+module.exports = { build, W, H, ANCHORS, WHEEL, FRAMES };
+
+});
+__d("render/hd/scenes/truck", function (module, exports, __r) {
+'use strict';
+
+// The truck: a delivery truck rolling along a night road, side on. Wheels turn, the lane marks, the poles and the city slide by at three speeds,
+// the headlights light the road ahead and the exhaust trails behind. After an answer, when it went well a green tick glows on its side and the
+// exhaust is clean; when it went badly the smoke is dark and thick and a red beacon turns on the cab. A function of time and mood only.
+
+const P = __r("render/palette");
+const layout = __r("ui/layout-hd");
+const { tint } = __r("render/draw");
+const light = __r("render/hd/light");
+const pixels = __r("render/hd/pixels");
+const surface = __r("render/hd/surface");
+const kit = __r("render/hd/scenes/kit");
+const rig = __r("render/hd/scenes/truck-sprite");
+
+const R = P.ramp;
+const HD = P.hd;
+const { W } = layout;
+const { dim, fillRect } = kit;
+
+const ROAD = Object.freeze({ top: 130, bottom: 160, line: 146 });
+const TRUCK = Object.freeze({ x: 205, y: 108 });
+const FOCAL = Object.freeze({ x: 252, y: 126 });
+const CITY_TILE = 240;
+const BUILDINGS = Object.freeze([[0, 22, 34], [26, 18, 50], [48, 26, 40], [78, 16, 58], [98, 24, 36], [126, 20, 46], [150, 28, 62], [182, 18, 38], [204, 26, 52]]);
+const SKIES = Object.freeze({ neutral: [HD.night[1], dim(R.city[0], 0.5), dim(HD.day[0], 0.55)], good: [HD.night[1], dim(R.city[0], 0.35), dim(HD.lamp[0], 0.45)], bad: [HD.night[1], dim(R.city[0], 0.7), dim(R.tie[0], 0.55)] });
+
+const slide = (t, speed, period) => -((t * speed) % period);
+
+function sky(ctx, t, mood) {
+  const [top, mid, low] = SKIES[mood];
+  kit.gradient(ctx, -8, ROAD.top, [[0, top], [0.55, mid], [1, low]]);
+  kit.drawStars(ctx, t, { x: 0, y: 0, w: W, h: 60 }, 30, 71);
+  light.glow(ctx, 252, ROAD.top - 4, 180, mood === 'bad' ? HD.alarm : HD.lamp[0], 0.16, { squash: 0.25 });
+}
+
+function city(ctx, t) {
+  for (let k = 0; k < 3; k += 1) {
+    const ox = slide(t, 6, CITY_TILE) + k * CITY_TILE;
+    BUILDINGS.forEach(([x, w, h], i) => {
+      fillRect(ctx, ox + x, ROAD.top - 4 - h, w, h + 4, dim(R.city[0], 0.72));
+      for (let row = 0; row < Math.floor(h / 6) - 1; row += 1) {
+        for (let col = 0; col < Math.floor(w / 5); col += 1) {
+          if (light.unit(81 + i, row, col) < 0.4) fillRect(ctx, ox + x + 2 + col * 5, ROAD.top - 4 - h + 4 + row * 6, 2, 2.5, tint(HD.lamp[1], 0.75));
+        }
+      }
+    });
+  }
+}
+
+function poles(ctx, t) {
+  const period = 110;
+  for (let k = 0; k < 6; k += 1) {
+    const x = slide(t, 34, period) + k * period;
+    fillRect(ctx, x, 70, 2, ROAD.top - 70, dim(P.ink, 0.1));
+    fillRect(ctx, x - 7, 74, 16, 2, dim(P.ink, 0.1));
+    ctx.strokeStyle = tint(P.ink, 0.5);
+    ctx.lineWidth = 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x - 7, 75);
+    ctx.quadraticCurveTo(x + period / 2, 84, x + period - 7, 75);
+    ctx.stroke();
+  }
+}
+
+function road(ctx, t) {
+  kit.gradient(ctx, ROAD.top, 270, [[0, dim(R.asphalt[2], 0.1)], [0.25, R.asphalt[1]], [1, dim(R.asphalt[0], 0.6)]]);
+  fillRect(ctx, -8, ROAD.top + 3, W + 16, 0.75, tint(P.white, 0.55));
+  fillRect(ctx, -8, ROAD.bottom - 4, W + 16, 0.75, tint(P.white, 0.4));
+  const period = 40;
+  for (let k = -1; k < W / period + 2; k += 1) fillRect(ctx, slide(t, 96, period) + k * period, ROAD.line, 18, 1.5, tint(HD.lamp[2], 0.7));
+}
+
+function guardRail(ctx, t) {
+  fillRect(ctx, -8, ROAD.bottom + 4, W + 16, 3, dim(R.metal[1], 0.35));
+  fillRect(ctx, -8, ROAD.bottom + 4, W + 16, 0.75, tint(R.metal[2], 0.6));
+  const period = 58;
+  for (let k = -1; k < W / period + 2; k += 1) fillRect(ctx, slide(t, 180, period) + k * period, ROAD.bottom + 4, 3, 18, dim(R.metal[0], 0.45));
+}
+
+function truck(ctx, t, mood, calm) {
+  const { body, wheels } = rig.build();
+  const baked = (sprite) => pixels.bake(sprite, surface.K());
+  const bob = calm ? 0 : Math.round(Math.sin(t * 11) * 0.5);
+  const spin = calm ? 0 : Math.floor(t * 16) % rig.FRAMES;
+  const strength = kit.MOODS[mood].lamp;
+  light.ray(ctx, TRUCK.x + rig.ANCHORS.head.x, TRUCK.y + rig.ANCHORS.head.y + bob, 0.06, 150, 0.2, HD.lamp[2], 0.22 * strength);
+  light.glow(ctx, TRUCK.x + 130, ROAD.top + 18, 70, HD.lamp[0], 0.2 * strength, { squash: 0.2 });
+  pixels.draw(ctx, baked(body), TRUCK.x, TRUCK.y + bob);
+  rig.ANCHORS.wheels.forEach((a) => pixels.draw(ctx, baked(wheels[spin]), TRUCK.x + a.x - rig.WHEEL / 2, TRUCK.y + bob + a.y - rig.WHEEL / 2));
+  light.glow(ctx, TRUCK.x + rig.ANCHORS.head.x, TRUCK.y + rig.ANCHORS.head.y + bob, 12, HD.lamp[2], 0.9 * strength);
+  light.glow(ctx, TRUCK.x + rig.ANCHORS.tail.x, TRUCK.y + rig.ANCHORS.tail.y + bob, 14, HD.alarm, 0.7);
+  light.glow(ctx, TRUCK.x + 50, ROAD.bottom - 2, 80, HD.lamp[0], 0.1, { squash: 0.12 });
+}
+
+function sign(ctx, mood) {
+  const { x, y, w, h } = rig.ANCHORS.side;
+  if (mood !== 'good') return;
+  ctx.strokeStyle = R.leaf[2];
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(TRUCK.x + x + w * 0.28, TRUCK.y + y + h * 0.5);
+  ctx.lineTo(TRUCK.x + x + w * 0.45, TRUCK.y + y + h * 0.78);
+  ctx.lineTo(TRUCK.x + x + w * 0.76, TRUCK.y + y + h * 0.2);
+  ctx.stroke();
+  light.glow(ctx, TRUCK.x + x + w / 2, TRUCK.y + y + h / 2, 30, R.leaf[2], 0.4);
+}
+
+function beacon(ctx, t, mood, calm) {
+  if (mood !== 'bad') return;
+  const at = { x: TRUCK.x + 80, y: TRUCK.y + 8 };
+  fillRect(ctx, at.x - 3, at.y, 7, 3, R.metal[0]);
+  fillRect(ctx, at.x - 2, at.y - 3, 5, 4, R.tie[1]);
+  light.glow(ctx, at.x, at.y - 1, 22, HD.alarm, 0.8);
+  light.ray(ctx, at.x, at.y - 1, calm ? 0.4 : t * 2.4, 90, 0.16, HD.alarm, 0.22);
+  light.ray(ctx, at.x, at.y - 1, (calm ? 0.4 : t * 2.4) + Math.PI, 90, 0.16, HD.alarm, 0.22);
+}
+
+function draw(ctx, t, mood = 'neutral', { calm = false, quality = 'full' } = {}) {
+  const felt = kit.moodOf(mood);
+  const time = calm ? 0 : t;
+  sky(ctx, time, felt);
+  city(ctx, time);
+  poles(ctx, time);
+  road(ctx, time);
+  truck(ctx, time, felt, calm);
+  sign(ctx, felt);
+  const bad = felt === 'bad';
+  kit.drawSmoke(ctx, kit.smokePuffs(time, { x: TRUCK.x + 61.5, y: TRUCK.y + 2 }, { count: bad ? 8 : 5, rise: bad ? 34 : 24, spread: 4, speed: 0.7, size: bad ? 5 : 3.2, drift: bad ? -20 : -14 }), bad ? dim(R.asphalt[1], 0.2) : R.cloud[2]);
+  beacon(ctx, time, felt, calm);
+  guardRail(ctx, time);
+  if (quality !== 'lite') light.drawMotes(ctx, light.motes(91, 14, time, { x: 280, y: 100, w: 190, h: 56 }), HD.lamp[2]);
+  kit.finish(ctx, time, felt, { calm, quality, focal: FOCAL, hazeBox: { x: 0, y: ROAD.top - 14, w: W, h: 30 } });
+}
+
+module.exports = { draw, FOCAL };
+
+});
+__d("render/hd/scenes/water", function (module, exports, __r) {
+'use strict';
+
+// Water: a dry riverbed under a hard sun. The earth is cracked, a boat lies stranded on it and a drop falls now and then and ripples. After an
+// answer, when it went well the river fills and the boat floats; when it went badly the earth cracks further and a tumbleweed rolls by.
+// A function of time and mood only.
+
+const P = __r("render/palette");
+const layout = __r("ui/layout-hd");
+const { tint, mix } = __r("render/draw");
+const light = __r("render/hd/light");
+const pixels = __r("render/hd/pixels");
+const surface = __r("render/hd/surface");
+const kit = __r("render/hd/scenes/kit");
+
+const R = P.ramp;
+const HD = P.hd;
+const { W } = layout;
+const { dim, fillRect } = kit;
+
+const HORIZON = 110;
+const SUN = Object.freeze({ x: 310, y: 46 });
+const BOAT = Object.freeze({ x: 252, y: 134 });
+const FOCAL = Object.freeze({ x: 252, y: 118 });
+const CHANNEL = Object.freeze([[240, HORIZON], [264, HORIZON], [392, 176], [112, 176]]);
+
+const MATERIALS = Object.freeze({ hull: R.wood.map((c) => dim(c, 0.1)), plank: R.wood, rim: R.sand, mast: R.wood.map((c) => dim(c, 0.35)) });
+const outline = (material) => mix(MATERIALS[material][0], P.ink, 0.55);
+
+// A wooden boat, lying on its side a little: the hull as a polygon, its planks as lines and a broken mast.
+function buildBoat() {
+  const g = pixels.grid(48, 26);
+  pixels.fill(g, pixels.poly([[2, 10], [46, 6], [40, 22], [10, 24]]), 'hull');
+  pixels.fill(g, pixels.poly([[2, 10], [46, 6], [45, 9], [3, 13]]), 'rim');
+  [14, 18].forEach((y, k) => pixels.stroke(g, 8 + k * 2, y, 42 - k * 4, y - 3 + k, 'plank'));
+  pixels.fill(g, kit.rectShape(22, 0, 3, 10), 'mast');
+  return pixels.shade(g, MATERIALS, { bevel: 1, outline });
+}
+
+let boat = null;
+const boatSprite = () => {
+  if (!boat) boat = buildBoat();
+  return boat;
+};
+
+// The cracks of the riverbed, found once: 70 of them, each a short jagged line that is longer the nearer it is to the viewer.
+const CRACKS = Object.freeze(Array.from({ length: 70 }, (_, i) => {
+  const y = HORIZON + 6 + light.unit(111, i, 0) ** 1.3 * 62;
+  const near = (y - HORIZON) / 66;
+  const span = 24 + near * 220;
+  const x = 252 + (light.unit(111, i, 1) - 0.5) * span;
+  let angle = light.unit(111, i, 2) * Math.PI * 2;
+  const points = [{ x, y }];
+  for (let k = 1; k <= 4; k += 1) {
+    angle += (light.unit(111, i, 3 + k) - 0.5) * 1.8;
+    const last = points[points.length - 1];
+    points.push({ x: last.x + Math.cos(angle) * (3 + near * 11), y: last.y + Math.sin(angle) * (1.2 + near * 4) });
+  }
+  return Object.freeze({ points, width: 0.4 + near * 1.1 });
+}));
+
+function sky(ctx, t, mood) {
+  const hot = P.sky.hot;
+  kit.gradient(ctx, -8, HORIZON + 6, [[0, dim(hot[0], mood === 'bad' ? 0.3 : 0.18)], [0.6, hot[0]], [1, mix(hot[1], P.white, 0.15)]]);
+  light.glow(ctx, SUN.x, SUN.y, 150, HD.lamp[2], mood === 'good' ? 0.35 : 0.5);
+  kit.softDisc(ctx, SUN.x, SUN.y, 14, P.white, 1);
+  if (mood === 'good') [[210, 34, 22], [380, 50, 26], [120, 60, 20]].forEach(([x, y, r]) => kit.cloud(ctx, x, y, r, R.cloud[2], 0.55));
+}
+
+function land(ctx, t, mood, sway) {
+  kit.drawRidge(ctx, kit.ridgePoints({ x0: -8, x1: W + 8, base: HORIZON + 2, amp: 28, step: 34, seed: 111 }).map((p) => ({ ...p, x: p.x + sway })), HORIZON + 4, mix(R.sand[0], HD.haze, 0.3));
+  kit.gradient(ctx, HORIZON, 270, [[0, mix(R.sand[1], P.sky.hot[1], 0.25)], [0.4, R.sand[1]], [1, dim(R.sand[0], 0.5)]]);
+  ctx.fillStyle = dim(R.sand[0], 0.25);
+  ctx.beginPath();
+  CHANNEL.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
+  ctx.closePath();
+  ctx.fill();
+  // heat shimmer over the horizon
+  for (let i = 0; i < 4; i += 1) fillRect(ctx, -8 + Math.sin(t * 2 + i) * 3, HORIZON - 8 + i * 5, W + 16, 2, tint(P.white, 0.05));
+}
+
+function cracks(ctx, mood) {
+  const count = mood === 'bad' ? CRACKS.length : mood === 'good' ? 18 : 40;
+  ctx.strokeStyle = tint(P.ink, mood === 'bad' ? 0.6 : 0.45);
+  CRACKS.slice(0, count).forEach(({ points, width }) => {
+    ctx.lineWidth = width * (mood === 'bad' ? 1.4 : 1);
+    ctx.beginPath();
+    points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+    ctx.stroke();
+  });
+}
+
+// The river in the good mood: it fills the channel, with highlights that drift and the sun in it.
+function river(ctx, t, calm) {
+  const g = ctx.createLinearGradient(0, HORIZON, 0, 176);
+  g.addColorStop(0, R.water[2]);
+  g.addColorStop(1, R.water[0]);
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  CHANNEL.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = tint(P.white, 0.5);
+  ctx.lineWidth = 0.6;
+  ctx.beginPath();
+  for (let i = 0; i < 30; i += 1) {
+    const y = HORIZON + 6 + light.unit(113, i, 0) * 62;
+    const near = (y - HORIZON) / 66;
+    const x = 252 + (kit.wrap(light.unit(113, i, 1) + (calm ? 0 : t * 0.02 * (0.4 + near)), 1) - 0.5) * (30 + near * 230);
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + 3 + near * 10, y);
+  }
+  ctx.stroke();
+  light.glow(ctx, 290, 140, 70, HD.lamp[2], 0.3, { squash: 0.25 });
+}
+
+function boatAt(ctx, t, mood, calm) {
+  const afloat = mood === 'good';
+  const bob = afloat && !calm ? Math.sin(t * 1.3) * 1.6 : 0;
+  const baked = pixels.bake(boatSprite(), surface.K());
+  ctx.fillStyle = tint(P.ink, afloat ? 0.2 : 0.35);
+  ctx.beginPath();
+  ctx.ellipse(BOAT.x, BOAT.y + 22, 26, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+  pixels.draw(ctx, baked, BOAT.x - 24, BOAT.y - 12 + bob);
+  if (afloat) {
+    ctx.strokeStyle = tint(P.white, 0.4);
+    ctx.lineWidth = 0.6;
+    [0, 1].forEach((k) => {
+      ctx.beginPath();
+      ctx.ellipse(BOAT.x, BOAT.y + 12 + bob, 28 + k * 6 + (calm ? 0 : Math.sin(t * 1.3 + k) * 2), 3.5 + k, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+  }
+}
+
+// A drop that falls in the neutral mood, and the rings it makes on the earth.
+function drop(ctx, t, calm) {
+  const phase = (calm ? 0.2 : t) % 3;
+  if (phase < 1.2) {
+    const k = phase / 1.2;
+    const y = 14 + k * k * 110;
+    kit.softDisc(ctx, 252, y, 3.5, HD.day[1], 0.9);
+    fillRect(ctx, 251.4, y - 6, 1.2, 5, tint(HD.day[1], 0.7));
+  } else if (phase < 2.2) {
+    const k = phase - 1.2;
+    ctx.strokeStyle = tint(HD.day[1], 0.7 * (1 - k));
+    ctx.lineWidth = 0.8;
+    [0, 0.25].forEach((delay) => {
+      if (k < delay) return;
+      ctx.beginPath();
+      ctx.ellipse(252, 125, (k - delay) * 22 + 1, (k - delay) * 4.5 + 0.4, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+  }
+}
+
+function tumbleweed(ctx, t, calm) {
+  const x = kit.wrap((calm ? 0.3 : t) * 34, W + 80) - 40;
+  const y = 158 - Math.abs(Math.sin((calm ? 0.3 : t) * 5)) * 7;
+  const spin = (calm ? 0.3 : t) * 4;
+  ctx.strokeStyle = dim(R.sand[2], 0.25);
+  ctx.lineWidth = 0.9;
+  for (let k = 0; k < 7; k += 1) {
+    const a = spin + (k * Math.PI) / 3.5;
+    ctx.beginPath();
+    ctx.moveTo(x - Math.cos(a) * 9, y - Math.sin(a) * 9);
+    ctx.quadraticCurveTo(x + Math.sin(a * 2) * 4, y + Math.cos(a * 2) * 4, x + Math.cos(a) * 9, y + Math.sin(a) * 9);
+    ctx.stroke();
+  }
+  ctx.fillStyle = tint(P.ink, 0.25);
+  ctx.beginPath();
+  ctx.ellipse(x, 166, 9, 1.8, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// A dead tree to the right: the riverbed goes on, and so does the drought.
+function deadTree(ctx) {
+  const x = 408;
+  ctx.strokeStyle = dim(R.wood[0], 0.55);
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(x, 150);
+  ctx.lineTo(x + 2, 104);
+  ctx.stroke();
+  ctx.lineWidth = 1.4;
+  ctx.beginPath();
+  [[x + 2, 116, x - 18, 100], [x + 2, 110, x + 20, 92], [x + 1, 126, x + 18, 116], [x, 130, x - 14, 122], [x - 18, 100, x - 22, 88], [x + 20, 92, x + 26, 80]].forEach(([a, b, c, d]) => {
+    ctx.moveTo(a, b);
+    ctx.lineTo(c, d);
+  });
+  ctx.stroke();
+}
+
+function draw(ctx, t, mood = 'neutral', { calm = false, quality = 'full' } = {}) {
+  const felt = kit.moodOf(mood);
+  const time = calm ? 0 : t;
+  const sway = calm ? 0 : Math.sin(t * 0.3) * 1.2;
+  sky(ctx, time, felt);
+  land(ctx, time, felt, sway);
+  if (felt === 'good') river(ctx, time, calm);
+  else cracks(ctx, felt);
+  deadTree(ctx);
+  boatAt(ctx, time, felt, calm);
+  if (felt === 'neutral') drop(ctx, t, calm);
+  if (felt === 'bad') tumbleweed(ctx, t, calm);
+  if (quality !== 'lite') light.drawMotes(ctx, light.motes(115, 22, time, { x: 120, y: 60, w: 300, h: 100 }), HD.lamp[1]);
+  kit.finish(ctx, time, felt, { calm, quality, focal: FOCAL, hazeBox: { x: 0, y: HORIZON - 12, w: W, h: 34 } });
+}
+
+module.exports = { draw, FOCAL };
 
 });
 __d("render/hd/surface", function (module, exports, __r) {
@@ -8189,7 +10521,10 @@ const { tint } = __r("render/draw");
 const ui = __r("render/ui");
 const fxDraw = __r("render/fx");
 const hud = __r("render/scenes/hud");
+const { TIER_COLOR } = hud;
 const { drawStatement } = __r("render/scenes/statement");
+const { operatingMargin } = __r("model");
+const { tierFor } = __r("tiers");
 const panel = __r("render/hd/panel");
 const scene = __r("render/hd/scene");
 const surface = __r("render/hd/surface");
@@ -8202,6 +10537,8 @@ const PANE_ROWS = 7;
 const NEGLIGIBLE = 0.05;
 const TONE = frame.DECISION_COLOR;
 const FOOTER_ALPHA = 0.8;
+const TREND_MIN = 8;
+const TREND_MAX = 24;
 const glassPanel = (ctx, box) => panel.glass(ctx, box);
 
 const GAUGES = Object.freeze({ at: L.DASH, gauges: L.GAUGES, label: L.GAUGES.label, panel: glassPanel, bar: panel.bar });
@@ -8209,7 +10546,7 @@ const GAUGES = Object.freeze({ at: L.DASH, gauges: L.GAUGES, label: L.GAUGES.lab
 const columnX = () => L.DIALOGUE.x + L.DIALOGUE.left.x;
 const paneX = () => L.DIALOGUE.x + L.DIALOGUE.pane.x;
 
-// The chips of the voice and of the segment, over the scene, and the month label under the gauges.
+// The chips of the voice and of the segment, over the scene, and the month label on a chip under the gauges.
 function drawChips(ctx, app, problem) {
   const { x, y, gap } = L.CHIPS;
   const voice = tx(app, `year.voice.${problem.voice}`);
@@ -8221,7 +10558,10 @@ function drawChips(ctx, app, problem) {
   panel.chipBox(ctx, segmentX, y, ui.textWidth(segment) + 9, P.gray);
   ui.text(ctx, segment, segmentX + 6, y + 2, P.white);
   const { monthIdx, problemIdx } = app.year;
-  ui.textRight(ctx, tx(app, 'year.stage', { m: monthIdx + 1, p: problemIdx + 1 }), L.STAGE.right, L.STAGE.y, P.white, { shadow: P.ink });
+  const stage = tx(app, 'year.stage', { m: monthIdx + 1, p: problemIdx + 1 });
+  const stageW = ui.textWidth(stage) + 10;
+  panel.chipBox(ctx, L.STAGE.right - stageW, L.STAGE.y - 2, stageW, P.dim);
+  ui.text(ctx, stage, L.STAGE.right - stageW + 6, L.STAGE.y, P.white);
 }
 
 // Reviewer mode: a badge and the exact meter values under the chips.
@@ -8231,6 +10571,16 @@ function drawReviewBadge(ctx, app) {
   const values = [['C', C], ['P', plant], ['E', E]].map(([key, value]) => `${tx(app, `year.meterTag.${key}`)[0]}${Math.round(value)}`).join(' ');
   ui.text(ctx, tx(app, 'year.review.on'), L.CHIPS.x, L.FOCUS.y + 2, P.red, { shadow: P.ink });
   ui.text(ctx, values, L.CHIPS.x, L.FOCUS.y + 12, P.white, { shadow: P.ink });
+}
+
+// The OI of every month that has closed, against the plan, under the bars (the notes take its place when there are any).
+function drawTrend(ctx, app, run) {
+  const { x, y, w, h } = L.TREND;
+  const oi = operatingMargin(run.pl);
+  ui.text(ctx, tx(app, 'year.trend'), L.DASH.x + L.GAUGES.label, L.DASH.y + y + 2, P.gray);
+  panel.sparkline(ctx, { x: L.DASH.x + x, y: L.DASH.y + y, w, h }, {
+    values: run.closes.map((close) => close.oi), slots: run.months, plan: rules.PLAN_OI, min: TREND_MIN, max: TREND_MAX, now: oi, color: TIER_COLOR[tierFor(oi)],
+  });
 }
 
 // The scene, the P&L, the chips and the gauges. Returns the current problem.
@@ -8244,6 +10594,7 @@ function drawTop(ctx, app, { before = null, focus = null, notes = [], delta = nu
   drawChips(ctx, app, problem);
   drawReviewBadge(ctx, app);
   frame.drawMeters(ctx, app, { notes, atStake: view.crisisMeter(app), geo: GAUGES });
+  if (notes.length === 0) drawTrend(ctx, app, run);
   return problem;
 }
 
@@ -9435,6 +11786,8 @@ const STATEMENT_ROWS = Object.freeze({ top: 15, pitch: 9, header: Object.freeze(
 // OI against the plan and the three meters as bars, then up to two rows of notes.
 const DASH = Object.freeze({ x: 338, y: 6, w: 136, h: 68 });
 const GAUGES = Object.freeze({ top: 7, pitch: 10, label: 8, bar: Object.freeze({ x: 30, y: 1, w: 98, h: 5 }), notes: Object.freeze([48, 57]) });
+// The history of the OI by month, in the place of the notes while there are none.
+const TREND = Object.freeze({ x: 44, y: 52, w: 84, h: 11 });
 
 // The chips of the voice and the segment sit over the scene, on this row; the month label sits under the gauges.
 const CHIPS = Object.freeze({ x: 172, y: 8, h: 10, gap: 4 });
@@ -9489,7 +11842,7 @@ function hitFooter(x, y) {
   return zone ? zone[0] : null;
 }
 
-module.exports = { W, H, LEGACY, STATEMENT, STATEMENT_ROWS, DASH, GAUGES, CHIPS, STAGE, FOCUS, DIALOGUE, FOOTER, answerRect, hitAnswer, hitFooter, inside };
+module.exports = { W, H, LEGACY, STATEMENT, STATEMENT_ROWS, DASH, GAUGES, TREND, CHIPS, STAGE, FOCUS, DIALOGUE, FOOTER, answerRect, hitAnswer, hitFooter, inside };
 
 });
 __d("ui/layout", function (module, exports, __r) {
