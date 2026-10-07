@@ -3877,6 +3877,434 @@ function drawAmbient(ctx, plan, t, box) {
 module.exports = { drawFlash, drawBurst, drawAmbient };
 
 });
+__d("render/hd/factory-sprite", function (module, exports, __r) {
+'use strict';
+
+// The building of the factory in each of its six states, drawn once as pixel sprites from shapes (the same hall, three sawtooth roofs and
+// chimney every time, dressed as the state asks: solar roofs and a green band for the best, rust for the worn one, boards and cracks for the
+// one on the edge, a heap of wall and beams for the one in ruins) and shaded with the palette's ramps, light from the top left.
+// The things that move (lights, smoke, flames) are not baked: the diorama draws them over the sprite from the anchors below.
+
+const P = __r("render/palette");
+const { mix } = __r("render/draw");
+const pixels = __r("render/hd/pixels");
+
+const { box, poly, ellipse, meet, fill, stroke } = pixels;
+
+const SIZE = Object.freeze({ w: 124, h: 94 });
+const SAWTOOTH_AT = Object.freeze([0, 41, 82]);
+
+// pixels.box takes two corners; this one takes a corner and a size.
+const rect = (x, y, w, h) => box(x, y, x + w, y + h);
+const flat = (color) => [color, color, color];
+const dim = (hex, amount) => mix(hex, P.ink, amount);
+
+// Where the lit windows go, in sprite cells: five along each of two rows of the hall, and the glazed face of every sawtooth.
+const HALL_WINDOWS = 9;
+const WINDOWS = Object.freeze([
+  ...[52, 66].flatMap((y) => [0, 1, 2, 3, 4].filter((i) => !(y === 66 && i === 2)).map((i) => ({ x: 6 + i * 23, y, w: 15, h: 9 }))),
+  ...SAWTOOTH_AT.map((x) => ({ x: x + 38, y: 27, w: 3, h: 17 })),
+]);
+
+// Where the smoke leaves the chimney and where the status lamp sits, in sprite cells.
+const CHIMNEY = Object.freeze({ x: 107, y: 2 });
+const LAMP = Object.freeze({ x: 62, y: 20 });
+
+function materialsOf(tier) {
+  const look = P.factory[tier];
+  const bright = tier === 'hightech' || tier === 'modern';
+  return {
+    wall: look.wall,
+    roof: look.roof,
+    glass: look.glass,
+    trim: look.trim,
+    stone: look.stone,
+    accent: look.accent,
+    door: bright ? look.glass : flat(dim(look.wall[0], tier === 'edge' ? 0.5 : 0.3)),
+    solar: flat(dim(look.roof[0], 0.35)),
+    board: look.accent,
+    rust: look.accent,
+    crack: flat(dim(look.wall[0], 0.7)),
+    beam: look.roof,
+    rubble: look.stone,
+  };
+}
+
+const outlineOf = (materials) => (material) => mix(materials[material][0], P.ink, 0.6);
+
+// The hall, the three sawtooth roofs, the chimney, the windows, the door under its canopy and the foot of the wall.
+function hall(g) {
+  fill(g, rect(0, 44, 124, 48), 'wall');
+  SAWTOOTH_AT.forEach((x) => {
+    fill(g, poly([[x, 44], [x + 41, 44], [x + 41, 24]]), 'roof');
+    fill(g, rect(x + 38, 27, 3, 17), 'glass');
+  });
+  fill(g, rect(100, 0, 14, 50), 'wall');
+  fill(g, rect(98, 0, 18, 4), 'trim');
+  fill(g, rect(100, 14, 14, 2), 'trim');
+  WINDOWS.slice(0, HALL_WINDOWS).forEach((w) => {
+    fill(g, rect(w.x, w.y, w.w, w.h), 'glass');
+    fill(g, rect(w.x - 1, w.y + w.h, w.w + 2, 2), 'trim');
+  });
+  fill(g, rect(50, 64, 26, 3), 'trim');
+  fill(g, rect(52, 67, 22, 25), 'door');
+  stroke(g, 63, 68, 63, 91, 'trim');
+  fill(g, rect(0, 90, 124, 4), 'stone');
+}
+
+// The roofs are solar panels: a grid of dark lines across each, and a green band along the top of the hall.
+function brightDress(g, tier) {
+  fill(g, rect(0, 46, 124, 2), 'accent');
+  if (tier !== 'hightech') return;
+  SAWTOOTH_AT.forEach((x) => {
+    const roof = poly([[x, 44], [x + 41, 44], [x + 41, 24]]);
+    fill(g, meet(roof, (px, py) => py % 6 === 0 || (px - x) % 9 === 0), 'solar');
+  });
+}
+
+// Rust stains on the wall and the stains that run from them.
+function wornDress(g) {
+  [[6, 70, 10, 6], [88, 56, 12, 4], [30, 80, 8, 5], [104, 74, 8, 8]].forEach(([x, y, w, h]) => fill(g, rect(x, y, w, h), 'rust'));
+  [[10, 76], [34, 85], [108, 82]].forEach(([x, y]) => stroke(g, x, y, x, y + 7, 'rust'));
+}
+
+// Boards over three windows, a crack from roof to ground, a sawtooth with its slope gone and a chimney that broke off.
+function edgeDress(g) {
+  [1, 4, 7].forEach((i) => {
+    const w = WINDOWS[i];
+    fill(g, rect(w.x - 1, w.y - 1, w.w + 2, w.h + 2), 'board');
+    stroke(g, w.x - 1, w.y + 2, w.x + w.w, w.y + 2, 'crack');
+    stroke(g, w.x - 1, w.y + 6, w.x + w.w, w.y + 6, 'crack');
+  });
+  stroke(g, 28, 46, 33, 60, 'crack');
+  stroke(g, 33, 60, 30, 72, 'crack');
+  stroke(g, 30, 72, 35, 88, 'crack');
+  stroke(g, 88, 46, 82, 58, 'crack');
+  stroke(g, 82, 58, 87, 70, 'crack');
+  fill(g, poly([[41, 44], [60, 44], [57, 36], [50, 40], [47, 34]]), null);
+  fill(g, rect(100, 0, 14, 9), null);
+  fill(g, poly([[100, 9], [103, 4], [106, 8], [109, 2], [112, 7], [114, 9]]), 'wall');
+}
+
+// What is left: a stump of wall at each side, the chimney broken at the middle, beams across the heap and the rubble between.
+function ruins(g) {
+  fill(g, poly([[0, 94], [0, 52], [8, 48], [12, 56], [20, 50], [27, 62], [30, 94]]), 'wall');
+  fill(g, rect(8, 63, 8, 9), null);
+  fill(g, poly([[92, 94], [94, 42], [101, 38], [104, 46], [112, 40], [124, 52], [124, 94]]), 'wall');
+  fill(g, poly([[100, 42], [100, 22], [104, 17], [108, 24], [112, 15], [114, 22], [114, 42]]), 'wall');
+  fill(g, rect(98, 20, 18, 3), 'trim');
+  fill(g, rect(102, 60, 8, 8), null);
+  fill(g, ellipse(60, 88, 34, 9), 'rubble');
+  fill(g, ellipse(34, 90, 14, 6), 'rubble');
+  fill(g, ellipse(86, 90, 12, 6), 'rubble');
+  [[26, 58, 58, 82], [58, 82, 92, 62], [40, 68, 42, 90], [74, 74, 78, 90]].forEach(([x0, y0, x1, y1]) => {
+    stroke(g, x0, y0, x1, y1, 'beam');
+    stroke(g, x0 + 1, y0, x1 + 1, y1, 'beam');
+  });
+  fill(g, rect(0, 90, 124, 4), 'stone');
+}
+
+const DRESS = Object.freeze({ hightech: brightDress, modern: brightDress, worn: wornDress, edge: edgeDress });
+
+const built = new Map();
+
+// The sprite of a tier's building, shaded and ready to bake; each is built once.
+function build(tier) {
+  if (!built.has(tier)) {
+    const g = pixels.grid(SIZE.w, SIZE.h);
+    if (tier === 'collapse') {
+      ruins(g);
+    } else {
+      hall(g);
+      if (DRESS[tier]) DRESS[tier](g, tier);
+    }
+    const materials = materialsOf(tier);
+    built.set(tier, pixels.shade(g, materials, { bevel: 1, outline: outlineOf(materials) }));
+  }
+  return built.get(tier);
+}
+
+// A tree: a crown of three overlapping ellipses on a trunk; a dead one is a trunk with bare branches.
+function buildTree(kind) {
+  const g = pixels.grid(26, 38);
+  fill(g, rect(12, 20, 3, 18), 'wood');
+  if (kind === 'dead') {
+    [[13, 24, 5, 14], [13, 28, 21, 20], [13, 20, 8, 8], [13, 26, 22, 30]].forEach(([x0, y0, x1, y1]) => stroke(g, x0, y0, x1, y1, 'wood'));
+  } else {
+    fill(g, ellipse(13, 12, 11, 10), 'leaf');
+    fill(g, ellipse(7, 17, 7, 6), 'leaf');
+    fill(g, ellipse(19, 17, 7, 6), 'leaf');
+  }
+  const materials = { wood: P.ramp.wood, leaf: P.ramp.leaf };
+  return pixels.shade(g, materials, { bevel: 1, outline: (material) => mix(materials[material][0], P.ink, 0.6) });
+}
+
+const trees = new Map();
+const tree = (kind) => {
+  if (!trees.has(kind)) trees.set(kind, buildTree(kind));
+  return trees.get(kind);
+};
+
+module.exports = { SIZE, WINDOWS, HALL_WINDOWS, CHIMNEY, LAMP, build, tree };
+
+});
+__d("render/hd/factory", function (module, exports, __r) {
+'use strict';
+
+// The factory of Demo 7 for the whole surface, in the six states of the business (the tiers of the OI): a sky, two ridges and a ground, the
+// building in the state it is in, its lit windows and smoke, and what stands around it: trees and a drone for the best, a flag for the next, a
+// lamp post for the middle one, weeds for the worn one, tape and a cracked glow for the one on the edge, flames and embers for the ruins.
+// Like the scenes of the problems it is a function of time and nothing else. `at` says where the building stands: 'side' (the right of the
+// surface, where the menus leave room) or 'center' (the title).
+
+const P = __r("render/palette");
+const layout = __r("ui/layout-hd");
+const { tint, mix } = __r("render/draw");
+const light = __r("render/hd/light");
+const pixels = __r("render/hd/pixels");
+const surface = __r("render/hd/surface");
+const kit = __r("render/hd/scenes/kit");
+const sprite = __r("render/hd/factory-sprite");
+
+const { W, H } = layout;
+const { dim, lift, fillRect } = kit;
+const HD = P.hd;
+const R = P.ramp;
+const { unit } = light;
+
+const TIERS = Object.freeze(Object.keys(P.factory));
+const { WINDOWS, HALL_WINDOWS, SIZE } = sprite;
+const PLACES = Object.freeze({ side: { x: 322, ground: 186 }, center: { x: 178, ground: 208 } });
+const SMOKE = Object.freeze({
+  hightech: { count: 3, rise: 30, size: 4, spread: 6, drift: 6 },
+  modern: { count: 4, rise: 34, size: 5, spread: 7, drift: 7 },
+  normal: { count: 8, rise: 44, size: 7, spread: 11, drift: 9 },
+  worn: { count: 7, rise: 50, size: 8, spread: 12, drift: 11 },
+  edge: { count: 9, rise: 60, size: 9, spread: 14, drift: 14 },
+  collapse: { count: 10, rise: 84, size: 11, spread: 16, drift: 16 },
+});
+
+// Which windows are lit: all of them in the best states, most of them in the middle one, few in the worn one, some of the failing one (and those
+// flicker, slowly), none of the ruins.
+const LIT = Object.freeze({
+  hightech: () => true,
+  modern: () => true,
+  normal: (i) => unit(i, 3, 0) < 0.7,
+  worn: (i) => unit(i, 5, 0) < 0.4,
+  edge: (i, t) => unit(i, 7, 0) < 0.6 && Math.floor(t * 2 + i * 3) % 5 !== 0,
+  collapse: () => false,
+});
+const isLit = (tier, i, t) => (LIT[tier] || LIT.normal)(i, t);
+
+const wrap = (value, size) => ((value % size) + size) % size;
+
+// ---- the sky
+
+function sunAndMoon(ctx, tier, look, place, time) {
+  const { ground } = place;
+  if (tier === 'hightech') {
+    light.glow(ctx, place.x - 70, ground - 64, 120, HD.gold, 0.5);
+    kit.softDisc(ctx, place.x - 70, ground - 64, 14, P.white, 0.95);
+  } else if (tier === 'modern') {
+    light.glow(ctx, place.x + 40, 40, 90, HD.day[1], 0.4);
+    kit.softDisc(ctx, place.x + 40, 40, 10, P.white, 0.95);
+  } else if (tier === 'normal') {
+    kit.drawStars(ctx, time, { x: 0, y: 0, w: W, h: ground - 60 }, 36, 5);
+    light.glow(ctx, place.x - 10, 36, 46, HD.day[1], 0.35);
+    kit.softDisc(ctx, place.x - 10, 36, 6, P.white, 0.9);
+  } else if (tier === 'worn') {
+    light.glow(ctx, place.x + 20, 50, 80, HD.haze, 0.18);
+  } else if (tier === 'edge') {
+    kit.drawStars(ctx, time, { x: 0, y: 0, w: W, h: ground - 70 }, 22, 6);
+    light.glow(ctx, place.x + 30, 44, 60, HD.alarm, 0.28);
+    kit.softDisc(ctx, place.x + 30, 44, 7, mix(HD.alarm, P.white, 0.3), 0.85);
+  }
+}
+
+// Clouds drift across the best and the worst-weathered skies.
+function clouds(ctx, tier, look, time) {
+  const settings = { hightech: [0.3, 0.7], modern: [0.45, 0.75], worn: [0.9, 0.7], edge: [0.6, 0.25] }[tier];
+  if (!settings) return;
+  const [alpha, drift] = settings;
+  const color = tier === 'worn' || tier === 'edge' ? look.sky[2] : P.white;
+  [[40, 36, 22], [180, 24, 18], [330, 48, 24], [430, 20, 16]].forEach(([x, y, r], i) => {
+    kit.cloud(ctx, wrap(x + time * drift * (1 + i * 0.3), W + 120) - 60, y, r, color, alpha * 0.55);
+  });
+}
+
+function backdrop(ctx, tier, look, place, time, sway) {
+  const { ground } = place;
+  kit.gradient(ctx, 0, ground + 6, [[0, look.sky[0]], [0.62, look.sky[1]], [1, look.sky[2]]]);
+  sunAndMoon(ctx, tier, look, place, time);
+  clouds(ctx, tier, look, time);
+  const far = kit.ridgePoints({ x0: -8, x1: W + 8, base: ground - 4, amp: 34, step: 14, seed: 11 }).map((p) => ({ ...p, x: p.x + sway }));
+  kit.drawRidge(ctx, far, ground, look.ridge);
+  kit.drawRidge(ctx, kit.ridgePoints({ x0: -8, x1: W + 8, base: ground, amp: 14, step: 10, seed: 12 }), ground + 4, mix(look.ridge, P.ink, 0.4));
+  kit.gradient(ctx, ground, H, [[0, look.ground[0]], [1, look.ground[1]]]);
+  fillRect(ctx, -8, ground, W + 16, 0.75, tint(lift(look.ground[0], 0.35), 0.8));
+  fillRect(ctx, -8, ground + 16, W + 16, 0.75, tint(lift(look.ground[0], 0.2), 0.5));
+  for (let x = -6; x < W; x += 22) fillRect(ctx, x, ground + 36, 12, 1.5, tint(P.white, 0.18));
+}
+
+// ---- the building and its lights
+
+function litWindows(ctx, tier, look, place, time, quality) {
+  const top = place.ground - SIZE.h;
+  const lit = WINDOWS.map((_, i) => isLit(tier, i, time));
+  WINDOWS.forEach((w, i) => {
+    if (!lit[i]) return;
+    fillRect(ctx, place.x + w.x, top + w.y, w.w, w.h, tint(look.window, 0.92));
+    fillRect(ctx, place.x + w.x, top + w.y, w.w, 1, tint(P.white, 0.5));
+  });
+  WINDOWS.forEach((w, i) => {
+    if (!lit[i]) return;
+    light.glow(ctx, place.x + w.x + w.w / 2, top + w.y + w.h / 2, w.w > 5 ? 14 : 9, look.window, 0.32);
+    if (quality !== 'lite' && i < HALL_WINDOWS) {
+      light.beam(ctx, { x0: place.x + w.x, x1: place.x + w.x + w.w, y: place.ground + 1 }, { x0: place.x + w.x - 2, x1: place.x + w.x + w.w + 2, y: place.ground + 26 }, look.window, 0.1);
+    }
+  });
+}
+
+function smoke(ctx, tier, look, place, time, quality) {
+  const base = SMOKE[tier];
+  const count = quality === 'lite' ? Math.ceil(base.count / 2) : base.count;
+  const color = tier === 'hightech' || tier === 'modern' ? look.smoke : dim(look.smoke, 0.15);
+  const top = place.ground - SIZE.h;
+  const source = tier === 'collapse' ? { x: place.x + 107, y: top + 16 } : { x: place.x + sprite.CHIMNEY.x, y: top + sprite.CHIMNEY.y };
+  kit.drawSmoke(ctx, kit.smokePuffs(time, source, { ...base, count }), color);
+  if (tier === 'collapse') {
+    [[place.x + 36, 0.3], [place.x + 74, 0.7]].forEach(([x, shift]) => {
+      kit.drawSmoke(ctx, kit.smokePuffs(time + shift, { x, y: place.ground - 8 }, { ...base, count: Math.ceil(count / 2), rise: 60 }), color);
+    });
+  }
+}
+
+const bakedSprite = (shape) => pixels.bake(shape, surface.K());
+
+// ---- what stands around the building
+
+function trees(ctx, kind, place, left, right) {
+  const sprites = bakedSprite(sprite.tree(kind));
+  if (left) pixels.draw(ctx, sprites, place.x - 34, place.ground - 38);
+  if (right) pixels.draw(ctx, sprites, place.x + SIZE.w + 4, place.ground - 38);
+}
+
+function drone(ctx, place, time, quality) {
+  const x = place.x + 62 + Math.sin(time * 0.9) * 40;
+  const y = place.ground - SIZE.h - 18 + Math.sin(time * 1.7) * 3;
+  fillRect(ctx, x - 4, y, 8, 2, P.white);
+  fillRect(ctx, x - 7, y - 1, 5, 1, tint(P.white, Math.floor(time * 3) % 2 ? 0.9 : 0.4));
+  fillRect(ctx, x + 2, y - 1, 5, 1, tint(P.white, Math.floor(time * 3) % 2 ? 0.4 : 0.9));
+  if (Math.floor(time * 2) % 2) light.glow(ctx, x, y + 3, 6, P.factory.hightech.accent[1], 0.7);
+  if (quality !== 'lite') light.beam(ctx, { x0: x - 1, x1: x + 1, y: y + 2 }, { x0: x - 9, x1: x + 9, y: place.ground }, P.factory.hightech.accent[1], 0.05);
+}
+
+function flag(ctx, look, place, time) {
+  const x = place.x + SIZE.w + 8;
+  const top = place.ground - 74;
+  fillRect(ctx, x, top, 1.5, 74, look.trim[1]);
+  for (let k = 0; k < 6; k += 1) fillRect(ctx, x + 1.5 + k * 3, top + 2 + Math.sin(time * 3 + k * 0.9) * 1.2, 3, 11, look.accent[1]);
+  fillRect(ctx, x - 0.5, top - 2, 2.5, 2, look.trim[2]);
+}
+
+function lampPost(ctx, place, time) {
+  const x = place.x - 22;
+  const strength = 1;
+  fillRect(ctx, x, place.ground - 66, 3, 66, dim(R.metal[0], 0.35));
+  fillRect(ctx, x, place.ground - 66, 18, 2, dim(R.metal[1], 0.2));
+  fillRect(ctx, x + 12, place.ground - 65, 9, 3, R.metal[1]);
+  light.beam(ctx, { x0: x + 12, x1: x + 21, y: place.ground - 62 }, { x0: x - 14, x1: x + 52, y: place.ground + 2 }, HD.lamp[0], 0.14 * strength);
+  light.glow(ctx, x + 16, place.ground - 61, 40, HD.lamp[0], 0.5 * strength);
+  light.glow(ctx, x + 16, place.ground - 62, 7, HD.lamp[2], 0.8 * strength);
+}
+
+function barrels(ctx, place) {
+  [[place.x + SIZE.w + 6, 20, 13], [place.x + SIZE.w + 21, 14, 12]].forEach(([x, h, w]) => {
+    kit.propBox(ctx, x, place.ground - h, w, h, R.clay);
+    fillRect(ctx, x + 1, place.ground - h + 4, w - 2, 1, tint(P.ink, 0.45));
+    fillRect(ctx, x + 1, place.ground - 5, w - 2, 1, tint(P.ink, 0.45));
+  });
+}
+
+// Weeds along the foot of the wall and a puddle that keeps the light of the windows.
+function weeds(ctx, place) {
+  for (let x = 4; x < SIZE.w; x += 17 + Math.floor(unit(x, 1, 2) * 9)) {
+    fillRect(ctx, place.x + x, place.ground - 5, 1, 5, R.leaf[0]);
+    fillRect(ctx, place.x + x + 2, place.ground - 3, 1, 3, R.leaf[1]);
+    fillRect(ctx, place.x + x - 2, place.ground - 3, 1, 3, R.leaf[1]);
+  }
+  ctx.fillStyle = tint(P.factory.worn.glass[2], 0.35);
+  ctx.beginPath();
+  ctx.ellipse(place.x + 60, place.ground + 10, 22, 3, 0, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// Yellow and black tape across the front, and the glow of the cracks as a heart of red that beats slowly.
+function tape(ctx, look, place, time, calm) {
+  const y = place.ground - 3;
+  fillRect(ctx, place.x - 6, y - 14, 1.5, 17, look.trim[1]);
+  fillRect(ctx, place.x + SIZE.w + 4, y - 14, 1.5, 17, look.trim[1]);
+  for (let x = place.x - 6; x < place.x + SIZE.w + 5; x += 6) {
+    fillRect(ctx, x, y - 12, 3, 2.5, R.hazard[1]);
+    fillRect(ctx, x + 3, y - 12, 3, 2.5, P.ink);
+  }
+  const pulse = calm ? 0.3 : 0.3 + 0.12 * Math.sin(time * 2);
+  const top = place.ground - SIZE.h;
+  [[30, 60], [34, 78], [84, 64]].forEach(([x, cy]) => light.glow(ctx, place.x + x, top + cy, 10, look.window, pulse));
+}
+
+function flames(ctx, look, place, time, quality) {
+  const [low, mid, high] = look.accent;
+  [0, 1, 2, 3, 4, 5, 6].forEach((k) => {
+    const x = place.x + 24 + k * 12;
+    const grow = 0.6 + 0.4 * Math.sin(time * 5 + k * 1.7);
+    const h = (8 + unit(k, 1, 0) * 12) * grow;
+    [[5, h, low], [3, h * 0.65, mid], [1.5, h * 0.35, high]].forEach(([half, height, color]) => {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(x - half, place.ground - 6);
+      ctx.lineTo(x + Math.sin(time * 3 + k) * 1.2, place.ground - 6 - height);
+      ctx.lineTo(x + half, place.ground - 6);
+      ctx.closePath();
+      ctx.fill();
+    });
+    light.glow(ctx, x, place.ground - 10, 24, mid, 0.22 * grow);
+  });
+  light.glow(ctx, place.x + 62, place.ground - 18, 120, mid, 0.18, { squash: 0.7 });
+  if (quality !== 'lite') light.drawMotes(ctx, light.motes(21, 16, time, { x: place.x + 10, y: place.ground - 90, w: 100, h: 84 }), high);
+}
+
+const EXTRAS = Object.freeze({
+  hightech: (ctx, look, place, time, o) => { trees(ctx, 'round', place, true, true); drone(ctx, place, time, o.quality); },
+  modern: (ctx, look, place, time) => { trees(ctx, 'round', place, true, false); flag(ctx, look, place, time); },
+  normal: (ctx, look, place, time) => { lampPost(ctx, place, time); barrels(ctx, place); },
+  worn: (ctx, look, place) => { trees(ctx, 'dead', place, true, false); weeds(ctx, place); },
+  edge: (ctx, look, place, time, o) => tape(ctx, look, place, time, o.calm),
+  collapse: (ctx, look, place, time, o) => flames(ctx, look, place, time, o.quality),
+});
+
+// Draws the factory in the state `tier` over the whole surface at time `t`; `options` are { calm, quality, at }.
+function draw(ctx, tier, t, { calm = false, quality = 'full', at = 'side' } = {}) {
+  const key = P.factory[tier] ? tier : 'normal';
+  const look = P.factory[key];
+  const place = PLACES[at] || PLACES.side;
+  const time = calm ? 0 : t;
+  const sway = calm ? 0 : Math.sin(t * 0.35) * 0.6;
+  backdrop(ctx, key, look, place, time, sway);
+  pixels.draw(ctx, bakedSprite(sprite.build(key)), place.x, place.ground - SIZE.h);
+  litWindows(ctx, key, look, place, time, quality);
+  EXTRAS[key](ctx, look, place, time, { calm, quality });
+  smoke(ctx, key, look, place, time, quality);
+  if (quality !== 'lite') {
+    light.haze(ctx, { x: 0, y: place.ground - 14, w: W, h: 30 }, HD.haze, 0.07, time);
+    light.drawMotes(ctx, light.motes(9, key === 'collapse' ? 4 : 8, time, { x: place.x + 90, y: place.ground - 110, w: 50, h: 100 }), look.window);
+  }
+  light.vignette(ctx, W, H, 0.5);
+}
+
+module.exports = { draw, isLit, TIERS, PLACES, WINDOWS };
+
+});
 __d("render/hd/font-data", function (module, exports, __r) {
 'use strict';
 
@@ -4333,6 +4761,7 @@ __d("render/hd/panel", function (module, exports, __r) {
 // selected), so the text reads on any scene behind it. The edges are drawn in fractions of a logical pixel, which the 4x surface can.
 
 const P = __r("render/palette");
+const layout = __r("ui/layout-hd");
 const { tint, mix } = __r("render/draw");
 
 const EDGE = 0.75;
@@ -4448,7 +4877,43 @@ function chipBox(ctx, x, y, w, color, { h = 10 } = {}) {
   ctx.restore();
 }
 
-module.exports = { glass, rule, vrule, bar, sparkline, chipBox, roundPath };
+// A row of a list inside a panel: faint glass; the selected one has a gold edge, a warm wash and a gold tab at its left.
+function row(ctx, { x, y, w, h }, { selected = false } = {}) {
+  ctx.save();
+  ctx.fillStyle = selected ? tint(P.hd.glassSelect, 0.16) : tint(P.hd.glass[0], 0.35);
+  roundPath(ctx, x, y, w, h, 2);
+  ctx.fill();
+  ctx.lineWidth = EDGE;
+  ctx.strokeStyle = selected ? tint(P.hd.glassSelect, 0.9) : tint(P.hd.glassEdge, 0.22);
+  roundPath(ctx, x + EDGE / 2, y + EDGE / 2, w - EDGE, h - EDGE, 2);
+  ctx.stroke();
+  if (selected) {
+    ctx.fillStyle = P.hd.glassSelect;
+    ctx.fillRect(x + 1, y + 2, 1.5, h - 4);
+  }
+  ctx.restore();
+}
+
+// A text field: a dark well with a pale edge, gold while it has the focus.
+function field(ctx, { x, y, w, h }, { focused = false } = {}) {
+  ctx.save();
+  ctx.fillStyle = tint(P.hd.shadow, 0.55);
+  roundPath(ctx, x, y, w, h, 2);
+  ctx.fill();
+  ctx.lineWidth = EDGE;
+  ctx.strokeStyle = focused ? tint(P.hd.glassSelect, 0.9) : tint(P.hd.glassEdge, 0.35);
+  roundPath(ctx, x + EDGE / 2, y + EDGE / 2, w - EDGE, h - EDGE, 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+// Dims the whole surface behind a window that floats over it.
+function veil(ctx, alpha = 0.6) {
+  ctx.fillStyle = tint(P.hd.shadow, alpha);
+  ctx.fillRect(0, 0, layout.W, layout.H);
+}
+
+module.exports = { glass, rule, vrule, bar, sparkline, chipBox, row, field, veil, roundPath };
 
 });
 __d("render/hd/pixels", function (module, exports, __r) {
@@ -7588,7 +8053,7 @@ function drawLegacy(ctx, app) {
 function drawWide(ctx, app) {
   ctx.fillStyle = P.ink;
   ctx.fillRect(0, 0, layoutHd.W, layoutHd.H);
-  drawShaken(ctx, app, () => wide.drawScreen(ctx, app));
+  drawShaken(ctx, app, () => (space.isDecision(app) ? wide.drawScreen(ctx, app) : drawScene(ctx, app)));
   drawVeil(ctx, app, layoutHd.W, layoutHd.H);
   if (app.overlay) {
     ctx.save();
@@ -7731,6 +8196,89 @@ module.exports = Object.freeze({
     night: Object.freeze(['#0c1234', '#050818']),
     alarm: '#ff3d50',
     gold: '#ffd070',
+    titleShadow: '#7a4a10',
+  }),
+  // Demo 7: the factory in each state of the business, from the one that shines to the one in ruins. `sky` is [top, middle, horizon],
+  // `ground` is [top, bottom], and every material is a ramp [shadow, base, light] like the ones above.
+  factory: Object.freeze({
+    hightech: Object.freeze({
+      sky: Object.freeze(['#3f7bd2', '#9fcdf6', '#ffe6bc']),
+      ridge: '#6a8cc0',
+      ground: Object.freeze(['#7e8aa4', '#3c465c']),
+      wall: Object.freeze(['#9aaac8', '#dfe8f6', '#ffffff']),
+      roof: Object.freeze(['#12306a', '#2a5cb0', '#6ea6f4']),
+      glass: Object.freeze(['#2b9cc6', '#5fe0ff', '#d4fbff']),
+      trim: Object.freeze(['#7a8cb2', '#aebcdc', '#e2ecfa']),
+      accent: Object.freeze(['#1c9a62', '#4cf0a0', '#b4ffe0']),
+      stone: Object.freeze(['#6a7890', '#8fa0bc', '#bccae0']),
+      smoke: '#f4f9ff',
+      window: '#d4fbff',
+    }),
+    modern: Object.freeze({
+      sky: Object.freeze(['#4777c4', '#a0cff0', '#e0f0fa']),
+      ridge: '#5a7ca8',
+      ground: Object.freeze(['#6a7490', '#363e54']),
+      wall: Object.freeze(['#8e9cba', '#d0d9ec', '#f0f5ff']),
+      roof: Object.freeze(['#44558a', '#6d7fae', '#9fb0d8']),
+      glass: Object.freeze(['#4a8cb0', '#7ccbea', '#c2efff']),
+      trim: Object.freeze(['#6a7aa0', '#98a6c8', '#cfd9ee']),
+      accent: Object.freeze(['#2c9a5c', '#4cc880', '#a4f0c4']),
+      stone: Object.freeze(['#58627a', '#7c88a4', '#a8b4d0']),
+      smoke: '#e9f0f8',
+      window: '#c2efff',
+    }),
+    normal: Object.freeze({
+      sky: Object.freeze(['#222a52', '#4a5a8a', '#c88a68']),
+      ridge: '#3c4668',
+      ground: Object.freeze(['#454556', '#1c1c2a']),
+      wall: Object.freeze(['#7a4838', '#b9805a', '#dca67e']),
+      roof: Object.freeze(['#3e3e50', '#5a5a6c', '#8a8a9e']),
+      glass: Object.freeze(['#4a6a8a', '#6a94b4', '#9ec4de']),
+      trim: Object.freeze(['#8a8aa4', '#c4c4d8', '#f0f0fa']),
+      accent: Object.freeze(['#a87410', '#f8d048', '#ffe88a']),
+      stone: Object.freeze(['#60607a', '#8a8aa4', '#b2b2c8']),
+      smoke: '#b8b8c2',
+      window: '#f6e09a',
+    }),
+    worn: Object.freeze({
+      sky: Object.freeze(['#38404e', '#667084', '#8c94a2']),
+      ridge: '#4a5262',
+      ground: Object.freeze(['#4a423c', '#241e1c']),
+      wall: Object.freeze(['#4e3c30', '#7e6250', '#9a7d68']),
+      roof: Object.freeze(['#2c2c34', '#44444c', '#5c5c66']),
+      glass: Object.freeze(['#262e38', '#4a5a6c', '#6c8096']),
+      trim: Object.freeze(['#4a4650', '#6c6872', '#8a8692']),
+      accent: Object.freeze(['#5a2c18', '#a65a32', '#cf7c4c']),
+      stone: Object.freeze(['#3a363c', '#58545c', '#76727a']),
+      smoke: '#6c6c76',
+      window: '#b09a62',
+    }),
+    edge: Object.freeze({
+      sky: Object.freeze(['#1c1220', '#4a2c3c', '#7c4650']),
+      ridge: '#2a1c2a',
+      ground: Object.freeze(['#2a2428', '#100c10']),
+      wall: Object.freeze(['#2a201e', '#54443f', '#6e5c56']),
+      roof: Object.freeze(['#18161c', '#2c2830', '#403c46']),
+      glass: Object.freeze(['#14181e', '#2a2e36', '#464c56']),
+      trim: Object.freeze(['#2a262c', '#46424a', '#605c66']),
+      accent: Object.freeze(['#2c2018', '#4e3a28', '#6a5038']),
+      stone: Object.freeze(['#201c22', '#38343a', '#504c54']),
+      smoke: '#34343a',
+      window: '#c04c3c',
+    }),
+    collapse: Object.freeze({
+      sky: Object.freeze(['#0a0610', '#2a1018', '#6a2420']),
+      ridge: '#1a0e14',
+      ground: Object.freeze(['#201a1c', '#0c080a']),
+      wall: Object.freeze(['#3a2e2c', '#6a5650', '#84706a']),
+      roof: Object.freeze(['#2a1c18', '#4a3428', '#6a4c38']),
+      glass: Object.freeze(['#0c0a10', '#1c1c24', '#2c2c36']),
+      trim: Object.freeze(['#2e2624', '#4e4240', '#6a5c58']),
+      accent: Object.freeze(['#a02c10', '#f06820', '#ffc050']),
+      stone: Object.freeze(['#2a2424', '#443c3c', '#5e5454']),
+      smoke: '#3a3a42',
+      window: '#f06820',
+    }),
   }),
   area: Object.freeze({
     sales: '#d85858',
@@ -8011,6 +8559,7 @@ __d("render/scenes/screens", function (module, exports, __r) {
 const engine = __r("engine");
 const { tierFor } = __r("tiers");
 const layout = __r("ui/layout");
+const layoutHd = __r("ui/layout-hd");
 const view = __r("ui/view");
 const { tx, num } = __r("ui/tx");
 const P = __r("render/palette");
@@ -8020,26 +8569,33 @@ const hud = __r("render/scenes/hud");
 const { drawStatement } = __r("render/scenes/statement");
 const { drawSky, drawFactory } = __r("render/factory");
 const { drawHero } = __r("render/bosses");
+const factory = __r("render/hd/factory");
+const light = __r("render/hd/light");
+const surface = __r("render/hd/surface");
 
 const SKY_H = layout.PLAY_H;
 const ROOM_WRAP = 38;
 const ROOM_ROWS = 6;
 
+const TITLE = Object.freeze({ y: 16, subtitleY: 50, pressY: 64, langY: 78, bestY: 236, noticeY: 6 });
+
+// The title: the factory at the middle of the surface under its name, the invitation to start, the language and the best result.
 function drawTitle(ctx, app) {
-  drawSky(ctx, 0, 0, layout.W, SKY_H, 'normal', app.t);
-  drawFactory(ctx, 'normal', 8, 80, app.t, 2);
-  ui.textRight(ctx, tx(app, 'ui.fictional'), 252, 4, P.white, { shadow: P.ink });
-  ui.textCenter(ctx, tx(app, 'ui.title'), 128, 16, P.gold, { scale: 3, shadow: '#7a4a10' });
-  ui.textCenter(ctx, tx(app, 'ui.subtitle'), 128, 46, P.white, { shadow: P.ink });
-  if (Math.floor(app.t * 2) % 2 === 0) ui.textCenter(ctx, tx(app, 'ui.press'), 128, 60, P.white, { shadow: P.ink });
+  factory.draw(ctx, 'normal', app.t, { calm: app.calm, quality: surface.quality(), at: 'center' });
+  const cx = layoutHd.W / 2;
+  light.glow(ctx, cx, TITLE.y + 14, 150, P.hd.gold, 0.16, { squash: 0.4 });
+  ui.textRight(ctx, tx(app, 'ui.fictional'), layoutHd.W - 8, TITLE.noticeY, P.white, { shadow: P.ink });
+  ui.textCenter(ctx, tx(app, 'ui.title'), cx, TITLE.y, P.gold, { scale: 4, shadow: P.hd.titleShadow });
+  ui.textCenter(ctx, tx(app, 'ui.subtitle'), cx, TITLE.subtitleY, P.white, { shadow: P.ink });
+  if (Math.floor(app.t * 2) % 2 === 0) ui.textCenter(ctx, tx(app, 'ui.press'), cx, TITLE.pressY, P.white, { shadow: P.ink });
   const es = tx(app, 'lang.es');
   const en = tx(app, 'lang.en');
   const total = ui.textWidth(`${es} / ${en}`);
-  const x = Math.round(128 - total / 2);
-  ui.text(ctx, es, x, 72, app.lang === 'es' ? P.gold : P.dim, { shadow: P.ink });
-  ui.text(ctx, ' / ', x + ui.textWidth(es), 72, P.white, { shadow: P.ink });
-  ui.text(ctx, en, x + ui.textWidth(`${es} / `), 72, app.lang === 'en' ? P.gold : P.dim, { shadow: P.ink });
-  if (app.best > 0) ui.textCenter(ctx, tx(app, 'ui.best', { n: app.best }), 128, 202, P.white, { shadow: P.ink });
+  const x = Math.round(cx - total / 2);
+  ui.text(ctx, es, x, TITLE.langY, app.lang === 'es' ? P.gold : P.dim, { shadow: P.ink });
+  ui.text(ctx, ' / ', x + ui.textWidth(es), TITLE.langY, P.white, { shadow: P.ink });
+  ui.text(ctx, en, x + ui.textWidth(`${es} / `), TITLE.langY, app.lang === 'en' ? P.gold : P.dim, { shadow: P.ink });
+  if (app.best > 0) ui.textCenter(ctx, tx(app, 'ui.best', { n: app.best }), cx, TITLE.bestY, P.white, { shadow: P.ink });
 }
 
 function drawIntro(ctx, app) {
@@ -9866,86 +10422,94 @@ module.exports = { SCENES, OVERLAYS, PHASES };
 __d("render/year/menus", function (module, exports, __r) {
 'use strict';
 
-// The screens before play: the mode menu, the list of endings to watch and the introduction
-// of the year. They share the sky-and-factory header of the title screen.
+// The screens before play: the mode menu, the list of endings to watch and the introduction of the year. Each is a glass panel at the left
+// of the surface over the factory, which stands at the right in the state the screen is about (the normal one, or the one the highlighted
+// ending ends in), under the title lockup.
 
 const anim = __r("ui/anim");
-const layout = __r("ui/layout");
+const menu = __r("ui/layout-menu");
 const view = __r("ui/year-view");
 const { SHOWCASE } = __r("year/showcase");
 const { tx } = __r("ui/tx");
 const { formatCode } = __r("rng");
 const P = __r("render/palette");
-const { rect } = __r("render/draw");
 const ui = __r("render/ui");
-const { drawSky, drawFactory } = __r("render/factory");
-const { drawHero } = __r("render/bosses");
+const panel = __r("render/hd/panel");
+const factory = __r("render/hd/factory");
+const surface = __r("render/hd/surface");
 
-const HEADER_H = 78;
-const INTRO_WRAP = 38;
-const SELECTED_ROW = 'rgba(248,208,72,0.22)';
-const blink = (app) => Math.floor(app.t * 3) % 2 === 0;
+const INTRO_WRAP = 44;
+const SUBTITLE_WRAP = 40;
+const PANEL_PAD = 10;
+const LINE_H = 10;
+const BUILD = 'DEMO 7';
 
-// Sky, the title block on the left and the factory (in the state of `tier`) on the right.
-function drawHeader(ctx, app, tier) {
-  drawSky(ctx, 0, 0, layout.W, HEADER_H, tier, app.t);
-  drawFactory(ctx, tier, 132, 6, app.t, 1);
-  ui.text(ctx, tx(app, 'ui.title'), 10, 14, P.gold, { scale: 2, shadow: '#7a4a10' });
-  ui.wrapLines([{ text: tx(app, 'ui.subtitle') }], 21).forEach((row, i) => {
-    ui.text(ctx, row.text, 10, 38 + i * 10, P.white, { shadow: P.ink });
+// The factory behind a screen, in the state of `tier`.
+const drawFactory = (ctx, app, tier) => factory.draw(ctx, tier, app.t, { calm: app.calm, quality: surface.quality(), at: 'side' });
+
+// The title, its subtitle and the name of this build, at the top left.
+function drawLockup(ctx, app) {
+  const { x, y, subtitleY, labelY } = menu.LOCKUP;
+  ui.text(ctx, tx(app, 'ui.title'), x, y, P.gold, { scale: 3, shadow: P.hd.titleShadow });
+  ui.wrapLines([{ text: tx(app, 'ui.subtitle') }], SUBTITLE_WRAP).forEach((row, i) => {
+    ui.text(ctx, row.text, x, subtitleY + i * LINE_H, P.white, { shadow: P.ink });
   });
-  ui.text(ctx, 'DEMO 6', 10, 64, P.orange, { shadow: P.ink });
+  ui.text(ctx, BUILD, x, labelY, P.orange, { shadow: P.ink });
 }
 
-// A row of a list of modes: its name, a line saying what it is and, on the full year, the best
-// result so far at the right of the name. `count` is the number of rows of the list.
+// A row of a list of modes: its name, a line saying what it is and, on the full year, the best result so far at the right of the name.
+// `count` is the number of rows of the list.
 function drawMenuRow(ctx, app, name, description, i, selected, extra = null, count = 4) {
-  const r = layout.menuRowRect(i, count);
+  const r = menu.menuRowRect(i, count);
   const top = r.y + Math.floor((r.h - 18) / 2);
-  ui.windowBox(ctx, r.x, r.y, r.w, r.h, { selected });
-  ui.text(ctx, name, r.x + 8, top, selected ? P.white : P.gray);
-  if (extra) ui.textRight(ctx, extra, r.x + r.w - 8, top, P.gold);
-  ui.text(ctx, description, r.x + 8, top + 10, selected ? P.gray : P.dim);
-  if (selected) ui.triangle(ctx, r.x + r.w - 12, top + 11 + (app.calm ? 0 : anim.bob(app.t)), -1, P.gold);
+  panel.row(ctx, r, { selected });
+  ui.text(ctx, name, r.x + 12, top, selected ? P.white : P.gray);
+  if (extra) ui.textRight(ctx, extra, r.x + r.w - 12, top, P.gold);
+  ui.text(ctx, description, r.x + 12, top + LINE_H, selected ? P.gray : P.dim);
+  if (selected) ui.triangle(ctx, r.x + r.w - 14, top + 11 + (app.calm ? 0 : anim.bob(app.t)), -1, P.gold);
 }
 
-function drawMenu(ctx, app) {
-  drawHeader(ctx, app, 'normal');
-  const p = layout.MENU.panel;
-  const items = view.menuItems(app);
-  // The panel opens with a small bounce (calm mode opens it in place).
+// The panel of a menu with its title, opening with a small bounce (calm mode opens it in place). `paint` draws what goes in it.
+function drawPanel(ctx, app, title, paint, box = menu.PANEL) {
   const pop = app.calm ? 0 : anim.popOffset(app.phaseT);
   if (pop !== 0) {
     ctx.save();
     ctx.translate(0, pop);
   }
-  ui.windowBox(ctx, p.x, p.y, p.w, p.h);
-  ui.textCenter(ctx, tx(app, 'menu.title'), 128, p.y + 7, P.gold);
-  items.forEach((id, i) => {
-    const best = id === 'year' ? view.bestLabel(app) : null;
-    drawMenuRow(ctx, app, tx(app, `menu.${id}`), tx(app, `menu.${id}.desc`), i, i === app.menuIdx, best, items.length);
-  });
-  if (items.length <= 3) ui.textCenter(ctx, tx(app, 'ui.fictional'), 128, p.y + p.h - 14, P.dim);
+  panel.glass(ctx, box);
+  ui.textCenter(ctx, title, box.x + box.w / 2, box.y + 7, P.gold);
+  paint();
   if (pop !== 0) ctx.restore();
+}
+
+function drawMenu(ctx, app) {
+  drawFactory(ctx, app, 'normal');
+  drawLockup(ctx, app);
+  const items = view.menuItems(app);
+  drawPanel(ctx, app, tx(app, 'menu.title'), () => {
+    items.forEach((id, i) => {
+      const best = id === 'year' ? view.bestLabel(app) : null;
+      drawMenuRow(ctx, app, tx(app, `menu.${id}`), tx(app, `menu.${id}.desc`), i, i === app.menuIdx, best, items.length);
+    });
+    if (items.length <= 3) ui.textCenter(ctx, tx(app, 'ui.fictional'), menu.PANEL.x + menu.PANEL.w / 2, menu.NOTICE_Y, P.dim);
+  });
 }
 
 // The factory behind the list shows the state the highlighted play style ends in.
 function drawEndings(ctx, app) {
-  drawHeader(ctx, app, view.OUTCOME_TIER[SHOWCASE[app.profileIdx].outcome]);
-  const p = layout.MENU.panel;
-  ui.windowBox(ctx, p.x, p.y, p.w, p.h);
-  ui.textCenter(ctx, tx(app, 'menu.endings.title'), 128, p.y + 7, P.gold);
-  view.PROFILE_ITEMS.forEach((id, i) => {
-    const r = layout.profileRowRect(i);
-    const selected = i === app.profileIdx;
-    if (selected) {
-      rect(ctx, r.x, r.y, r.w, r.h, SELECTED_ROW);
-      rect(ctx, r.x + 4, r.y + 3, 3, 3, P.gold);
-    }
-    ui.text(ctx, tx(app, `profile.${id}`), r.x + 14, r.y + 2, selected ? P.white : P.gray);
+  drawFactory(ctx, app, view.OUTCOME_TIER[SHOWCASE[app.profileIdx].outcome]);
+  drawLockup(ctx, app);
+  const p = menu.PANEL;
+  drawPanel(ctx, app, tx(app, 'menu.endings.title'), () => {
+    view.PROFILE_ITEMS.forEach((id, i) => {
+      const r = menu.profileRowRect(i);
+      const selected = i === app.profileIdx;
+      panel.row(ctx, r, { selected });
+      ui.text(ctx, tx(app, `profile.${id}`), r.x + 12, r.y + 3, selected ? P.white : P.gray);
+    });
+    const chosen = view.PROFILE_ITEMS[app.profileIdx];
+    ui.text(ctx, tx(app, `profile.${chosen}.desc`), p.x + 12, menu.PROFILE_DESC_Y, P.gray);
   });
-  const chosen = view.PROFILE_ITEMS[app.profileIdx];
-  ui.text(ctx, tx(app, `profile.${chosen}.desc`), p.x + 8, p.y + p.h - 16, P.gray);
 }
 
 const CODE_DIGITS = 4;
@@ -9959,14 +10523,13 @@ function codeText(app) {
 
 function drawYearIntro(ctx, app) {
   const half = view.isHalfYear(app);
-  drawSky(ctx, 0, 0, layout.W, layout.PLAY_H, 'normal', app.t);
-  drawFactory(ctx, 'normal', 150, -8, app.t, 1);
-  ui.text(ctx, tx(app, 'ui.title'), 10, 10, P.gold, { scale: 2, shadow: '#7a4a10' });
-  ui.text(ctx, tx(app, half ? 'menu.half' : 'menu.year'), 10, 32, P.white, { shadow: P.ink });
+  drawFactory(ctx, app, 'normal');
+  ui.text(ctx, tx(app, 'ui.title'), menu.LOCKUP.x, menu.LOCKUP.y, P.gold, { scale: 2, shadow: P.hd.titleShadow });
+  ui.text(ctx, tx(app, half ? 'menu.half' : 'menu.year'), menu.LOCKUP.x, menu.INTRO_LINES.mode, P.white, { shadow: P.ink });
   const code = codeText(app);
-  ui.text(ctx, code.text, 10, 44, code.typed ? P.gold : P.gray, { shadow: P.ink });
-  drawHero(ctx, 226, 58, app.t);
-  ui.windowBox(ctx, 4, 60, 248, 166);
+  ui.text(ctx, code.text, menu.LOCKUP.x, menu.INTRO_LINES.code, code.typed ? P.gold : P.gray, { shadow: P.ink });
+  const box = menu.INTRO_PANEL;
+  panel.glass(ctx, box);
   const rows = ui.wrapLines([
     { text: tx(app, half ? 'year.intro1.half' : 'year.intro1') },
     { text: ' ' },
@@ -9974,11 +10537,11 @@ function drawYearIntro(ctx, app) {
     { text: ' ' },
     { text: tx(app, 'year.intro3'), tone: 'gold' },
   ], INTRO_WRAP);
-  ui.paragraph(ctx, rows, 12, 70);
-  ui.text(ctx, tx(app, code.typed ? 'year.intro.partial' : 'year.intro.hint'), 12, 208, code.typed ? P.orange : P.dim);
+  ui.paragraph(ctx, rows, box.x + PANEL_PAD + 2, box.y + PANEL_PAD + 2, LINE_H);
+  ui.text(ctx, tx(app, code.typed ? 'year.intro.partial' : 'year.intro.hint'), box.x + PANEL_PAD + 2, box.y + box.h - 18, code.typed ? P.orange : P.dim);
 }
 
-module.exports = { drawMenu, drawEndings, drawYearIntro, drawHeader, drawMenuRow };
+module.exports = { drawMenu, drawEndings, drawYearIntro, drawLockup, drawMenuRow, drawPanel, drawFactory };
 
 });
 __d("render/year/overlays", function (module, exports, __r) {
@@ -10719,6 +11282,7 @@ __d("render/year/workshop", function (module, exports, __r) {
 // map of the selected team).
 
 const layout = __r("ui/layout");
+const menu = __r("ui/layout-menu");
 const view = __r("ui/year-view");
 const { WORKSHOP_ITEMS } = __r("ui/workshop-app");
 const { rankedTeams, noticeText } = __r("ui/rank-view");
@@ -10730,6 +11294,7 @@ const P = __r("render/palette");
 const { rect, line } = __r("render/draw");
 const ui = __r("render/ui");
 const hud = __r("render/scenes/hud");
+const panel = __r("render/hd/panel");
 const { DECISION_COLOR } = __r("render/year/frame");
 const menus = __r("render/year/menus");
 
@@ -10740,6 +11305,7 @@ const BODY = Object.freeze({ x: 4, y: 21, w: 248, h: 166 });
 const TABLE = Object.freeze({ top: 37, step: 10, rows: 8 });
 const PLOT = Object.freeze({ left: 30, right: 238, top: 134, bottom: 174, max: 30 });
 const SELECTED_ROW = 'rgba(248,208,72,0.22)';
+const SETUP_HINT_WRAP = 40;
 
 const teamColor = (team) => TEAM_COLORS[team.color % TEAM_COLORS.length];
 const caret = (app) => (Math.floor(app.t * 2) % 2 === 0 ? '_' : ' ');
@@ -10748,36 +11314,37 @@ const outcomeColor = (outcome) => hud.TIER_COLOR[view.OUTCOME_TIER[outcome]];
 // ---------------------------------------------------------------- menu and setup
 
 function drawWorkshopMenu(ctx, app) {
-  menus.drawHeader(ctx, app, 'normal');
-  const p = layout.MENU.panel;
-  ui.windowBox(ctx, p.x, p.y, p.w, p.h);
-  ui.textCenter(ctx, tx(app, 'ws.title'), 128, p.y + 7, P.gold);
-  WORKSHOP_ITEMS.forEach((id, i) => {
-    menus.drawMenuRow(ctx, app, tx(app, `ws.${id}`), tx(app, `ws.${id}.desc`), i, i === app.workshopIdx);
-  });
+  menus.drawFactory(ctx, app, 'normal');
+  menus.drawLockup(ctx, app);
+  menus.drawPanel(ctx, app, tx(app, 'ws.title'), () => {
+    WORKSHOP_ITEMS.forEach((id, i) => {
+      menus.drawMenuRow(ctx, app, tx(app, `ws.${id}`), tx(app, `ws.${id}.desc`), i, i === app.workshopIdx, null, WORKSHOP_ITEMS.length);
+    });
+  }, menu.panelFor(WORKSHOP_ITEMS.length));
 }
 
 function drawField(ctx, app, box, value, placeholder, focused) {
-  ui.windowBox(ctx, box.x, box.y, box.w, box.h, { selected: focused });
+  panel.field(ctx, box, { focused });
   const shown = value === '' ? placeholder : value;
-  ui.text(ctx, `${shown}${focused ? caret(app) : ''}`, box.x + 5, box.y + 4, value === '' ? P.dim : P.white);
+  ui.text(ctx, `${shown}${focused ? caret(app) : ''}`, box.x + 6, box.y + 4, value === '' ? P.dim : P.white);
 }
 
 function drawSetup(ctx, app) {
-  menus.drawHeader(ctx, app, 'normal');
-  const p = layout.MENU.panel;
+  menus.drawFactory(ctx, app, 'normal');
+  menus.drawLockup(ctx, app);
+  const p = menu.PANEL;
   const { name, code, field, notice } = app.setup;
-  ui.windowBox(ctx, p.x, p.y, p.w, p.h);
-  ui.textCenter(ctx, tx(app, 'ws.setup.title'), 128, p.y + 7, P.gold);
-  ui.text(ctx, tx(app, 'ws.setup.name'), 14, layout.SETUP.name.y + 4, P.gray);
-  ui.text(ctx, tx(app, 'ws.setup.code'), 14, layout.SETUP.code.y + 4, P.gray);
-  drawField(ctx, app, layout.SETUP.name, name, tx(app, 'ws.team.default'), field === 0);
-  drawField(ctx, app, layout.SETUP.code, code, '0000', field === 1);
-  const start = layout.SETUP.start;
-  ui.windowBox(ctx, start.x, start.y, start.w, start.h, { selected: field === 2 });
-  ui.textCenter(ctx, tx(app, 'ws.setup.start'), start.x + start.w / 2, start.y + 5, P.gold);
-  ui.paragraph(ctx, ui.wrapLines([{ text: tx(app, 'ws.setup.hint'), tone: 'gray' }], 38), 12, 170);
-  if (notice) ui.text(ctx, noticeText(app, notice), 12, p.y + p.h - 9, P.red);
+  menus.drawPanel(ctx, app, tx(app, 'ws.setup.title'), () => {
+    ui.text(ctx, tx(app, 'ws.setup.name'), p.x + 12, menu.SETUP.name.y + 4, P.gray);
+    ui.text(ctx, tx(app, 'ws.setup.code'), p.x + 12, menu.SETUP.code.y + 4, P.gray);
+    drawField(ctx, app, menu.SETUP.name, name, tx(app, 'ws.team.default'), field === 0);
+    drawField(ctx, app, menu.SETUP.code, code, '0000', field === 1);
+    const start = menu.SETUP.start;
+    panel.row(ctx, start, { selected: field === 2 });
+    ui.textCenter(ctx, tx(app, 'ws.setup.start'), start.x + start.w / 2, start.y + 6, P.gold);
+    ui.paragraph(ctx, ui.wrapLines([{ text: tx(app, 'ws.setup.hint'), tone: 'gray' }], SETUP_HINT_WRAP), p.x + 12, menu.SETUP.hintY, menu.SETUP.hintPitch);
+    if (notice) ui.text(ctx, noticeText(app, notice), p.x + 12, menu.SETUP.noticeY, P.red);
+  });
 }
 
 // ---------------------------------------------------------------- the ranking
@@ -11845,6 +12412,87 @@ function hitFooter(x, y) {
 module.exports = { W, H, LEGACY, STATEMENT, STATEMENT_ROWS, DASH, GAUGES, TREND, CHIPS, STAGE, FOCUS, DIALOGUE, FOOTER, answerRect, hitAnswer, hitFooter, inside };
 
 });
+__d("ui/layout-menu", function (module, exports, __r) {
+'use strict';
+
+// Geometry of the screens before play in Demo 7, in logical pixels of the 480 by 270 surface: the mode menu, the list of endings, the year
+// introduction, the workshop menu and the team setup. A glass panel sits at the left over the factory, which stands at the right of the
+// surface (render/hd/factory.js), so the panels end before the building starts. Shared by the renderer and the reducers.
+
+const L = __r("ui/layout-hd");
+
+// The title, its subtitle and the name of the build, at the top left; the panel of the menus starts under them.
+const LOCKUP = Object.freeze({ x: 14, y: 10, subtitleY: 40, labelY: 62, bottom: 76 });
+const PANEL = Object.freeze({ x: 8, y: 84, w: 268, h: 166 });
+// A list of only two rows (the workshop's) needs a shorter panel.
+const SHORT_PANEL = Object.freeze({ ...PANEL, h: 124 });
+const panelFor = (count) => (count <= 2 ? SHORT_PANEL : PANEL);
+const MENU_ROW_W = 256;
+const NOTICE_Y = 234;
+
+// The fewer the modes the taller the rows: two, three, four (the endings of a creator without the half year) or the five of a creator.
+const MENU_ROWS = Object.freeze({
+  2: Object.freeze({ h: 42, step: 48 }),
+  3: Object.freeze({ h: 34, step: 38 }),
+  4: Object.freeze({ h: 28, step: 32 }),
+  5: Object.freeze({ h: 22, step: 25 }),
+});
+const MENU_TOP = 106;
+const PROFILE = Object.freeze({ y: 106, h: 13, step: 14 });
+const PROFILE_DESC_Y = 228;
+
+// The year introduction: a taller panel under the title, the mode and the code of the game.
+const INTRO_PANEL = Object.freeze({ x: 8, y: 66, w: 288, h: 184 });
+const INTRO_LINES = Object.freeze({ mode: 38, code: 50 });
+
+// Workshop setup: the team name, the game code and the start button.
+const SETUP = Object.freeze({
+  name: Object.freeze({ x: 128, y: 112, w: 140, h: 16 }),
+  code: Object.freeze({ x: 128, y: 136, w: 56, h: 16 }),
+  start: Object.freeze({ x: 70, y: 164, w: 148, h: 20 }),
+  hintY: 196,
+  hintPitch: 10,
+  hintRows: 3,
+  noticeY: 238,
+});
+
+const inside = L.inside;
+
+const rowsFor = (count) => MENU_ROWS[Math.min(5, Math.max(2, count))];
+const menuRowRect = (i, count = 4) => {
+  const { h, step } = rowsFor(count);
+  return { x: PANEL.x + 6, y: MENU_TOP + i * step, w: MENU_ROW_W, h };
+};
+
+const profileRowRect = (i) => ({ x: PANEL.x + 6, y: PROFILE.y + i * PROFILE.step, w: MENU_ROW_W, h: PROFILE.h });
+
+const hitIndex = (rectOf, count, x, y) => {
+  for (let i = 0; i < count; i += 1) if (inside(rectOf(i), x, y)) return i;
+  return -1;
+};
+
+const hitMenuRow = (x, y, count = 4) => hitIndex((i) => menuRowRect(i, count), count, x, y);
+const hitProfileRow = (x, y, count = 8) => hitIndex(profileRowRect, count, x, y);
+const hitSetup = (x, y) => ['name', 'code', 'start'].findIndex((key) => inside(SETUP[key], x, y));
+
+module.exports = {
+  LOCKUP,
+  PANEL,
+  panelFor,
+  MENU_ROW_W,
+  NOTICE_Y,
+  PROFILE_DESC_Y,
+  INTRO_PANEL,
+  INTRO_LINES,
+  SETUP,
+  menuRowRect,
+  profileRowRect,
+  hitMenuRow,
+  hitProfileRow,
+  hitSetup,
+};
+
+});
 __d("ui/layout", function (module, exports, __r) {
 'use strict';
 
@@ -11979,7 +12627,7 @@ __d("ui/menu-app", function (module, exports, __r) {
 const engine = __r("year/engine");
 const { showcaseRun } = __r("year/showcase");
 const { nextGameCode, parseCode } = __r("rng");
-const layout = __r("ui/layout");
+const layout = __r("ui/layout-menu");
 const { menuItems, PROFILE_ITEMS } = __r("ui/year-view");
 const { verdictEffects } = __r("ui/year-app");
 const { sfx, music, result, moved, listMove, selectIndex } = __r("ui/shared");
@@ -12181,14 +12829,18 @@ __d("ui/screen-space", function (module, exports, __r) {
 
 const layout = __r("ui/layout-hd");
 
-const WIDE_PHASES = Object.freeze(['problem', 'result']);
+// The two phases of a problem have a composition of their own (the scene, the P&L, the gauges and the dialogue console).
+const DECISION_PHASES = Object.freeze(['problem', 'result']);
+// The screens before play: the title, the menus, the introduction of the year and the team setup.
+const WIDE_SCENES = Object.freeze(['title', 'menu', 'endings', 'yearIntro', 'workshop', 'setup']);
 
-const isWide = (app) => app.scene === 'year' && app.year !== null && WIDE_PHASES.includes(app.year.phase);
+const isDecision = (app) => app.scene === 'year' && app.year !== null && DECISION_PHASES.includes(app.year.phase);
+const isWide = (app) => isDecision(app) || WIDE_SCENES.includes(app.scene);
 
 // A pointer position on the surface, in the coordinates of the screen that is showing.
 const toScreen = (app, point) => (isWide(app) ? point : { x: point.x - layout.LEGACY.x, y: point.y - layout.LEGACY.y });
 
-module.exports = { isWide, toScreen };
+module.exports = { isWide, isDecision, toScreen };
 
 });
 __d("ui/shared", function (module, exports, __r) {
@@ -12528,7 +13180,7 @@ const engine = __r("year/engine");
 const { decode, cleanName } = __r("year/result-code");
 const { analyze } = __r("year/standings");
 const { formatCode, parseCode } = __r("rng");
-const layout = __r("ui/layout");
+const layout = __r("ui/layout-menu");
 const { MAX_TEAMS, rankedTeams, firstFreeColor } = __r("ui/rank-view");
 const { tx } = __r("ui/tx");
 const { typeName, typeDigit, typeFree, erase } = __r("ui/text-entry");
