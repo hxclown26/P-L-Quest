@@ -390,26 +390,28 @@ module.exports = { casesOf, ANSWERS };
 __d("content/cases/en", function (module, exports, __r) {
 'use strict';
 
-// The cases of the year in English: the four units, one file each. Same rows, in the same order, as the Spanish ones.
+// The cases of the year in English: the five units, one file each. Same rows, in the same order, as the Spanish ones.
 
 module.exports = Object.freeze({
   ...__r("content/cases/hotel.en"),
   ...__r("content/cases/hospital.en"),
   ...__r("content/cases/food.en"),
   ...__r("content/cases/industry.en"),
+  ...__r("content/cases/mining.en"),
 });
 
 });
 __d("content/cases/es", function (module, exports, __r) {
 'use strict';
 
-// The cases of the year in Spanish: the four units, one file each.
+// The cases of the year in Spanish: the five units, one file each.
 
 module.exports = Object.freeze({
   ...__r("content/cases/hotel.es"),
   ...__r("content/cases/hospital.es"),
   ...__r("content/cases/food.es"),
   ...__r("content/cases/industry.es"),
+  ...__r("content/cases/mining.es"),
 });
 
 });
@@ -2461,6 +2463,162 @@ module.exports = casesOf('industry', [
 ]);
 
 });
+__d("content/cases/mining.en", function (module, exports, __r) {
+'use strict';
+
+// The cases of the year written for mining, English. One row for each problem (the id is the month and the voice: c client, p plant, e environment,
+// s strategy), with everything the player reads about it:
+//   [id, title, scene, brief, 'fact|fact|fact',
+//     [smart: name, description, story], [shortcut: ...], [give in: ...], [do nothing: ...]]
+// The four answers are always written in that order; the game shuffles what the player sees. A story opens with the kind of answer it was
+// ("Equilibrada:", "Atajo:", "Cesión:", "Pasividad:"; a red line opens with "Línea roja:"). tests/year-case.test.js keeps lengths and openings honest.
+// Mining is the one unit no problem was written from: its cases are written for the clients that buy chemical inputs (reagents, flocculants,
+// antiscalants, dust control, water reuse) from a mine or its concentrator, with the same dilemma, answers and P&L effects as the other units.
+
+const { casesOf } = __r("content/cases/build");
+
+module.exports = casesOf('mining', [
+  ['m01c', 'Supply renewal', 'A mining company, 18% of your sales, asks for a 3% rebate to renew.', 'A mining company with 3 concentrator plants buys flotation reagents and flocculants from you. Its contract expires in 20 days and a competitor has quoted. Purchasing wants to close fast.', 'Client: miner with 3 plants|Weight: 18% of your sales|Client margin: 33%',
+    ['Biennial contract', 'You offer a 1% rebate, 2% above the tonnage plan, for a 2-year commitment.', 'Balanced: the miner signed for 2 years; the 1% rebate costs little and secures 18% of your sales.'],
+    ['Recover elsewhere', 'You accept the 3% and recoup it with 2% more on their other inputs and service.', 'Shortcut: you accepted the 3% and loaded it onto other inputs; OI rises now and the miner will notice.'],
+    ['Concede the 3%', 'You concede the 3% on the contract and renew the 3 plants this week.', 'Concession: you renewed the 3 concentrators with the full 3%. The miner stays, but that margin is gone.'],
+    ['Study the request', 'You study the request calmly and propose 30 days; the contract ends in 20.', 'Passivity: the contract expired in 20 days and the miner tendered with another supplier: you lost volume.']],
+  ['m02c', 'Collector change', 'A miner, 12% of your sales, asks for another collector in 2 weeks.', 'A concentrator changes the flotation program of one circuit and asks for another collector with only 2 weeks\' notice. Its chief metallurgist will review the effect on recovery.', 'Client: concentrator|Weight: 12% of your sales|Notice: 2 weeks',
+    ['Short trial', 'You test it for 3 days in one flotation cell and propose a realistic date.', 'Balanced: the 3-day trial avoided a drop in recovery and the miner accepted a realistic date.'],
+    ['Reformulate it', 'You reformulate the collector with what is in the warehouse and ship in 2 weeks.', 'Shortcut: you shipped on time from stock; if the collector lowers recovery, the claim will be big.'],
+    ['Give the 2 weeks', 'You grant the 2 weeks asked and pay for the rush production yourself.', 'Concession: you accepted the 2 weeks and absorbed the extra cost: the miner is calm and the margin paid.'],
+    ['See it Monday', 'You leave it for Monday\'s committee and reply within 7 days.', 'Passivity: you answered in 7 days and the miner quoted the collector with another reagent supplier.']],
+  ['m03c', 'Off-spec flocculant', 'A miner claims 40 tons of flocculant that came out off specification.', 'A concentrator claims 40 tons of off-specification flocculant: the thickener did not clarify and lost recovered water for a day. Its plant manager wants an answer today.', 'Client: concentrator|Batch claimed: 40 tons|Answer wanted: today',
+    ['Replace the lot', 'You replace the 40 tons today and share the root-cause analysis of the lot.', 'Balanced: you replaced the 40 tons and shared the root-cause analysis: it costs, but you avoid another claim.'],
+    ['Point at freight', 'You put the loss of activity down to the trip to the mine and replace only half.', 'Shortcut: blaming the trip and replacing half saves today; if disproved, you lose their trust.'],
+    ['10% discount', 'You take 10% off the next order and close the claim the same day.', 'Concession: the 10% discount closed the claim that day, but you gave away margin and the cause is still there.'],
+    ['Formal claim', 'You wait for the formal claim, due in 15 days, and only then check the lot.', 'Passivity: you answered after 15 days and the formal claim added handling costs and an upset miner.']],
+  ['m04c', 'Budget cut', 'A miner cuts its input budget 10% and asks for lower prices.', 'A mining company cuts its supplies budget 10% because the metal price fell, and asks for lower prices. It has other suppliers at hand and its management decides in 30 days.', 'Client: miner|Weight: 10% of your sales|Client budget: -10%',
+    ['Dose per ton', 'You lower the dose per ton so they spend 10% less and bill the service.', 'Balanced: the miner cuts its reagent spend and pays a service for the savings; it stays, your margin holds.'],
+    ['Change the mix', 'You cut the collector 5% and offset it with 5% more on monitoring and service.', 'Shortcut: you cut the reagent and raised services; the deal closes, but the miner will see the surcharge.'],
+    ['Lower the price', 'You give a 5% discount for 12 months and the miner keeps buying.', 'Concession: you cut 5% for 12 months and the miner kept buying; the discount comes out of margin all year.'],
+    ['Wait for the call', 'You leave the contract as it is and wait for its management to decide in 30 days.', 'Passivity: you left the terms alone and after 30 days the miner moved part of its use to another supplier.']],
+  ['m05c', 'Free visits', 'A concentrator (9% of sales) asks for weekly visits at no extra charge.', 'A concentrator asks for a weekly visit from your metallurgist to its flotation circuits, without paying more. Each visit costs your team hours, and other plants might ask for the same.', 'Client: concentrator|Weight: 9% of your sales|Visits asked: 4 per month',
+    ['Remote monitoring', 'You put sensors on the circuit and send the metallurgist only on an alert.', 'Balanced: remote monitoring avoids extra visits: the miner is served and Direct Chg fall.'],
+    ['New technician', 'You cover the visits with a newly trained technician and cut the cost 40%.', 'Shortcut: a junior technician costs 40% less, but a badly dosed circuit lowers recovery later.'],
+    ['Weekly visits', 'You give 4 visits a month at no charge and pay your team\'s trips to the mine.', 'Concession: 4 visits a month at your cost: a happy miner, but Direct Chg rise with no revenue in return.'],
+    ['Route to Ops', 'You forward the request to Operations and promise a dated answer in 20 days.', 'Passivity: you took 20 days to reply and the miner felt its plant was not a priority.']],
+  ['m06c', 'Competitor 8% lower', 'A competitor offers 8% less and threatens a contract worth 14% of sales.', 'A competitor offers 8% less on reagents to a mining group that is 14% of your sales. Its plant manager values your service, but management pushes to cut the cost of inputs.', 'Client: mining group|Weight: 14% of your sales|Rival offer: 8% less',
+    ['Show the results', 'You table the measured recovery and hold the price with a 2-year rebate.', 'Balanced: you showed the measured recovery and consumption and defended price with a 2-year rebate.'],
+    ['Lock in the miner', 'You sign 3 years with a 20% exit penalty and leave your list price alone.', 'Shortcut: the exit fines hold the group now, but tied down and looking for a way out.'],
+    ['Cut 8% across', 'You match the rival and cut 8% on the whole contract, asking nothing back.', 'Concession: you matched the rival on the whole contract: the group stays and your margin bleeds every month.'],
+    ['Count on the bond', 'You look after the plant relationship and take its 3-year support for granted.', 'Passivity: you trusted the relationship and the group sent part of the tons to the competitor.']],
+  ['m07c', 'Cost audit', 'A miner (11% of your sales) asks to audit your costs and margin.', 'A mining company that is 11% of your sales asks to audit your costs and margin before renewing. Its buyer suspects freight to the mine and technical service are inflated.', 'Client: miner|Weight: 11% of your sales|Request: audit costs and margin',
+    ['Audit by method', 'You let them audit freight to the mine and service, and set how to compare.', 'Balanced: you opened freight and service under clear rules; the miner sees value and asks no more.'],
+    ['Show only part', 'You show the costs that favor you and hand over the rest in summary.', 'Shortcut: you showed only the costs that favor you; if the miner cross-checks, you lose its trust.'],
+    ['Open everything', 'You show each cost line and give up 2 margin points without arguing.', 'Concession: you opened everything and gave up 2 margin points without arguing the value you deliver on site.'],
+    ['Leave it for later', 'You leave the audit for later, with up to 6 months to do it.', 'Passivity: you pushed the audit back 6 months and the miner assumed you were hiding something: it bought less.']],
+  ['m08c', 'New buyer', 'A miner\'s new purchasing manager (16% of sales) wants to tender.', 'The new purchasing manager of a mining group (16% of your sales) wants to tender all reagent supply. He came with a cost-cutting goal and does not know your track record on site.', 'Client: mining group|Weight: 16% of your sales|Process: open tender',
+    ['Show the results', 'You bring recovery results and a tiered rebate over 2 years.', 'Balanced: you brought recovery results and a tiered rebate: the manager sees value.'],
+    ['Enter low', 'You quote a base price 6% lower and invoice tech service apart.', 'Shortcut: you came in 6% under on base price and billed service apart; the final bill surprises the manager.'],
+    ['Bid the minimum', 'You set the lowest price you can sustain for a 3-year contract.', 'Concession: you bid the floor for 3 years: you win the concentrators, but at minimum margin.'],
+    ['Quote if asked', 'You wait for the formal invitation and quote in 10 days at your current rate.', 'Passivity: you waited for the invitation and quoted after 10 days; the manager already had other prices.']],
+  ['m09c', 'Volume for price', 'A miner (13% of sales) promises 20% more volume if you cut 5%.', 'A mining group that is 13% of your sales promises 20% more volume if you cut 5%. It is opening a new flotation line, but the promise is unsigned and its margin is already low.', 'Client: mining group|Promised volume: +20%|Cut asked: 5%',
+    ['Stepped cut', 'You apply 5% to the new line alone and reassess with data at 3 months.', 'Balanced: 5% only on the new line, with a review at 3 months: more sales and margin looked after.'],
+    ['Load the others', 'You raise small mining firms 3%, who rarely haggle, and pay for the discount.', 'Shortcut: you raised small miners, who do not negotiate, by 3%: OI rises today, they notice tomorrow.'],
+    ['Give 5% on all', 'You cut 5% from all of the year\'s volume and hope their consumption rises.', 'Concession: you gave 5% all year and believed the promise: more tons, at a much lower margin.'],
+    ['Pass to committee', 'You take the proposal to the purchasing committee, which meets in 4 weeks.', 'Passivity: the proposal sat 4 weeks in committee and the group split the volume among others.']],
+  ['m10c', 'Loaned equipment', 'A concentrator asks for 3 dosing systems on loan.', 'A concentrator asks for 3 dosing systems on loan for its new flotation line. The units are yours and their upkeep is on you, even if it buys little.', 'Systems asked: 3 dosing systems|Minimum purchase: not agreed|Upkeep: on you',
+    ['Loan on conditions', 'You lend the 3 systems if the miner commits to a minimum yearly purchase.', 'Balanced: you lent the systems with a yearly minimum purchase and paid upkeep: a clear return.'],
+    ['Add to the price', 'You raise the reagent price 3% and fund the units with that surcharge.', 'Shortcut: you added 3% to reagents to pay for the units; the miner will see the rise on its invoice.'],
+    ['Hand over freely', 'You mount the 3 systems on the new line with no conditions and cover all upkeep.', 'Concession: you handed over 3 systems and took on their upkeep though it buys little: Direct Chg without sales.'],
+    ['Buy their own', 'You say loans do not exist and that the miner should buy its own units.', 'Passivity: you told it to buy its own units; the miner went to someone who does lend them.']],
+  ['m11c', 'Disputed charges', 'A miner disputes 3% of charges on 4 invoices, but keeps buying.', 'A mining company disputes 3% of freight and service charges on 4 invoices, but keeps buying. Every disputed charge is money in limbo and the argument can wear the relationship down.', 'Charges in dispute: 3%|Invoices disputed: 4|Client: miner',
+    ['Check each charge', 'You go through the 4 invoices with the miner and correct only what is wrong.', 'Balanced: you reviewed the 4 invoices with the miner and fixed only what was wrong: you are paid what is fair.'],
+    ['Charges into price', 'You tuck those charges into the price per ton of the following dispatches.', 'Shortcut: you spread those charges into the price of next invoices; the miner will notice later.'],
+    ['Credit note', 'You credit the 3% of the 4 invoices with credit notes and call it closed.', 'Concession: you credited the 3% on all 4 invoices: closed, but margin gives way entirely.'],
+    ['Leave it open', 'You leave the 4 invoices open and review the charges only if they insist.', 'Passivity: you left the dispute open; the miner held back payments and ended up demanding a bigger credit.']],
+  ['m12c', 'Fixed-price contract', 'A mining group offers to renew 3 years at a fixed price, no adjustment.', 'A large, loyal mining group offers a 3-year renewal, but at a fixed price with no inflation adjustment. Your raw material costs can rise; the price will not move.', 'Contract: 36 months|Price: fixed, no adjustment|Client weight: 15% of your sales',
+    ['Fixed with a clause', 'You sign 36 months with a clause tied to the cost of raw materials.', 'Balanced: you accepted 36 months with a cap tied to raw-material cost: sales and margin looked after.'],
+    ['Enter higher', 'You come in 3% over the competition and close the 36-month contract.', 'Shortcut: you signed with an opening price 3% over the market; the group can walk away at the first chance.'],
+    ['Sign as asked', 'You subscribe to the 36 months with the group\'s draft, changing nothing.', 'Concession: you signed the group\'s text without touching it: tons secured and costs free to rise.'],
+    ['Let it lapse', 'You pass the offer to legal and the group\'s deadline runs out in 30 days.', 'Passivity: legal was slow and the offer lapsed; the group signed with another supplier for 3 years.']],
+]);
+
+});
+__d("content/cases/mining.es", function (module, exports, __r) {
+'use strict';
+
+// The cases of the year written for mining, Spanish. One row for each problem (the id is the month and the voice: c client, p plant, e environment,
+// s strategy), with everything the player reads about it:
+//   [id, title, scene, brief, 'fact|fact|fact',
+//     [smart: name, description, story], [shortcut: ...], [give in: ...], [do nothing: ...]]
+// The four answers are always written in that order; the game shuffles what the player sees. A story opens with the kind of answer it was
+// ("Equilibrada:", "Atajo:", "Cesión:", "Pasividad:"; a red line opens with "Línea roja:"). tests/year-case.test.js keeps lengths and openings honest.
+// Mining is the one unit no problem was written from: its cases are written for the clients that buy chemical inputs (reagents, flocculants,
+// antiscalants, dust control, water reuse) from a mine or its concentrator, with the same dilemma, answers and P&L effects as the other units.
+
+const { casesOf } = __r("content/cases/build");
+
+module.exports = casesOf('mining', [
+  ['m01c', 'Renovación del suministro', 'Una minera, 18% de tus ventas, pide 3% de rebate para renovar.', 'Una minera con 3 concentradoras te compra reactivos de flotación y floculantes. Su contrato vence en 20 días y un competidor ya cotizó. Compras quiere cerrar rápido.', 'Cliente: minera con 3 plantas|Peso: 18% de tus ventas|Margen del cliente: 33%',
+    ['Contrato de 2 años', 'Das 1% de rebate, y 2% sobre el plan de toneladas, a cambio de firmar 2 años.', 'Equilibrada: la minera firmó 2 años; el rebate de 1% pesa poco y deja asegurado el 18% de tus ventas.'],
+    ['Recuperar en otros', 'Aceptas el 3% y lo recuperas con 2% más en sus otros insumos y en el servicio.', 'Atajo: aceptaste el 3% y lo cargaste a otros insumos; el OI sube hoy y la minera lo verá en su auditoría.'],
+    ['Conceder el 3%', 'Otorgas el 3% completo y dejas renovadas las 3 plantas antes del viernes.', 'Cesión: renovaste las 3 concentradoras con el 3% completo. La minera se queda, pero ese margen se fue.'],
+    ['Pedir más plazo', 'Estudias el pedido y propones 30 días, aunque el contrato vence en 20.', 'Pasividad: el contrato venció en 20 días y la minera licitó con otro proveedor: perdiste volumen.']],
+  ['m02c', 'Cambio de colector', 'Una minera, 12% de tus ventas, pide otro colector con 2 semanas de aviso.', 'Una concentradora cambia el programa de flotación de un circuito y pide otro colector con solo 2 semanas de aviso. Su metalurgista jefe revisará la recuperación del cambio.', 'Cliente: concentradora|Peso: 12% de tus ventas|Aviso: 2 semanas',
+    ['Ensayo en celdas', 'Corres un ensayo de 3 días en el circuito y acuerdas una fecha realista.', 'Equilibrada: el ensayo de 3 días evitó una caída de recuperación y la minera aceptó una fecha realista.'],
+    ['Cambiar fórmula', 'Reformulas el colector con lo que hay en bodega y despachas en 2 semanas.', 'Atajo: despachaste a tiempo con el stock; si el colector baja la recuperación, el reclamo será grande.'],
+    ['Aceptar lo pedido', 'Das las 2 semanas pedidas y pagas tú la producción urgente.', 'Cesión: aceptaste las 2 semanas y absorbiste el costo extra: la minera quedó tranquila y el margen pagó.'],
+    ['Verlo el lunes', 'Lo dejas para el comité del lunes y contestas dentro de 7 días.', 'Pasividad: respondiste en 7 días y la minera cotizó el colector con otro proveedor de reactivos.']],
+  ['m03c', 'Floculante fuera de norma', 'Una minera reclama 40 toneladas de floculante fuera de especificación.', 'Una concentradora reclama 40 toneladas de floculante fuera de especificación: el espesador no clarificó y perdió agua recuperada por un día. Su gerente de planta pide una respuesta hoy.', 'Cliente: concentradora|Lote reclamado: 40 toneladas|Respuesta pedida: hoy',
+    ['Reponer el lote', 'Repones hoy las 40 toneladas y compartes el análisis de causa del lote.', 'Equilibrada: repusiste las 40 toneladas y compartiste la causa: cuesta, pero evitas otro reclamo.'],
+    ['Culpar al flete', 'Atribuyes la baja de actividad al viaje a la faena y repones solo la mitad.', 'Atajo: culpar al viaje a la faena y reponer a medias ahorra hoy; si lo desmienten, pierdes su confianza.'],
+    ['Descuento de 10%', 'Reconoces 10% sobre la siguiente compra de la minera y cierras el reclamo hoy.', 'Cesión: el 10% de descuento cerró el reclamo ese mismo día, pero regalaste margen y la causa sigue ahí.'],
+    ['Reclamo formal', 'Dejas que el reclamo formal llegue, en 15 días, y analizas el lote después.', 'Pasividad: respondiste a los 15 días y el reclamo formal sumó costos de gestión y una minera molesta.']],
+  ['m04c', 'Recorte de presupuesto', 'Una minera recorta 10% su presupuesto de insumos y pide bajar los precios.', 'Una minera recorta 10% su presupuesto de insumos porque bajó el precio del metal, y pide bajar los precios. Tiene otros proveedores a mano y su gerencia decide en 30 días.', 'Cliente: minera|Peso: 10% de tus ventas|Presupuesto del cliente: -10%',
+    ['Dosis por tonelada', 'Bajas la dosis por tonelada para que gasten 10% menos y cobras el servicio.', 'Equilibrada: la minera baja su gasto en reactivos y paga un servicio por el ahorro; se queda y tu margen resiste.'],
+    ['Mover el precio', 'Rebajas 5% el reactivo principal y subes 5% los servicios del contrato.', 'Atajo: bajaste el reactivo y subiste los servicios; el trato cierra, pero la minera verá el recargo.'],
+    ['Rebajar el precio', 'Rebajas 5% por 12 meses el precio del contrato y la minera sigue.', 'Cesión: bajaste 5% por 12 meses y la minera siguió comprando; ese descuento sale de tu margen todo el año.'],
+    ['Mantener la oferta', 'Mantienes los términos vigentes y la minera decide en 30 días si sigue.', 'Pasividad: no tocaste los términos y a los 30 días la minera desvió parte de su consumo a otro proveedor.']],
+  ['m05c', 'Visitas sin costo', 'Una concentradora (9% de tus ventas) pide visitas semanales sin pagar más.', 'Una concentradora pide una visita semanal de tu metalurgista a sus circuitos de flotación, sin pagar más. Cada visita cuesta horas de tu equipo y otras plantas podrían pedirla.', 'Cliente: concentradora|Peso: 9% de tus ventas|Visitas pedidas: 4 por mes',
+    ['Monitoreo remoto', 'Instalas monitoreo remoto de la dosis y visitas solo si el dato lo pide.', 'Equilibrada: el monitoreo evita visitas de más: la minera queda atendida y bajan los Direct Chg.'],
+    ['Técnico nuevo', 'Cubres las visitas con un técnico recién formado y recortas 40% el costo.', 'Atajo: un técnico junior cuesta 40% menos, pero un circuito mal dosificado baja la recuperación después.'],
+    ['Visitas semanales', 'Das 4 visitas al mes sin cobrar y pagas el viaje a la faena de tu equipo.', 'Cesión: 4 visitas al mes por tu cuenta: la minera contenta y los Direct Chg suben sin ingreso a cambio.'],
+    ['Derivar la petición', 'Derivas el pedido a Operaciones y prometes responder con fecha en 20 días.', 'Pasividad: tardaste 20 días en contestar y la minera sintió que su planta no era prioridad.']],
+  ['m06c', 'Competidor 8% menor', 'Un competidor ofrece 8% menos y amenaza un contrato de 14% de ventas.', 'Un competidor ofrece 8% menos en reactivos a un grupo minero que pesa 14% de tus ventas. Su gerente de planta valora tu servicio, pero la gerencia presiona por bajar costos.', 'Cliente: grupo minero|Peso: 14% de tus ventas|Oferta rival: 8% menos',
+    ['Probar el resultado', 'Muestras la recuperación medida y sostienes el precio con rebate a 2 años.', 'Equilibrada: mostraste la recuperación y el consumo medidos y defendiste el precio con un rebate a 2 años.'],
+    ['Amarrar a la minera', 'Sellas 3 años con multas de 20% por salir y dejas intacto el precio.', 'Atajo: las multas de salida retienen al grupo hoy, pero queda atado y buscando cómo irse.'],
+    ['Bajar 8% todo', 'Recortas 8% el precio de todo el contrato para no perder al grupo.', 'Cesión: igualaste al rival en todo el contrato: el grupo se queda y tu margen sangra cada mes.'],
+    ['Contar con el lazo', 'Cuidas la relación con la planta y das por seguro su apoyo por 3 años.', 'Pasividad: confiaste en la relación y el grupo mandó parte de las toneladas al competidor.']],
+  ['m07c', 'Auditoría de costos', 'Una minera (11% de tus ventas) pide auditar tus costos y tu margen.', 'Una minera que pesa 11% de tus ventas pide auditar tus costos y tu margen antes de renovar. Su comprador sospecha que el flete a la faena y el servicio técnico vienen inflados.', 'Cliente: minera|Peso: 11% de tus ventas|Pedido: auditar costos y margen',
+    ['Auditar con método', 'Dejas auditar el flete a la faena y el servicio, y fijas cómo se compara.', 'Equilibrada: abriste flete y servicio con reglas claras; la minera ve el valor y no pide más rebaja.'],
+    ['Mostrar a medias', 'Abres solo los costos que te convienen y resumes el resto.', 'Atajo: mostraste solo los costos que te favorecen; si la minera cruza datos, pierdes su confianza.'],
+    ['Libro abierto', 'Muestras cada línea de costo y cedes 2 puntos de margen sin discutir.', 'Cesión: abriste todo y cediste 2 puntos de margen sin discutir el valor que entregas en faena.'],
+    ['Auditoría después', 'Dejas la auditoría para más adelante, con plazo de hasta 6 meses.', 'Pasividad: aplazaste 6 meses la auditoría y la minera supuso que escondías algo: compró menos.']],
+  ['m08c', 'Nuevo comprador', 'El nuevo gerente de compras de una minera (16% de ventas) quiere licitar.', 'El nuevo gerente de compras de un grupo minero (16% de tus ventas) quiere licitar todo el suministro de reactivos. Llegó con la meta de bajar costos y no conoce tu historial en faena.', 'Cliente: grupo minero|Peso: 16% de tus ventas|Proceso: licitación abierta',
+    ['Mostrar resultados', 'Presentas lo medido en recuperación y consumo y ofreces rebate escalonado.', 'Equilibrada: llevaste resultados de recuperación y un rebate escalonado: el gerente ve valor.'],
+    ['Entrar bajo', 'Ofreces un precio base 6% menor y facturas aparte el servicio técnico.', 'Atajo: entraste con 6% menos de precio base y cobraste aparte el servicio; la factura sorprende al gerente.'],
+    ['Licitar al mínimo', 'Ofreces el precio más bajo posible por 3 años de suministro.', 'Cesión: ofertaste el piso por 3 años: ganaste las concentradoras, pero con un margen mínimo.'],
+    ['Invitación formal', 'Cotizas al llegar la invitación, en 10 días, con tu tarifa vigente.', 'Pasividad: esperaste la invitación y cotizaste a los 10 días; para entonces el gerente ya tenía otros precios.']],
+  ['m09c', 'Volumen por precio', 'Una minera (13% de ventas) promete 20% más volumen si le bajas 5%.', 'Un grupo minero que pesa 13% de tus ventas promete 20% más volumen si le bajas 5%. Abre una línea de flotación nueva, pero la promesa no está firmada y su margen ya es bajo.', 'Cliente: grupo minero|Volumen prometido: +20%|Rebaja pedida: 5%',
+    ['Descuento por tramo', 'Das el 5% solo sobre la línea nueva y mides el volumen real a los 3 meses.', 'Equilibrada: el 5% solo sobre la línea nueva, con revisión a los 3 meses: más ventas y margen cuidado.'],
+    ['Subir al resto', 'Subes 3% la lista a las mineras chicas, que no negocian, y financias la rebaja.', 'Atajo: subiste 3% a las mineras chicas, que no negocian: hoy sube el OI, mañana lo notan.'],
+    ['Descuento total', 'Otorgas 5% en todas las toneladas del año y confías en que cumplirán.', 'Cesión: diste 5% todo el año y creíste la promesa: más toneladas, con un margen mucho menor.'],
+    ['Pasar al comité', 'Llevas la propuesta al comité de compras, que se reúne en 4 semanas.', 'Pasividad: la propuesta pasó 4 semanas en el comité y el grupo repartió el volumen entre otros.']],
+  ['m10c', 'Equipos en comodato', 'Una concentradora pide 3 sistemas de dosificación en comodato.', 'Una concentradora pide 3 sistemas de dosificación en comodato para su nueva línea de flotación. Los equipos son tuyos y su mantención corre por tu cuenta, aunque compre poco.', 'Equipos pedidos: 3 sistemas|Compra mínima: sin acordar|Mantención: por tu cuenta',
+    ['Comodato con mínimo', 'Cedes los equipos con compra mínima anual y la minera paga la mantención.', 'Equilibrada: cediste los sistemas con compra anual mínima y mantención pagada: retorno claro.'],
+    ['Subir el precio', 'Recargas 3% al precio de los reactivos y costeas los equipos con eso.', 'Atajo: recargaste 3% a los reactivos para pagar los equipos; la minera verá el alza en su factura.'],
+    ['Entregar sin trabas', 'Montas los 3 sistemas en la línea nueva, sin condiciones, y mantienes todo tú.', 'Cesión: entregaste 3 sistemas y asumiste su mantención aunque compre poco: Direct Chg sin ventas.'],
+    ['Que los compre', 'Respondes que no prestas equipos: debe comprar los 3 por su cuenta.', 'Pasividad: le dijiste que comprara sus equipos; la minera se fue con quien sí los presta.']],
+  ['m11c', 'Cargos en disputa', 'Una minera objeta 3% de cargos en 4 facturas, pero sigue comprando.', 'Una minera objeta 3% de cargos de flete y servicio en 4 facturas, pero sigue comprando. Cada cargo discutido es plata en suspenso y la discusión puede desgastar la relación.', 'Cargos en disputa: 3%|Facturas objetadas: 4|Cliente: minera',
+    ['Revisar cada cargo', 'Revisas las 4 facturas con la minera y corriges solo lo que esté mal.', 'Equilibrada: revisaste las 4 facturas con la minera y corregiste solo lo que estaba mal: se paga lo justo.'],
+    ['Cargos al precio', 'Metes esos cargos en el precio por tonelada de los despachos siguientes.', 'Atajo: repartiste esos cargos en el precio de las próximas facturas; la minera lo notará después.'],
+    ['Nota de crédito', 'Acreditas el 3% de las 4 facturas con notas de crédito y cierras el tema.', 'Cesión: acreditaste el 3% de las 4 facturas: cierras el tema, pero el margen cede por completo.'],
+    ['Dejar abierta', 'Mantienes abierta la disputa y solo miras los cargos si la minera lo pide.', 'Pasividad: dejaste la disputa abierta; la minera retuvo pagos y terminó exigiendo un crédito mayor.']],
+  ['m12c', 'Contrato a precio fijo', 'Un grupo minero ofrece renovar 3 años a precio fijo, sin reajuste.', 'Un grupo minero grande y fiel ofrece renovar 3 años, pero a precio fijo y sin reajuste por inflación. Tus costos de materias primas pueden subir; el precio no se mueve.', 'Contrato: 36 meses|Precio: fijo, sin reajuste|Peso del cliente: 15% de tus ventas',
+    ['Fijo con cláusula', 'Firmas 36 meses con una cláusula atada al costo de las materias primas.', 'Equilibrada: aceptaste 36 meses con un tope atado al costo de las materias primas: ventas y margen cuidados.'],
+    ['Alza y firma', 'Entras 3% por encima de la competencia y cierras el contrato de 36 meses.', 'Atajo: firmaste con un precio inicial 3% sobre el mercado; el grupo puede irse en cuanto pueda.'],
+    ['Firmar como piden', 'Aceptas el contrato de 3 años exactamente como lo escribió el grupo.', 'Cesión: firmaste el texto del grupo sin tocar nada: toneladas aseguradas y costos libres de subir.'],
+    ['Dejar vencer', 'Envías el contrato a legal y la oferta vence en 30 días.', 'Pasividad: legal tardó y la oferta caducó; el grupo firmó con otro proveedor por 3 años.']],
+]);
+
+});
 __d("content/en", function (module, exports, __r) {
 'use strict';
 
@@ -3257,19 +3415,20 @@ module.exports = Object.freeze({
   'profile.halfShort.desc': 'Balances, but falls for the shortcut.',
 
   // Introduction
-  'year.intro1': 'You run a unit that sells hygiene, chemicals and industrial water-reuse programs (boilers, cooling towers) to hotels, hospitals, food and industry. It lasts 12 months, 4 problems each.',
+  'year.intro1': 'You run a unit that sells hygiene, chemicals and industrial water-reuse programs (boilers, cooling towers) to hotels, hospitals, food, industry and mining. It lasts 12 months, 4 problems each.',
   'year.intro2': 'Your goal: the OI margin (operating income / net sales, plan 15%) and sales that grow. Watch the Client, Plant and Strategy meters.',
-  'year.intro1.half': 'You run a unit that sells hygiene, chemicals and industrial water-reuse programs (boilers, cooling towers) to hotels, hospitals, food and industry. It lasts 6 months and every decision weighs double.',
+  'year.intro1.half': 'You run a unit that sells hygiene, chemicals and industrial water-reuse programs (boilers, cooling towers) to hotels, hospitals, food, industry and mining. It lasts 6 months and every decision weighs double.',
   'year.intro2.half': 'Your goal: the OI margin (operating income / net sales, plan 15%) and sales that grow. Watch the Client, Plant and Strategy meters.',
   'year.intro.hint': 'Type 4 digits to choose the code.',
   'year.intro.partial': 'Digits missing. Erase with Backspace.',
   'year.intro3': 'Balance wins. A meter at 0 is a blow; OI at 0 brings a restructuring plan. N: rules.',
 
-  // The four kinds of client
+  // The five kinds of client
   'year.seg.hotel': 'HOTELS',
   'year.seg.hospital': 'HOSPITALS',
   'year.seg.food': 'FOOD',
   'year.seg.industry': 'INDUSTRY',
+  'year.seg.mining': 'MINING',
 
   // Screen furniture
   'year.stage': 'Month {m} - {p}/4',
@@ -3451,19 +3610,20 @@ module.exports = Object.freeze({
   'profile.halfShort.desc': 'Equilibra, pero cae en el atajo.',
 
   // Introduction
-  'year.intro1': 'Diriges una unidad que vende higiene, insumos químicos y programas de reúso de agua industrial (calderas, torres de enfriamiento) a hoteles, hospitales, alimentos e industria. Dura 12 meses y cada mes trae 4 problemas.',
+  'year.intro1': 'Diriges una unidad que vende higiene, insumos químicos y programas de reúso de agua industrial (calderas, torres de enfriamiento) a hoteles, hospitales, alimentos, industria y minería. Dura 12 meses y cada mes trae 4 problemas.',
   'year.intro2': 'Tu meta: margen OI (utilidad operacional, plan 15%) y ventas que crezcan. Cuida los medidores Cliente, Planta y Estrategia.',
-  'year.intro1.half': 'Diriges una unidad que vende higiene, insumos químicos y programas de reúso de agua industrial (calderas, torres de enfriamiento) a hoteles, hospitales, alimentos e industria. Dura 6 meses y cada decisión pesa el doble.',
+  'year.intro1.half': 'Diriges una unidad que vende higiene, insumos químicos y programas de reúso de agua industrial (calderas, torres de enfriamiento) a hoteles, hospitales, alimentos, industria y minería. Dura 6 meses y cada decisión pesa el doble.',
   'year.intro2.half': 'Tu meta: margen OI (utilidad operacional, plan 15%) y ventas que crezcan. Cuida los medidores Cliente, Planta y Estrategia.',
   'year.intro.hint': 'Teclea 4 dígitos para elegir el código.',
   'year.intro.partial': 'Faltan dígitos. Borra con Retroceso.',
   'year.intro3': 'Gana quien equilibra. Un medidor en 0 es un golpe; el OI en 0, un plan de reestructuración. N: reglas.',
 
-  // The four kinds of client
+  // The five kinds of client
   'year.seg.hotel': 'HOTELES',
   'year.seg.hospital': 'HOSPITALES',
   'year.seg.food': 'ALIMENTOS',
   'year.seg.industry': 'INDUSTRIA',
+  'year.seg.mining': 'MINERÍA',
 
   // Screen furniture
   'year.stage': 'Mes {m} - {p}/4',
@@ -14279,15 +14439,18 @@ __d("year/segments", function (module, exports, __r) {
 const { deepFreeze } = __r("freeze");
 const { SERVE_VARIABLE_SHARE } = __r("model");
 
-// The four kinds of client the unit sells to: hotels, hospitals, the food industry and industry in general. What sets
-// them apart in the numbers is how much service a sale drags along (visits, audits, documentation): `serve` is the
-// share of the freight and direct charges that follows the volume. A hotel chain buys a lot and asks for little; a
-// hospital buys less and asks for audits and records on every visit.
+// The five kinds of client the unit sells to: hotels, hospitals, the food industry, industry in general and mining. What sets
+// them apart in the numbers is how much service a sale drags along (visits, audits, documentation, freight to a remote site):
+// `serve` is the share of the freight and direct charges that follows the volume. A hotel chain buys a lot and asks for little;
+// a hospital buys less and asks for audits and records on every visit; a mine buys by the tonne treated and asks for a
+// technician on site and for freight up a mountain road. Mining is a unit the problems are played in, not one they were
+// written for: no problem has it as its own segment.
 const SEGMENTS = deepFreeze({
   hotel: { serve: 0.5 },
   hospital: { serve: 0.9 },
   food: { serve: 0.7 },
   industry: { serve: 0.6 },
+  mining: { serve: 0.8 },
 });
 
 const SEGMENT_IDS = Object.freeze(Object.keys(SEGMENTS));
