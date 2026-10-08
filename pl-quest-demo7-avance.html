@@ -2911,7 +2911,6 @@ __d("main", function (module, exports, __r) {
 
 const { createApp, reduce, acceptsText } = __r("ui/app");
 const { keyToAction } = __r("ui/keys");
-const { toScreen } = __r("ui/screen-space");
 const { createStorage } = __r("storage");
 const { GAME_CODES } = __r("rng");
 const { createAudio } = __r("audio");
@@ -3045,7 +3044,7 @@ function bindInput(canvas, runtime) {
     dispatch({ type: 'paste', text });
   });
   // A pointer position in the coordinates of the screen that is showing (a legacy screen sits in the middle of the surface).
-  const logical = (event) => toScreen(runtime.current(), surface.toLogical(event.clientX, event.clientY, canvas.getBoundingClientRect()));
+  const logical = (event) => surface.toLogical(event.clientX, event.clientY, canvas.getBoundingClientRect());
   canvas.addEventListener('pointerdown', (event) => {
     event.preventDefault();
     dispatch({ type: 'tap', ...logical(event) });
@@ -3228,118 +3227,13 @@ module.exports = {
 };
 
 });
-__d("render/backdrops", function (module, exports, __r) {
-'use strict';
-
-const { rect, disc, line, bands, mix } = __r("render/draw");
-const { text } = __r("render/ui");
-const { LOOKS } = __r("render/looks");
-
-// The room behind each floor, repainted with the factory state. The ladder covers the left
-// half of the screen, so the props live on the right, where the boss stands.
-
-function room(ctx, look, tier, t) {
-  bands(ctx, 0, 0, 256, 58, look.wall, mix(look.wall, look.shade, 0.35), 4);
-  rect(ctx, 0, 0, 256, 6, look.shade);
-  bands(ctx, 0, 58, 256, 28, look.ground, mix(look.ground, '#000000', 0.35), 4);
-  rect(ctx, 0, 58, 256, 1, mix(look.wall, '#000000', 0.4));
-  for (let x = 0; x < 256; x += 32) rect(ctx, x, 6, 1, 52, mix(look.wall, look.shade, 0.5));
-  [30, 110, 190].forEach((x, i) => {
-    const lit = !(tier === 'edge' && Math.floor(t * 5 + i * 2) % 4 === 0);
-    rect(ctx, x, 6, 18, 3, lit ? '#fff6c8' : '#5a5050');
-    if (lit) {
-      ctx.globalAlpha = 0.14;
-      rect(ctx, x - 6, 9, 30, 18, '#fff6c8');
-      ctx.globalAlpha = 1;
-    }
-  });
-  if (tier === 'hightech' || tier === 'modern') {
-    rect(ctx, 0, 40, 256, 2, look.accent);
-  }
-  if (tier === 'worn' || tier === 'edge') {
-    ctx.globalAlpha = 0.35;
-    [[140, 12, 18, 14], [212, 22, 22, 10], [170, 40, 14, 12]].forEach(([x, y, w, h]) => rect(ctx, x, y, w, h, '#201810'));
-    ctx.globalAlpha = 1;
-  }
-  if (tier === 'edge') {
-    line(ctx, 150, 6, 160, 30, '#14101a');
-    line(ctx, 160, 30, 154, 48, '#14101a');
-    line(ctx, 226, 6, 218, 26, '#14101a');
-  }
-}
-
-const screenColor = (tier) => ({ hightech: '#4cf0a0', modern: '#68d8f8', normal: '#98b8d8', worn: '#6a7078', edge: '#c04c3c' }[tier]);
-
-const PROPS = {
-  1(ctx, look, tier) {
-    rect(ctx, 138, 44, 112, 14, look.shade);
-    rect(ctx, 138, 44, 112, 2, look.roofHi);
-    rect(ctx, 146, 38, 16, 6, '#f4f4f8');
-    rect(ctx, 148, 40, 12, 1, '#a0a8b8');
-    rect(ctx, 218, 22, 22, 28, '#f4f4f8');
-    rect(ctx, 218, 22, 22, 5, '#d85858');
-    for (let k = 0; k < 4; k += 1) rect(ctx, 221, 30 + k * 5, 16, 1, '#a0a8b8');
-    if (tier === 'hightech') rect(ctx, 196, 30, 12, 10, screenColor(tier));
-  },
-  2(ctx, look, tier) {
-    rect(ctx, 136, 50, 114, 6, '#8a6a3a');
-    rect(ctx, 136, 50, 114, 1, '#b08a4a');
-    rect(ctx, 142, 56, 4, 14, '#6a4a28');
-    rect(ctx, 240, 56, 4, 14, '#6a4a28');
-    rect(ctx, 204, 12, 44, 26, '#f4f4f8');
-    rect(ctx, 204, 12, 44, 2, '#a0a8b8');
-    text(ctx, '%', 220, 20, '#d85858', { scale: 2 });
-    rect(ctx, 148, 40, 14, 10, look.shade);
-    rect(ctx, 150, 36, 10, 4, tier === 'hightech' ? look.accent : '#c8a070');
-  },
-  3(ctx, look, tier, t) {
-    [18, 34].forEach((y) => rect(ctx, 138, y, 112, 2, look.shade));
-    [[144, 8], [168, 8], [196, 24], [222, 8], [232, 24]].forEach(([x, y]) => {
-      rect(ctx, x, y + 2, 12, 14, '#8a5a30');
-      rect(ctx, x, y + 6, 12, 2, '#58606c');
-    });
-    rect(ctx, 130, 56, 126, 5, '#303040');
-    for (let k = 0; k < 12; k += 1) rect(ctx, 130 + ((k * 11 + t * 18) % 126), 57, 4, 3, '#808090');
-  },
-  4(ctx, look, tier, t) {
-    rect(ctx, 140, 14, 86, 42, '#242434');
-    for (let k = 0; k < 7; k += 1) rect(ctx, 140, 16 + k * 6, 86, 1, '#3a3a4c');
-    rect(ctx, 232, 38, 16, 18, '#a87848');
-    rect(ctx, 232, 46, 16, 1, '#7a5028');
-    rect(ctx, 236, 28, 12, 10, '#a87848');
-    rect(ctx, 130, 56, 126, 4, look.accent);
-    const x = 130 + ((t * 24) % 120);
-    rect(ctx, x, 57, 6, 2, '#ffffff');
-  },
-  5(ctx, look, tier, t) {
-    rect(ctx, 136, 50, 52, 6, '#8a6a3a');
-    rect(ctx, 150, 38, 18, 12, '#202838');
-    rect(ctx, 152, 40, 14, 8, screenColor(tier));
-    rect(ctx, 156, 50, 6, 2, '#58606c');
-    rect(ctx, 214, 24, 18, 32, '#808898');
-    for (let k = 0; k < 3; k += 1) rect(ctx, 216, 28 + k * 9, 14, 6, '#a0a8b8');
-    disc(ctx, 244, 48, 6, tier === 'worn' || tier === 'edge' ? '#6a7a48' : '#3fa868');
-    rect(ctx, 243, 52, 3, 6, '#6a4a28');
-    if (Math.floor(t * 2) % 2) rect(ctx, 162, 42, 2, 1, '#ffffff');
-  },
-};
-
-function drawBackdrop(ctx, floorId, tier, t = 0) {
-  const look = LOOKS[tier === 'collapse' ? 'edge' : tier];
-  room(ctx, look, tier, t);
-  PROPS[floorId](ctx, look, tier, t);
-}
-
-module.exports = { drawBackdrop };
-
-});
 __d("render/bosses", function (module, exports, __r) {
 'use strict';
 
 const { rect, disc, ellipse, line } = __r("render/draw");
 const { text } = __r("render/ui");
 
-// The five P&L bosses and the hero, all drawn from rectangles and discs so the game needs
+// The five P&L bosses, all drawn from rectangles and discs so the game needs
 // no image files. Each draws around (cx, cy) and reacts to the mood: 'hit' blinks, 'happy'
 // grins (the boss just took a bite out of your margin).
 
@@ -3447,22 +3341,8 @@ function drawBoss(ctx, id, cx, cy, t = 0, mood = 'idle') {
 }
 
 // A small hard-hatted manager; (x, y) is the middle of the feet.
-function drawHero(ctx, x, y, t = 0) {
-  const bob = Math.round(Math.sin(t * 3));
-  rect(ctx, x - 4, y - 8, 3, 8, '#2a3a6a');
-  rect(ctx, x + 1, y - 8, 3, 8, '#2a3a6a');
-  rect(ctx, x - 5, y - 19 + bob, 10, 11, '#3a62c0');
-  rect(ctx, x - 1, y - 18 + bob, 2, 6, '#f8f8f8');
-  rect(ctx, x - 6, y - 18 + bob, 2, 8, '#f0c8a0');
-  rect(ctx, x + 4, y - 18 + bob, 2, 8, '#f0c8a0');
-  rect(ctx, x - 4, y - 27 + bob, 8, 8, '#f0c8a0');
-  rect(ctx, x - 5, y - 29 + bob, 10, 4, '#f8d048');
-  rect(ctx, x - 6, y - 26 + bob, 12, 1, '#d8a820');
-  rect(ctx, x - 2, y - 24 + bob, 1, 1, INK);
-  rect(ctx, x + 1, y - 24 + bob, 1, 1, INK);
-}
 
-module.exports = { drawBoss, drawHero };
+module.exports = { drawBoss };
 
 });
 __d("render/draw", function (module, exports, __r) {
@@ -3558,14 +3438,6 @@ function tint(hex, alpha) {
   return tintCache.get(key);
 }
 
-// Vertical gradient in hard bands, like the colour ramps of a SNES backdrop.
-function bands(ctx, x, y, w, h, top, bottom, step = 2) {
-  for (let i = 0; i < h; i += step) {
-    const t = h <= step ? 0 : i / (h - step);
-    rect(ctx, x, y + i, w, Math.min(step, h - i), mix(top, bottom, t));
-  }
-}
-
 // Draws a sprite from rows of characters; '.' is transparent.
 function sprite(ctx, rows, palette, x, y, scale = 1) {
   rows.forEach((row, cy) => {
@@ -3575,236 +3447,7 @@ function sprite(ctx, rows, palette, x, y, scale = 1) {
   });
 }
 
-module.exports = { rect, disc, ellipse, line, mix, tint, bands, sprite };
-
-});
-__d("render/factory", function (module, exports, __r) {
-'use strict';
-
-const { rect, disc, line, bands, mix } = __r("render/draw");
-const { text } = __r("render/ui");
-const { LOOKS } = __r("render/looks");
-
-// The factory is drawn in a 120x66 box. Each state repaints the same building: cleaner and
-// brighter as OI rises, then rusty, cracked and finally in ruins as it falls.
-
-function drawSky(ctx, x, y, w, h, tier, t = 0) {
-  const look = LOOKS[tier];
-  bands(ctx, x, y, w, h, look.sky[0], look.sky[1], 4);
-  const gloomy = ['worn', 'edge', 'collapse'].includes(tier);
-  [[20, 8, 1], [110, 16, 0.7], [180, 6, 1.2]].forEach(([cx, cy, s]) => {
-    const px = ((cx + t * 3 * s) % (w + 60)) - 30 + x;
-    ctx.globalAlpha = gloomy ? 0.55 : 0.85;
-    rect(ctx, px, y + cy, 22 * s, 4, gloomy ? '#5a5260' : '#ffffff');
-    rect(ctx, px + 4, y + cy - 3, 14 * s, 4, gloomy ? '#5a5260' : '#ffffff');
-    ctx.globalAlpha = 1;
-  });
-}
-
-function body(ctx, look) {
-  rect(ctx, -6, 60, 132, 8, look.ground);
-  rect(ctx, -6, 61, 132, 1, mix(look.ground, '#ffffff', 0.18));
-  rect(ctx, 6, 26, 108, 34, look.wall);
-  rect(ctx, 6, 54, 108, 6, look.shade);
-  rect(ctx, 6, 26, 108, 2, look.shade);
-  for (let x = 24; x < 110; x += 18) rect(ctx, x, 28, 1, 26, mix(look.wall, look.shade, 0.5));
-}
-
-function roofs(ctx, look) {
-  [8, 44, 80].forEach((x0) => {
-    for (let k = 0; k < 28; k += 2) {
-      const h = 2 + Math.floor(k / 3);
-      rect(ctx, x0 + k, 26 - h, 2, h, look.roof);
-      rect(ctx, x0 + k, 26 - h, 2, 1, look.roofHi);
-    }
-    rect(ctx, x0 + 28, 15, 4, 11, look.glass);
-  });
-}
-
-function smoke(ctx, look, tier, t) {
-  const puffs = { hightech: 2, modern: 2, normal: 3, worn: 4, edge: 6 }[tier] || 3;
-  [[20, 3], [100, 8]].forEach(([cx, top], c) => {
-    for (let j = 0; j < puffs; j += 1) {
-      const phase = (t * 0.5 + j / puffs + c * 0.37) % 1;
-      const radius = tier === 'hightech' ? 1 + phase * 2 : 2 + phase * 4;
-      ctx.globalAlpha = Math.max(0, 0.95 - phase);
-      disc(ctx, cx + Math.sin(t * 1.3 + j * 2 + c) * 2 + phase * 7, top - phase * 24, Math.round(radius), look.smoke);
-    }
-    ctx.globalAlpha = 1;
-  });
-}
-
-function chimneys(ctx, look, tier, t) {
-  rect(ctx, 16, 4, 9, 22, look.shade);
-  rect(ctx, 15, 3, 11, 3, look.roofHi);
-  rect(ctx, 96, 9, 8, 17, look.shade);
-  rect(ctx, 95, 8, 10, 3, look.roofHi);
-  if (tier === 'hightech' || tier === 'modern') {
-    rect(ctx, 16, 12, 9, 2, look.accent);
-    rect(ctx, 96, 15, 8, 2, look.accent);
-  }
-  smoke(ctx, look, tier, t);
-}
-
-const WINDOW_PATTERN = { hightech: 'LLLLLL', modern: 'LLLLLL', normal: 'LDLDLD', worn: 'DxDLxD', edge: 'DxxDxD' };
-
-function windows(ctx, look, tier, t) {
-  [...(WINDOW_PATTERN[tier] || 'DDDDDD')].forEach((state, i) => {
-    const x = 12 + i * 17;
-    const flicker = tier === 'edge' && Math.floor(t * 6 + i) % 5 === 0;
-    rect(ctx, x, 34, 11, 9, state === 'L' && !flicker ? look.glassHi : look.glass);
-    rect(ctx, x, 34, 11, 1, look.shade);
-    rect(ctx, x, 42, 11, 1, look.shade);
-    rect(ctx, x + 5, 34, 1, 9, look.shade);
-    if (state === 'x') {
-      line(ctx, x + 1, 35, x + 9, 41, look.shade);
-      line(ctx, x + 9, 35, x + 3, 41, look.shade);
-    }
-  });
-}
-
-function door(ctx, look, tier) {
-  const [x, y, w, h] = [50, 44, 20, 16];
-  if (tier === 'hightech') {
-    rect(ctx, x, y, w, h, look.glass);
-    rect(ctx, x + 9, y, 2, h, look.shade);
-    rect(ctx, x, y, w, 1, look.accent);
-    return;
-  }
-  rect(ctx, x, y, w, h, look.shade);
-  for (let k = 3; k < h; k += 3) rect(ctx, x, y + k, w, 1, mix(look.shade, look.wall, 0.4));
-  if (tier === 'edge') {
-    for (let k = 0; k < 7; k += 1) rect(ctx, x + k * 3, y + 3, 2, 3, k % 2 ? '#f8d048' : '#14141c');
-  }
-}
-
-function sign(ctx, look, tier, t) {
-  const crooked = tier === 'worn' || tier === 'edge';
-  const y = 3 + (crooked ? 1 : 0);
-  const plate = { hightech: '#10202c', modern: '#14243c', normal: '#6a4a30', worn: '#4a3828', edge: '#2a2220' }[tier];
-  rect(ctx, 44, y, 32, 12, tier === 'hightech' || tier === 'modern' ? look.accent : look.shade);
-  rect(ctx, 45, y + 1, 30, 10, plate);
-  const label = tier === 'edge' && Math.floor(t * 4) % 3 === 0 ? 'P  ' : 'P&L';
-  text(ctx, label, 51, y + 3, tier === 'normal' ? '#f8e098' : '#ffffff');
-}
-
-function hightechExtras(ctx, look, t) {
-  rect(ctx, 6, 25, 108, 1, look.accent);
-  [[0, 56], [120, 56]].forEach(([x, y]) => {
-    rect(ctx, x - 1, y + 2, 2, 4, '#6a4a30');
-    disc(ctx, x, y, 4, '#3fbf78');
-  });
-  const dx = 60 + Math.sin(t * 1.2) * 30;
-  const dy = 0 + Math.sin(t * 2) * 2;
-  rect(ctx, dx - 3, dy, 6, 2, '#f4f9ff');
-  rect(ctx, dx - 6, dy - 1, 4, 1, Math.floor(t * 20) % 2 ? '#9fb0c8' : '#ffffff');
-  rect(ctx, dx + 2, dy - 1, 4, 1, Math.floor(t * 20) % 2 ? '#ffffff' : '#9fb0c8');
-  if (Math.floor(t * 3) % 2) rect(ctx, dx, dy + 2, 1, 1, look.accent);
-  rect(ctx, 104, 52, 8, 8, look.shade);
-  line(ctx, 108, 52, 114, 42, look.roofHi);
-  line(ctx, 114, 42, 110, 34, look.roofHi);
-  disc(ctx, 114, 42, 1, look.accent);
-}
-
-function modernExtras(ctx, look, t) {
-  rect(ctx, 6, 25, 108, 1, look.accent);
-  [[0, 57], [120, 57]].forEach(([x, y]) => {
-    rect(ctx, x - 1, y + 2, 2, 3, '#6a4a30');
-    disc(ctx, x, y, 3, '#3fa868');
-  });
-  rect(ctx, 112, 10, 1, 18, '#c8d0e0');
-  rect(ctx, 113, 10, 6 + Math.round(Math.sin(t * 3)), 4, look.accent);
-}
-
-function normalExtras(ctx) {
-  rect(ctx, 28, 52, 9, 8, '#a87848');
-  rect(ctx, 28, 55, 9, 1, '#7a5028');
-  rect(ctx, 76, 50, 8, 10, '#8a6a3a');
-  rect(ctx, 76, 53, 8, 1, '#5a6070');
-}
-
-function wornExtras(ctx, look) {
-  [[12, 46, 6, 4], [88, 30, 8, 3], [100, 50, 5, 5], [32, 40, 4, 2]].forEach(([x, y, w, h]) => {
-    rect(ctx, x, y, w, h, look.accent);
-  });
-  [[6, 58], [40, 59], [84, 58], [108, 59]].forEach(([x, y]) => rect(ctx, x, y, 4, 2, '#6a6a72'));
-  [[2, 58], [112, 58], [64, 59]].forEach(([x, y]) => {
-    rect(ctx, x, y, 1, 3, '#4a8a48');
-    rect(ctx, x + 2, y + 1, 1, 2, '#4a8a48');
-  });
-}
-
-function edgeExtras(ctx, look, t) {
-  line(ctx, 30, 26, 38, 54, '#14101a');
-  line(ctx, 38, 54, 34, 58, '#14101a');
-  line(ctx, 90, 26, 82, 40, '#14101a');
-  line(ctx, 82, 40, 88, 52, '#14101a');
-  rect(ctx, 56, 18, 12, 8, look.sky[0]);
-  [[22, 30], [74, 34], [96, 46], [48, 28]].forEach(([x, y], i) => {
-    if (Math.floor(t * 8 + i * 3) % 4 === 0) rect(ctx, x, y, 2, 2, '#f8d048');
-  });
-  if (Math.floor(t * 2) % 2) {
-    disc(ctx, 60, 20, 2, look.accent);
-    rect(ctx, 59, 18, 3, 1, '#ffb0a0');
-  }
-}
-
-function ruins(ctx, look, t) {
-  rect(ctx, -6, 60, 132, 8, look.ground);
-  rect(ctx, 6, 38, 26, 22, look.wall);
-  rect(ctx, 6, 38, 26, 2, look.shade);
-  rect(ctx, 11, 44, 7, 7, look.glass);
-  rect(ctx, 96, 46, 18, 14, look.wall);
-  rect(ctx, 96, 46, 18, 2, look.shade);
-  rect(ctx, 100, 51, 6, 6, look.glass);
-  line(ctx, 18, 38, 24, 56, look.shade);
-  line(ctx, 104, 46, 98, 58, look.shade);
-  ctx.globalAlpha = 0.28 + 0.1 * Math.sin(t * 6);
-  disc(ctx, 62, 52, 15, '#f88830');
-  ctx.globalAlpha = 1;
-  disc(ctx, 40, 58, 9, look.wall);
-  disc(ctx, 64, 59, 13, look.shade);
-  disc(ctx, 84, 58, 10, look.wall);
-  rect(ctx, 38, 50, 32, 7, look.roofHi);
-  rect(ctx, 38, 50, 32, 1, look.wall);
-  line(ctx, 46, 44, 56, 58, look.roof);
-  line(ctx, 80, 42, 68, 58, look.roof);
-  [30, 62, 94].forEach((cx, c) => {
-    for (let j = 0; j < 5; j += 1) {
-      const phase = (t * 0.4 + j / 5 + c * 0.3) % 1;
-      ctx.globalAlpha = Math.max(0, 0.85 - phase);
-      disc(ctx, cx + Math.sin(t + j) * 3, 50 - phase * 36, 3 + Math.round(phase * 5), look.smoke);
-    }
-    ctx.globalAlpha = 1;
-  });
-  for (let k = 0; k < 8; k += 1) {
-    rect(ctx, 14 + k * 13 + Math.sin(t * 3 + k) * 3, 54 - ((t * 20 + k * 9) % 30), 1, 1, '#f8c040');
-  }
-}
-
-const EXTRAS = { hightech: hightechExtras, modern: modernExtras, normal: normalExtras, worn: wornExtras, edge: edgeExtras };
-
-// Draws the factory with its top-left corner at (ox, oy). Scale must be a whole number.
-function drawFactory(ctx, tier, ox, oy, t = 0, scale = 1) {
-  const look = LOOKS[tier];
-  ctx.save();
-  ctx.translate(Math.round(ox), Math.round(oy));
-  ctx.scale(scale, scale);
-  if (tier === 'collapse') {
-    ruins(ctx, look, t);
-  } else {
-    body(ctx, look);
-    roofs(ctx, look);
-    chimneys(ctx, look, tier, t);
-    windows(ctx, look, tier, t);
-    door(ctx, look, tier);
-    sign(ctx, look, tier, t);
-    EXTRAS[tier](ctx, look, t);
-  }
-  ctx.restore();
-}
-
-module.exports = { drawSky, drawFactory };
+module.exports = { rect, disc, ellipse, line, mix, tint, sprite };
 
 });
 __d("render/font", function (module, exports, __r) {
@@ -3835,13 +3478,13 @@ __d("render/fx", function (module, exports, __r) {
 // Draws the flash and the particles that ui/fx.js plans. They are measured from the impact of the
 // result, a moment after the screen opens, and never start before it.
 
-const layout = __r("ui/layout");
+const layout = __r("ui/layout-hd");
 const fx = __r("ui/fx");
 const P = __r("render/palette");
 const { rect } = __r("render/draw");
 
 // A faint tint over the picture: its colour and strength come from the plan, and it is gone in 120 ms.
-function drawFlash(ctx, plan, phaseT, box = layout.ART) {
+function drawFlash(ctx, plan, phaseT, box = layout.FOCUS) {
   const alpha = fx.flashAlpha(phaseT - fx.IMPACT_AT, plan.flash);
   if (alpha <= 0) return;
   ctx.globalAlpha = alpha;
@@ -3875,6 +3518,36 @@ function drawAmbient(ctx, plan, t, box) {
 }
 
 module.exports = { drawFlash, drawBurst, drawAmbient };
+
+});
+__d("render/hd/ambient", function (module, exports, __r) {
+'use strict';
+
+// The quiet backdrop of the screens that have no scene of their own (the month close, the ranking): a night with a pool of cool light, drifting
+// haze and dust.
+
+const layout = __r("ui/layout-hd");
+const P = __r("render/palette");
+const light = __r("render/hd/light");
+
+const MOTES = 26;
+const SEED = 11;
+
+function draw(ctx, app) {
+  const { W, H } = layout;
+  const t = app.calm ? 0 : app.t;
+  const sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, P.hd.night[0]);
+  sky.addColorStop(1, P.hd.night[1]);
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, H);
+  light.glow(ctx, W / 2, H * 0.46, 250, P.hd.day[0], 0.2, { squash: 0.8 });
+  light.haze(ctx, { x: 0, y: H * 0.72, w: W, h: 50 }, P.hd.haze, 0.07, t);
+  light.drawMotes(ctx, light.motes(SEED, MOTES, t, { x: 0, y: 0, w: W, h: H }), P.hd.day[2]);
+  light.vignette(ctx, W, H, 0.55);
+}
+
+module.exports = { draw };
 
 });
 __d("render/hd/factory-sprite", function (module, exports, __r) {
@@ -4055,7 +3728,7 @@ __d("render/hd/factory", function (module, exports, __r) {
 // building in the state it is in, its lit windows and smoke, and what stands around it: trees and a drone for the best, a flag for the next, a
 // lamp post for the middle one, weeds for the worn one, tape and a cracked glow for the one on the edge, flames and embers for the ruins.
 // Like the scenes of the problems it is a function of time and nothing else. `at` says where the building stands: 'side' (the right of the
-// surface, where the menus leave room) or 'center' (the title).
+// surface, where the menus leave room), 'center' (the title), 'left' (the verdict) or 'low' (GAME OVER).
 
 const P = __r("render/palette");
 const layout = __r("ui/layout-hd");
@@ -4074,7 +3747,13 @@ const { unit } = light;
 
 const TIERS = Object.freeze(Object.keys(P.factory));
 const { WINDOWS, HALL_WINDOWS, SIZE } = sprite;
-const PLACES = Object.freeze({ side: { x: 322, ground: 186 }, center: { x: 178, ground: 208 } });
+// `left` is the one of the first page of the verdict, over its bridge; `low` the one of GAME OVER, which leaves the top of the surface to its text.
+const PLACES = Object.freeze({
+  side: { x: 322, ground: 186 },
+  center: { x: 178, ground: 208 },
+  left: { x: 96, ground: 136 },
+  low: { x: 178, ground: 246 },
+});
 const SMOKE = Object.freeze({
   hightech: { count: 3, rise: 30, size: 4, spread: 6, drift: 6 },
   modern: { count: 4, rise: 34, size: 5, spread: 7, drift: 7 },
@@ -4914,6 +4593,28 @@ function veil(ctx, alpha = 0.6) {
 }
 
 module.exports = { glass, rule, vrule, bar, sparkline, chipBox, row, field, veil, roundPath };
+
+});
+__d("render/hd/pill", function (module, exports, __r) {
+'use strict';
+
+// A glass pill in the middle of the top of the surface with a title in it: the verdict of the year, the result of the tutorial. The text is
+// drawn at `scale` and the pill is wider than it by `padX` at each side.
+
+const L = __r("ui/layout-hd");
+const P = __r("render/palette");
+const ui = __r("render/ui");
+const panel = __r("render/hd/panel");
+
+const TEXT_TOP = 5;
+
+function draw(ctx, text, color, { y, h, scale, padX }) {
+  const width = ui.textWidth(text, scale) + 2 * padX;
+  panel.glass(ctx, { x: Math.round((L.W - width) / 2), y, w: width, h });
+  ui.textCenter(ctx, text, L.W / 2, y + TEXT_TOP, color, { scale, shadow: P.ink });
+}
+
+module.exports = { draw };
 
 });
 __d("render/hd/pixels", function (module, exports, __r) {
@@ -7955,48 +7656,14 @@ function useFont(data) {
 module.exports = { MARGIN, ATLAS_TOP, BASELINE, ATLAS_H, SLANT, BOLD, indexOf, emPixels, atlasFor, drawGlyph, reset, useFont };
 
 });
-__d("render/hd/wings", function (module, exports, __r) {
-'use strict';
-
-// The backdrop of the screens that are still the 256 by 256 composition: the margins around that picture are a quiet night
-// with a pool of cool light behind it, drifting haze and dust, so the old screens sit in a room instead of on black bars.
-
-const layout = __r("ui/layout-hd");
-const P = __r("render/palette");
-const light = __r("render/hd/light");
-
-const MOTES = 26;
-const SEED = 11;
-
-function draw(ctx, app) {
-  const { W, H } = layout;
-  const t = app.calm ? 0 : app.t;
-  const sky = ctx.createLinearGradient(0, 0, 0, H);
-  sky.addColorStop(0, P.hd.night[0]);
-  sky.addColorStop(1, P.hd.night[1]);
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, W, H);
-  light.glow(ctx, W / 2, H * 0.46, 250, P.hd.day[0], 0.2, { squash: 0.8 });
-  light.haze(ctx, { x: 0, y: H * 0.72, w: W, h: 50 }, P.hd.haze, 0.07, t);
-  light.drawMotes(ctx, light.motes(SEED, MOTES, t, { x: 0, y: 0, w: W, h: H }), P.hd.day[2]);
-  light.vignette(ctx, W, H, 0.55);
-}
-
-module.exports = { draw };
-
-});
 __d("render/index", function (module, exports, __r) {
 'use strict';
 
 const anim = __r("ui/anim");
-const layout = __r("ui/layout");
-const layoutHd = __r("ui/layout-hd");
-const space = __r("ui/screen-space");
+const layout = __r("ui/layout-hd");
 const screenFx = __r("ui/screen-fx");
 const P = __r("render/palette");
 const surface = __r("render/hd/surface");
-const wings = __r("render/hd/wings");
-const hud = __r("render/scenes/hud");
 const { drawBattle } = __r("render/scenes/battle");
 const screens = __r("render/scenes/screens");
 const yearScreens = __r("render/year/index");
@@ -8018,12 +7685,12 @@ function drawScene(ctx, app) {
 }
 
 // A screen that has just opened comes out of the dark.
-function drawVeil(ctx, app, width, height) {
+function drawVeil(ctx, app) {
   const alpha = anim.fadeAlpha(app.phaseT);
   if (alpha <= 0) return;
   ctx.globalAlpha = alpha;
   ctx.fillStyle = P.ink;
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillRect(0, 0, layout.W, layout.H);
   ctx.globalAlpha = 1;
 }
 
@@ -8039,85 +7706,26 @@ function drawShaken(ctx, app, paint) {
   if (shaken) ctx.restore();
 }
 
-// The 256 by 256 composition of the screens that have not been recomposed yet.
-function drawLegacy(ctx, app) {
+// Draws one whole frame for the given app state: the screen over the whole 480 by 270 surface, the veil of a screen that has just opened, the
+// window that floats over it (if any) and the footer.
+function drawFrame(ctx, app) {
+  surface.begin(ctx);
   ctx.fillStyle = P.ink;
   ctx.fillRect(0, 0, layout.W, layout.H);
   drawShaken(ctx, app, () => drawScene(ctx, app));
-  drawVeil(ctx, app, layout.W, layout.PLAY_H);
-  hud.drawFooter(ctx, app);
-}
-
-// A recomposed screen owns the whole surface.
-function drawWide(ctx, app) {
-  ctx.fillStyle = P.ink;
-  ctx.fillRect(0, 0, layoutHd.W, layoutHd.H);
-  drawShaken(ctx, app, () => (space.isDecision(app) ? wide.drawScreen(ctx, app) : drawScene(ctx, app)));
-  drawVeil(ctx, app, layoutHd.W, layoutHd.H);
+  drawVeil(ctx, app);
   if (app.overlay) OVERLAYS[app.overlay](ctx, app);
   wide.drawFooter(ctx, app);
 }
 
-// Draws one whole frame for the given app state.
-function drawFrame(ctx, app) {
-  surface.begin(ctx);
-  if (space.isWide(app)) {
-    drawWide(ctx, app);
-    return;
-  }
-  wings.draw(ctx, app);
-  ctx.save();
-  ctx.translate(layoutHd.LEGACY.x, layoutHd.LEGACY.y);
-  drawLegacy(ctx, app);
-  ctx.restore();
-  if (app.overlay) OVERLAYS[app.overlay](ctx, app);
-}
-
 module.exports = { drawFrame };
-
-});
-__d("render/looks", function (module, exports, __r) {
-'use strict';
-
-const { deepFreeze } = __r("freeze");
-
-// The look of the factory in each state: the same building, repainted. Colours go from
-// bright and clean (hightech) to dark and broken (collapse), so OI is readable at a glance.
-const LOOKS = deepFreeze({
-  hightech: {
-    wall: '#eef3fb', shade: '#c4d0e6', roof: '#8fa0c4', roofHi: '#b4c4e4', glass: '#5fe0ff',
-    glassHi: '#d4fbff', accent: '#4cf0a0', smoke: '#f4f9ff', ground: '#5a6c80', sky: ['#7fd6ff', '#d6f4ff'],
-  },
-  modern: {
-    wall: '#d6deee', shade: '#a9b6d0', roof: '#6d7fae', roofHi: '#8fa0c8', glass: '#7ccbea',
-    glassHi: '#c2efff', accent: '#4cc880', smoke: '#e9f0f8', ground: '#5a6272', sky: ['#6ec0f0', '#bfe6fa'],
-  },
-  normal: {
-    wall: '#b9805a', shade: '#8d5e44', roof: '#5a5a6c', roofHi: '#74748a', glass: '#8cb2d2',
-    glassHi: '#f6e09a', accent: '#d8a040', smoke: '#b8b8c2', ground: '#505060', sky: ['#78a8d8', '#c8dcec'],
-  },
-  worn: {
-    wall: '#8c6c58', shade: '#684c3c', roof: '#46464e', roofHi: '#5c5c66', glass: '#566678',
-    glassHi: '#7e7658', accent: '#a65a32', smoke: '#6c6c76', ground: '#403c44', sky: ['#7a8898', '#a8b0b8'],
-  },
-  edge: {
-    wall: '#5e4e4a', shade: '#40302c', roof: '#302c34', roofHi: '#443f48', glass: '#2e323a',
-    glassHi: '#c04c3c', accent: '#c83434', smoke: '#34343a', ground: '#2c282e', sky: ['#4a3c4c', '#6a5460'],
-  },
-  collapse: {
-    wall: '#7a6660', shade: '#54443f', roof: '#463c3c', roofHi: '#6c5c58', glass: '#1c1c24',
-    glassHi: '#1c1c24', accent: '#a03030', smoke: '#5a5a62', ground: '#2e2a30', sky: ['#40283c', '#7c4a50'],
-  },
-});
-
-module.exports = { LOOKS };
 
 });
 __d("render/palette", function (module, exports, __r) {
 'use strict';
 
 // One palette for the whole game. Tone names (white, red, green...) double as keys, so a
-// message tagged tone: 'red' is drawn with PALETTE.red. Every text tone reads on a window
+// message tagged tone: 'red' is drawn with PALETTE.red. Every text tone reads on the glass of a panel
 // (tests/palette.test.js measures it): dim is the quietest, still 3:1; red is never the only cue.
 module.exports = Object.freeze({
   ink: '#0c0c1c',
@@ -8132,12 +7740,6 @@ module.exports = Object.freeze({
   ratio: '#86b4ff',
   ratioLabel: '#94aee6',
   header: '#2e6fd8',
-  winTop: '#2c40a8',
-  winBottom: '#0c1452',
-  winEdge: '#f4f4fa',
-  winShade: '#7284d8',
-  selTop: '#5470e0',
-  selBottom: '#1c2a80',
   // Three tones per material for the pictures: [shadow, base, light]. Light falls from the top left, so
   // every shape takes its light tone on its top and left edges and its shadow tone on the bottom and right.
   ramp: Object.freeze({
@@ -8275,6 +7877,8 @@ module.exports = Object.freeze({
       window: '#f06820',
     }),
   }),
+  // One colour for each team of the facilitator's ranking (eight at most), kept by the team for the whole session.
+  team: Object.freeze(['#58e088', '#68d8f8', '#f8d048', '#f89848', '#c8a0f8', '#f898c8', '#ff6b6b', '#f8f8f8']),
   area: Object.freeze({
     sales: '#d85858',
     procurement: '#d8963c',
@@ -8288,28 +7892,36 @@ module.exports = Object.freeze({
 __d("render/scenes/battle", function (module, exports, __r) {
 'use strict';
 
+// The fight screens of the tutorial: the factory in the state the OI has left it in behind, the boss of the floor on a glass card, the OI
+// panel, the P&L and the dialogue console, which holds the situation and the cards of a turn, or one message across its whole width.
+
 const engine = __r("engine");
 const { CARDS } = __r("content/cards");
 const { FLOORS } = __r("content/floors");
 const { tierFor } = __r("tiers");
 const anim = __r("ui/anim");
-const layout = __r("ui/layout");
+const L = __r("ui/layout-hd");
+const B = __r("ui/layout-battle");
 const view = __r("ui/view");
-const { tx, signed } = __r("ui/tx");
+const { tx, num, signed } = __r("ui/tx");
 const P = __r("render/palette");
-const { rect } = __r("render/draw");
+const { tint } = __r("render/draw");
 const ui = __r("render/ui");
 const hud = __r("render/scenes/hud");
 const { drawStatement } = __r("render/scenes/statement");
-const { drawBackdrop } = __r("render/backdrops");
 const { drawBoss } = __r("render/bosses");
+const panel = __r("render/hd/panel");
+const factory = __r("render/hd/factory");
+const surface = __r("render/hd/surface");
 
-const WRAP = 40;
-const MESSAGE_WRAP = 40;
-const MESSAGE_ROWS = 10;
-const REVEAL_ROWS = 9;
-const ROW_H = 9;
-const SELECTED_ROW = 'rgba(248,208,72,0.22)';
+const MESSAGE_WRAP = B.TEXT.wrap;
+const MESSAGE_ROWS = B.TEXT.rows;
+const REVEAL_ROWS = B.TEXT.rows;
+const ROW_H = B.TEXT.pitch;
+const CARD_ROW_H = B.TURN.pitch;
+const SLIDE_SECONDS = 0.5;
+const SLIDE_FROM = 44;
+const SELECTED_ALPHA = 0.22;
 
 function bossMood(app) {
   const { run } = app;
@@ -8338,49 +7950,56 @@ function drawChips(ctx, app, card, right, limit, y) {
   }, right - chipsWidth(shown));
 }
 
+const columnX = () => L.DIALOGUE.x + L.DIALOGUE.left.x;
+const paneX = () => L.DIALOGUE.x + L.DIALOGUE.pane.x;
+
 function drawCardRow(ctx, app, id, i) {
   const card = CARDS[id];
-  const r = layout.answerRect(i);
+  const r = L.answerRect(i);
   const selected = i === app.cursor;
   if (selected) {
-    rect(ctx, r.x, r.y, r.w, r.h, SELECTED_ROW);
-    if (Math.floor(app.t * 3) % 2 === 0) ui.text(ctx, '>', r.x + 3, r.y + 1, P.gold);
+    ctx.fillStyle = tint(P.gold, SELECTED_ALPHA);
+    ctx.fillRect(r.x, r.y, r.w - 4, r.h);
+    ctx.fillStyle = P.gold;
+    ctx.fillRect(r.x, r.y, 1.5, r.h);
+    if (Math.floor(app.t * 3) % 2 === 0) ui.text(ctx, '>', r.x + 4, r.y + 1, P.gold);
   }
   const name = tx(app, `card.${id}.name`);
-  ui.text(ctx, name, r.x + 12, r.y + 1, selected ? P.white : P.gray);
-  drawChips(ctx, app, card, r.x + r.w - 4, r.x + 12 + ui.textWidth(name) + 8, r.y + 1);
+  ui.text(ctx, name, r.x + 13, r.y + 1, selected ? P.white : P.gray);
+  drawChips(ctx, app, card, r.x + r.w - 10, r.x + 13 + ui.textWidth(name) + 8, r.y + 1);
 }
 
-// The area (sales, plant...) that owns the highlighted card, as a coloured tag.
-function drawAreaTag(ctx, app, card, d) {
+// The area (sales, plant...) that owns the highlighted card, as a coloured tag at the top of the pane.
+function drawAreaTag(ctx, app, card) {
   const tag = tx(app, `area.tag.${card.area}`);
   const w = ui.textWidth(tag) + 4;
-  const x = d.x + d.w - 6 - w;
-  rect(ctx, x, d.y + d.titleY - 1, w, 9, P.area[card.area]);
-  ui.text(ctx, tag, x + 2, d.y + d.titleY, P.white);
+  const y = L.DIALOGUE.y + L.DIALOGUE.titleY - 1;
+  ctx.fillStyle = P.area[card.area];
+  ctx.fillRect(B.TURN.tagX, y, w, 9);
+  ui.text(ctx, tag, B.TURN.tagX + 2, y + 1, P.white);
 }
 
 function drawTurn(ctx, app) {
   const { run } = app;
   const floor = FLOORS[run.floorIdx];
   const card = CARDS[run.hand[app.cursor]];
-  const d = layout.DIALOGUE;
-  ui.windowBox(ctx, d.x, d.y, d.w, d.h);
-  ui.text(ctx, tx(app, 'ui.stage', { f: floor.id, n: run.turn + 1 }), d.x + 6, d.y + d.titleY, P.gold);
-  drawAreaTag(ctx, app, card, d);
-  const said = ui.wrapLines([{ text: tx(app, `floor.${floor.id}.t${run.turn + 1}`) }], WRAP);
-  ui.paragraph(ctx, anim.revealRows(said, anim.typedChars(app.phaseT)), d.x + 6, d.y + d.sceneY, ROW_H);
-  rect(ctx, d.x + 4, d.y + d.firstRule, d.w - 8, 1, P.winShade);
+  const d = L.DIALOGUE;
+  panel.glass(ctx, d);
+  ui.text(ctx, tx(app, 'ui.stage', { f: floor.id, n: run.turn + 1 }), columnX(), d.y + d.titleY, P.gold);
+  drawAreaTag(ctx, app, card);
+  const said = ui.wrapLines([{ text: tx(app, `floor.${floor.id}.t${run.turn + 1}`) }], B.TURN.sceneWrap);
+  ui.paragraph(ctx, anim.revealRows(said, anim.typedChars(app.phaseT)), columnX(), d.y + d.sceneY, CARD_ROW_H);
+  panel.rule(ctx, columnX(), d.y + d.firstRule, d.left.w - 6);
   run.hand.forEach((id, i) => drawCardRow(ctx, app, id, i));
-  rect(ctx, d.x + 4, d.y + d.secondRule, d.w - 8, 1, P.winShade);
-  const desc = ui.wrapLines([{ text: tx(app, `card.${card.id}.desc`) }], WRAP);
-  ui.paragraph(ctx, desc, d.x + 6, d.y + d.detailY, ROW_H);
+  panel.vrule(ctx, paneX() - 7, d.y + 8, d.h - 16);
+  const desc = ui.wrapLines([{ text: tx(app, `card.${card.id}.desc`) }], B.TURN.detailWrap).slice(0, B.TURN.detailRows);
+  ui.paragraph(ctx, desc, paneX(), d.y + d.paneY, CARD_ROW_H);
 }
 
 function drawMessage(ctx, app, rows) {
-  const d = layout.DIALOGUE;
-  ui.windowBox(ctx, d.x, d.y, d.w, d.h);
-  ui.paragraph(ctx, ui.wrapLines(rows, MESSAGE_WRAP).slice(0, MESSAGE_ROWS), d.x + 8, d.y + 4, ROW_H);
+  const d = L.DIALOGUE;
+  panel.glass(ctx, d);
+  ui.paragraph(ctx, ui.wrapLines(rows, MESSAGE_WRAP).slice(0, MESSAGE_ROWS), B.TEXT.x, d.y + B.TEXT.y, ROW_H);
 }
 
 function drawFloorIntro(ctx, app) {
@@ -8397,9 +8016,7 @@ function drawFloorIntro(ctx, app) {
 }
 
 function drawReveal(ctx, app) {
-  const d = layout.DIALOGUE;
-  ui.windowBox(ctx, d.x, d.y, d.w, d.h);
-  ui.paragraph(ctx, ui.wrapLines(view.revealLines(app), WRAP).slice(0, REVEAL_ROWS), d.x + 8, d.y + 8, ROW_H);
+  drawMessage(ctx, app, view.revealLines(app));
 }
 
 function drawFloorOutro(ctx, app) {
@@ -8416,16 +8033,51 @@ function drawFloorOutro(ctx, app) {
 
 const PHASES = { floorIntro: drawFloorIntro, turn: drawTurn, turnResult: drawReveal, floorOutro: drawFloorOutro };
 
-// Everything shared by the fight screens: the room, the boss, the OI panel and the P&L statement.
+// The factory of the state the OI is in, behind the whole screen.
+const drawFactory = (ctx, app, tier) => factory.draw(ctx, tier, app.t, { calm: app.calm, quality: surface.quality(), at: 'side' });
+
+// The boss of the floor on a glass card, at twice its size, with its name under it; on a new floor it slides in from above.
+function drawBossCard(ctx, app, floor) {
+  const b = B.BOSS;
+  const slide = app.run.phase === 'floorIntro' && !app.calm ? Math.max(0, 1 - app.phaseT / SLIDE_SECONDS) * SLIDE_FROM : 0;
+  panel.glass(ctx, b);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(b.x + 1, b.y + 1, b.w - 2, b.h - 2);
+  ctx.clip();
+  ctx.transform(b.scale, 0, 0, b.scale, b.cx, b.cy - slide * b.scale);
+  drawBoss(ctx, floor.boss, 0, 0, app.t, bossMood(app));
+  ctx.restore();
+  ui.textCenter(ctx, tx(app, `boss.${floor.boss}`), b.cx, b.nameY, P.gold, { shadow: P.ink });
+}
+
+// The projected OI as a big number and a bar with the two marks of the tutorial (the minimum and the goal), with the state of the factory under it.
+function drawOi(ctx, app) {
+  const o = B.OI;
+  const oi = engine.oiOf(app.run);
+  const tier = tierFor(oi);
+  const color = hud.TIER_COLOR[tier];
+  const barW = o.w - 2 * o.pad;
+  panel.glass(ctx, o);
+  ui.text(ctx, 'OI', o.x + o.pad, o.y + o.labelY, P.gray);
+  ui.textRight(ctx, `${num(app, Math.max(oi, 0))}%`, o.x + o.w - o.pad, o.y + o.valueY, color, { scale: o.scale, shadow: P.ink });
+  panel.bar(ctx, o.x + o.pad, o.y + o.barY, barW, o.barH, oi / B.OI_SCALE, color);
+  [engine.MIN_OI, engine.GOAL_OI].forEach((mark) => {
+    const at = o.x + o.pad + Math.round((barW * mark) / B.OI_SCALE);
+    ctx.fillStyle = P.gold;
+    ctx.fillRect(at, o.y + o.barY - 2, 1, o.barH + 4);
+    ui.textCenter(ctx, String(mark), at, o.y + o.marksY, P.gold);
+  });
+  ui.text(ctx, tx(app, `tier.${tier}`), o.x + o.pad, o.y + o.tierY, P.gray);
+}
+
+// Everything shared by the fight screens: the factory, the boss, the OI panel and the P&L statement.
 function drawBattle(ctx, app) {
   const { run } = app;
   const floor = FLOORS[run.floorIdx];
-  const tier = tierFor(engine.oiOf(run));
-  drawBackdrop(ctx, floor.id, tier, app.t);
-  const slide = run.phase === 'floorIntro' ? Math.max(0, 1 - app.phaseT / 0.5) * 44 : 0;
-  drawBoss(ctx, floor.boss, layout.BOSS_CENTER.x, layout.BOSS_CENTER.y - slide, app.t, bossMood(app));
-  hud.drawBossPlate(ctx, app, floor);
-  hud.drawOiPanel(ctx, app);
+  drawFactory(ctx, app, tierFor(engine.oiOf(run)));
+  drawBossCard(ctx, app, floor);
+  drawOi(ctx, app);
   const result = run.phase === 'turnResult';
   drawStatement(ctx, app, {
     before: result ? view.plBefore(run) : null,
@@ -8436,52 +8088,20 @@ function drawBattle(ctx, app) {
   PHASES[run.phase](ctx, app);
 }
 
-module.exports = { drawBattle, MESSAGE_ROWS, MESSAGE_WRAP, REVEAL_ROWS };
+module.exports = { drawBattle, drawOi, drawFactory, MESSAGE_ROWS, MESSAGE_WRAP, REVEAL_ROWS };
 
 });
 __d("render/scenes/hud", function (module, exports, __r) {
 'use strict';
 
-const engine = __r("engine");
-const { tierFor } = __r("tiers");
-const layout = __r("ui/layout");
-const { tx, num } = __r("ui/tx");
+const { tx } = __r("ui/tx");
 const { briefing } = __r("ui/year-view");
 const P = __r("render/palette");
-const { rect } = __r("render/draw");
 const ui = __r("render/ui");
 
 const TIER_COLOR = Object.freeze({
   collapse: P.red, edge: P.red, worn: P.orange, normal: P.white, modern: P.green, hightech: P.cyan,
 });
-
-// The projected OI as a big number and a bar with the two marks of the tutorial (the minimum
-// and the goal), with the state of the factory under it. It sits where the year mode has its gauges.
-const OI_PANEL = Object.freeze({ valueY: 4, barY: 25, labelsY: 35, tierY: 46, scale: 25 });
-
-function drawOiPanel(ctx, app) {
-  const { x, y, w, h } = layout.DASH;
-  const oi = engine.oiOf(app.run);
-  const tier = tierFor(oi);
-  const color = TIER_COLOR[tier];
-  const barW = w - 12;
-  ui.windowBox(ctx, x, y, w, h, { alpha: 0.95 });
-  ui.text(ctx, 'OI', x + 6, y + OI_PANEL.valueY + 4, P.gray);
-  ui.textRight(ctx, `${num(app, Math.max(oi, 0))}%`, x + w - 5, y + OI_PANEL.valueY, color, { scale: 2, shadow: P.ink });
-  ui.bar(ctx, x + 6, y + OI_PANEL.barY, barW, 6, oi / OI_PANEL.scale, color);
-  [engine.MIN_OI, engine.GOAL_OI].forEach((mark) => {
-    const at = x + 6 + Math.round((barW * mark) / OI_PANEL.scale);
-    rect(ctx, at, y + OI_PANEL.barY - 2, 1, 10, P.gold);
-    ui.textCenter(ctx, String(mark), at, y + OI_PANEL.labelsY, P.gold);
-  });
-  ui.paragraph(ctx, ui.wrapLines([{ text: tx(app, `tier.${tier}`), tone: 'gray' }], 17), x + 6, y + OI_PANEL.tierY, 9);
-}
-
-function drawBossPlate(ctx, app, floor) {
-  const { x, y, w, h } = layout.PLATE;
-  ui.windowBox(ctx, x, y, w, h, { alpha: 0.95 });
-  ui.text(ctx, tx(app, `boss.${floor.boss}`), x + 6, y + 4, P.gold);
-}
 
 const SCENE_ACTIONS = Object.freeze({
   title: 'ui.btn.start',
@@ -8521,14 +8141,9 @@ const noteActive = (app) => NOTE_SCENES.includes(app.scene);
 // After E the strip says which effects are on, for a moment.
 const CALM_TOAST_SECONDS = 1.8;
 
-// Bottom strip: the action for the current screen plus the three global buttons. The geometry is the legacy one unless the
-// screen passes its own: { footer, width, strip } (strip paints the bar behind the labels).
-const legacyStrip = (ctx, f, width) => {
-  rect(ctx, 0, f.y, width, f.h, P.ink);
-  rect(ctx, 0, f.y, width, 1, '#242844');
-};
-
-function drawFooter(ctx, app, { footer = layout.FOOTER, width = layout.W, strip = legacyStrip } = {}) {
+// Bottom strip: the action for the current screen plus the three global buttons. The screen passes its geometry: { footer, width, strip }
+// (strip paints the bar behind the labels).
+function drawFooter(ctx, app, { footer, width, strip }) {
   const f = footer;
   strip(ctx, f, width);
   if (app.t - app.calmAt < CALM_TOAST_SECONDS) {
@@ -8545,41 +8160,51 @@ function drawFooter(ctx, app, { footer = layout.FOOTER, width = layout.W, strip 
   items.forEach(([label, x, color]) => ui.text(ctx, label, x, f.y + 3, color));
 }
 
-module.exports = { drawOiPanel, drawBossPlate, drawFooter, actionKey, noteKey, noteActive, TIER_COLOR };
+module.exports = { drawFooter, actionKey, noteKey, noteActive, TIER_COLOR };
 
 });
 __d("render/scenes/screens", function (module, exports, __r) {
 'use strict';
 
+// The screens around the tutorial and the title: the title itself, the introduction of the tutorial, the control room between floors, the
+// final result with its stars and the autopsy of a run that died. Each is a glass panel over the factory in the state the game is in.
+
 const engine = __r("engine");
 const { tierFor } = __r("tiers");
-const layout = __r("ui/layout");
-const layoutHd = __r("ui/layout-hd");
+const L = __r("ui/layout-hd");
+const B = __r("ui/layout-battle");
+const V = __r("ui/layout-verdict");
+const menu = __r("ui/layout-menu");
 const view = __r("ui/view");
 const { tx, num } = __r("ui/tx");
 const P = __r("render/palette");
-const { rect } = __r("render/draw");
 const ui = __r("render/ui");
 const hud = __r("render/scenes/hud");
 const { drawStatement } = __r("render/scenes/statement");
-const { drawSky, drawFactory } = __r("render/factory");
-const { drawHero } = __r("render/bosses");
+const { drawOi, drawFactory } = __r("render/scenes/battle");
 const factory = __r("render/hd/factory");
 const light = __r("render/hd/light");
+const panel = __r("render/hd/panel");
+const pill = __r("render/hd/pill");
 const surface = __r("render/hd/surface");
 
-const SKY_H = layout.PLAY_H;
-const ROOM_WRAP = 38;
-const ROOM_ROWS = 6;
-
 const TITLE = Object.freeze({ y: 16, subtitleY: 50, pressY: 64, langY: 78, bestY: 236, noticeY: 6 });
+const ROOM_WRAP = B.TEXT.wrap;
+const ROOM_ROWS = B.ROOM.rows;
+const SHAKE_SECONDS = 0.8;
+const SHAKE_RATE = 60;
+const SHAKE_SIZE = 2;
+const STAR_COUNT = 3;
+const STAR_W = 7;
+const PANEL_PAD = 12;
+const LINE_H = 10;
 
 // The title: the factory at the middle of the surface under its name, the invitation to start, the language and the best result.
 function drawTitle(ctx, app) {
   factory.draw(ctx, 'normal', app.t, { calm: app.calm, quality: surface.quality(), at: 'center' });
-  const cx = layoutHd.W / 2;
+  const cx = L.W / 2;
   light.glow(ctx, cx, TITLE.y + 14, 150, P.hd.gold, 0.16, { squash: 0.4 });
-  ui.textRight(ctx, tx(app, 'ui.fictional'), layoutHd.W - 8, TITLE.noticeY, P.white, { shadow: P.ink });
+  ui.textRight(ctx, tx(app, 'ui.fictional'), L.W - 8, TITLE.noticeY, P.white, { shadow: P.ink });
   ui.textCenter(ctx, tx(app, 'ui.title'), cx, TITLE.y, P.gold, { scale: 4, shadow: P.hd.titleShadow });
   ui.textCenter(ctx, tx(app, 'ui.subtitle'), cx, TITLE.subtitleY, P.white, { shadow: P.ink });
   if (Math.floor(app.t * 2) % 2 === 0) ui.textCenter(ctx, tx(app, 'ui.press'), cx, TITLE.pressY, P.white, { shadow: P.ink });
@@ -8594,67 +8219,71 @@ function drawTitle(ctx, app) {
 }
 
 function drawIntro(ctx, app) {
-  drawSky(ctx, 0, 0, layout.W, SKY_H, 'normal', app.t);
-  drawFactory(ctx, 'normal', 68, 6, app.t, 1);
-  drawHero(ctx, 38, 70, app.t);
-  ui.windowBox(ctx, 4, 78, 248, 148);
-  const rows = ui.wrapLines([
-    { text: tx(app, 'ui.intro1') },
-    { text: ' ' },
-    { text: tx(app, 'ui.intro2') },
-  ], 38);
-  ui.paragraph(ctx, rows, 12, 88);
+  const box = B.INTRO_BOX;
+  factory.draw(ctx, 'normal', app.t, { calm: app.calm, quality: surface.quality(), at: 'side' });
+  ui.text(ctx, tx(app, 'ui.title'), menu.LOCKUP.x, menu.LOCKUP.y, P.gold, { scale: 2, shadow: P.hd.titleShadow });
+  ui.text(ctx, tx(app, 'menu.tutorial'), menu.LOCKUP.x, menu.INTRO_LINES.mode, P.white, { shadow: P.ink });
+  panel.glass(ctx, box);
+  const rows = ui.wrapLines([{ text: tx(app, 'ui.intro1') }, { text: ' ' }, { text: tx(app, 'ui.intro2') }], B.INTRO_WRAP);
+  ui.paragraph(ctx, rows, box.x + PANEL_PAD + 2, box.y + PANEL_PAD + 2, LINE_H);
 }
 
-// The control room: the statement with the line of the room marked, the factory in the state the
-// OI has left it in, and what the room is about in the window below.
+// The control room: the statement with the line of the room marked, the OI panel and, in the console, what the room is about.
 function drawRoom(ctx, app) {
   const { run } = app;
-  const tier = tierFor(engine.oiOf(run));
-  drawSky(ctx, 0, 0, layout.W, SKY_H, tier, app.t);
-  drawFactory(ctx, tier, 132, 8, app.t, 1);
-  ui.textCenter(ctx, tx(app, `tier.${tier}`), 192, 82, hud.TIER_COLOR[tier], { shadow: P.ink });
+  const d = L.DIALOGUE;
+  const r = B.ROOM;
+  drawFactory(ctx, app, tierFor(engine.oiOf(run)));
+  drawOi(ctx, app);
   drawStatement(ctx, app, { focus: run.room });
-  const d = layout.DIALOGUE;
-  ui.windowBox(ctx, d.x, d.y, d.w, d.h);
-  ui.text(ctx, `${tx(app, 'ui.room')} - ${tx(app, `room.${run.room}.title`)}`, d.x + 8, d.y + 6, P.gold);
-  rect(ctx, d.x + 4, d.y + 17, d.w - 8, 1, P.winShade);
+  panel.glass(ctx, d);
+  ui.text(ctx, `${tx(app, 'ui.room')} - ${tx(app, `room.${run.room}.title`)}`, B.TEXT.x, d.y + r.titleY, P.gold);
+  panel.rule(ctx, B.TEXT.x, d.y + r.ruleY, d.w - 20);
   const rows = ui.wrapLines([{ text: tx(app, `room.${run.room}.body`) }], ROOM_WRAP);
-  ui.paragraph(ctx, rows.slice(0, ROOM_ROWS), d.x + 8, d.y + 22, 9);
-  ui.text(ctx, tx(app, 'ui.saved'), d.x + 8, d.y + d.h - 12, P.green);
+  ui.paragraph(ctx, rows.slice(0, ROOM_ROWS), B.TEXT.x, d.y + r.bodyY, r.pitch);
+  ui.text(ctx, tx(app, 'ui.saved'), B.TEXT.x, d.y + r.savedY, P.green);
+}
+
+// The stars, the OI of the end and the reasons for each star, on the panel at the right of the factory.
+function drawStars(ctx, app, tier, stars, oi) {
+  const f = B.FINAL;
+  const box = f.panel;
+  const first = Math.round(box.x + box.w / 2 - ((STAR_COUNT - 1) * f.starStep + STAR_W) / 2);
+  panel.glass(ctx, box);
+  for (let i = 0; i < STAR_COUNT; i += 1) ui.star(ctx, first + i * f.starStep, box.y + f.starsY, i < stars);
+  const summary = `${tx(app, 'ui.finalOi', { n: num(app, oi) })}  ${tx(app, `tier.${tier}`)}`;
+  ui.textCenter(ctx, summary, box.x + box.w / 2, box.y + f.summaryY, hud.TIER_COLOR[tier], { shadow: P.ink });
+  [tx(app, 'ui.star1'), tx(app, 'ui.star2', { n: engine.MIN_OI }), tx(app, 'ui.star3', { n: engine.GOAL_OI })].forEach((label, i) => {
+    ui.text(ctx, label, box.x + f.pad, box.y + f.criteriaTop + i * f.criteriaPitch, i < stars ? P.green : P.dim);
+  });
 }
 
 function drawFinal(ctx, app) {
   const { run } = app;
+  const f = B.FINAL;
   const oi = engine.oiOf(run);
   const tier = tierFor(oi);
-  const stars = engine.starsFor(run);
-  drawSky(ctx, 0, 0, layout.W, SKY_H, tier, app.t);
-  drawFactory(ctx, tier, 68, 2, app.t, 1);
-  ui.textCenter(ctx, tx(app, 'ui.result'), 128, 72, P.gold, { shadow: P.ink });
-  [0, 1, 2].forEach((i) => ui.star(ctx, 128 - 31 + i * 22, 82, i < stars));
-  const summary = `${tx(app, 'ui.finalOi', { n: num(app, oi) })}  ${tx(app, `tier.${tier}`)}`;
-  ui.textCenter(ctx, summary, 128, 94, hud.TIER_COLOR[tier], { shadow: P.ink });
-  const criteria = [
-    tx(app, 'ui.star1'),
-    tx(app, 'ui.star2', { n: engine.MIN_OI }),
-    tx(app, 'ui.star3', { n: engine.GOAL_OI }),
-  ];
-  criteria.forEach((label, i) => ui.text(ctx, label, 36, 106 + i * 10, i < stars ? P.green : P.dim, { shadow: P.ink }));
-  ui.windowBox(ctx, 4, 140, 248, 86);
-  const rows = ui.wrapLines(view.lessons(app).map((text) => ({ text })), 40);
-  ui.paragraph(ctx, rows.slice(0, 8), 10, 148);
+  factory.draw(ctx, tier, app.t, { calm: app.calm, quality: surface.quality(), at: 'left' });
+  pill.draw(ctx, tx(app, 'ui.result'), P.gold, V.TITLE);
+  drawStars(ctx, app, tier, engine.starsFor(run), oi);
+  panel.glass(ctx, f.lessons);
+  const rows = ui.wrapLines(view.lessons(app).map((text) => ({ text })), f.lessonsWrap);
+  ui.paragraph(ctx, rows.slice(0, f.lessonsRows), f.lessons.x + f.lessonsLeft, f.lessons.y + f.lessonsTop, f.lessonsPitch);
 }
 
+// The collapsed factory shakes for a moment when the run dies (calm mode keeps it still).
 function drawDead(ctx, app) {
-  const shake = app.phaseT < 0.8 ? Math.round(Math.sin(app.phaseT * 60) * 2) : 0;
-  drawSky(ctx, 0, 0, layout.W, SKY_H, 'collapse', app.t);
-  drawFactory(ctx, 'collapse', 68 + shake, 6, app.t, 1);
-  ui.textCenter(ctx, tx(app, 'ui.gameOver'), 128, 78, P.red, { scale: 2, shadow: P.ink });
-  ui.windowBox(ctx, 4, 98, 248, 128);
-  ui.text(ctx, tx(app, 'ui.autopsy'), 12, 106, P.gold);
-  const rows = ui.wrapLines(view.autopsyLines(app).map((text) => ({ text })), 38);
-  ui.paragraph(ctx, rows.slice(0, 11), 12, 120);
+  const d = B.DEAD;
+  const shake = !app.calm && app.phaseT < SHAKE_SECONDS ? Math.round(Math.sin(app.phaseT * SHAKE_RATE) * SHAKE_SIZE) : 0;
+  ctx.save();
+  if (shake !== 0) ctx.translate(shake, 0);
+  factory.draw(ctx, 'collapse', app.t, { calm: app.calm, quality: surface.quality(), at: 'low' });
+  ctx.restore();
+  panel.glass(ctx, d.panel);
+  ui.textCenter(ctx, tx(app, 'ui.gameOver'), L.W / 2, d.panel.y + d.titleY, P.red, { scale: 3, shadow: P.ink });
+  ui.text(ctx, tx(app, 'ui.autopsy'), d.panel.x + d.left, d.panel.y + d.autopsyY, P.gold);
+  const rows = ui.wrapLines(view.autopsyLines(app).map((text) => ({ text })), d.wrap);
+  ui.paragraph(ctx, rows.slice(0, d.rows), d.panel.x + d.left, d.panel.y + d.linesTop, d.pitch);
 }
 
 module.exports = { drawTitle, drawIntro, drawRoom, drawFinal, drawDead, ROOM_WRAP, ROOM_ROWS };
@@ -8671,20 +8300,21 @@ __d("render/scenes/statement", function (module, exports, __r) {
 const { operatingMargin } = __r("model");
 const { tierFor } = __r("tiers");
 const anim = __r("ui/anim");
-const layout = __r("ui/layout");
+const layoutHd = __r("ui/layout-hd");
 const statement = __r("ui/statement");
 const { tx, signed } = __r("ui/tx");
 const P = __r("render/palette");
-const { rect } = __r("render/draw");
+const { rect, tint } = __r("render/draw");
 const ui = __r("render/ui");
+const { glass } = __r("render/hd/panel");
 const { TIER_COLOR } = __r("render/scenes/hud");
 
 const PAD = 6;
 const RATIO_INDENT = 6;
 // Positive numbers leave the width of a closing bracket free, so the decimals of every row line up.
 const BRACKET = 6;
-const TOTAL_BAND = 'rgba(255,255,255,0.09)';
-const FOCUS_BAND = 'rgba(248,208,72,0.28)';
+const TOTAL_BAND = tint(P.white, 0.09);
+const FOCUS_BAND = tint(P.gold, 0.28);
 const HEADER_MIN_W = 36;
 const NEGLIGIBLE = 0.05;
 // Where the floating change sits on the OI row: in the gap between its short label and its number.
@@ -8695,8 +8325,8 @@ const SALES_FLOAT_X = 59;
 // takes in a loss, which is why a loss has none): up when it helped the business, down when it hurt.
 const ARROW_GAP = 2;
 
-// The legacy P&L window; a screen with another look passes its own panel.
-const legacyPanel = (ctx, box) => ui.windowBox(ctx, box.x, box.y, box.w, box.h, { alpha: 0.95 });
+// The glass panel of the P&L; a screen with another look passes its own.
+const glassPanel = (ctx, box) => glass(ctx, box);
 
 function drawHeader(ctx, app, { x, y, w }, columnKey, { header }) {
   const label = tx(app, columnKey);
@@ -8754,8 +8384,8 @@ function drawFloat(ctx, app, text, up, x, row, at, geometry) {
 // `progress` (0 to 1) rolls the numbers from `before` to `pl`; the rows that changed keep their
 // green or red from the start. `delta` is the change in the OI margin, floated over the OI row.
 function drawStatement(ctx, app, {
-  pl = app.run.pl, before = null, focus = null, column = 'stmt.col.real', at = layout.STATEMENT, progress = 1, delta = null, growth = null,
-  geometry = layout.STATEMENT_ROWS, panel = legacyPanel,
+  pl = app.run.pl, before = null, focus = null, column = 'stmt.col.real', at = layoutHd.STATEMENT, progress = 1, delta = null, growth = null,
+  geometry = layoutHd.STATEMENT_ROWS, panel = glassPanel,
 } = {}) {
   const shown = before && progress < 1 ? anim.blendPl(before, pl, progress) : pl;
   panel(ctx, at);
@@ -8784,7 +8414,7 @@ const { CELL_W } = __r("render/font");
 const { wrapText } = __r("text");
 const type = __r("render/hd/type");
 const P = __r("render/palette");
-const { rect, bands } = __r("render/draw");
+const { rect } = __r("render/draw");
 
 // y is the top of the capital letters; the glyph cell reserves two rows above for accents. Letters are copied one by one
 // from the strip of their colour, size, slant and weight (render/hd/type.js).
@@ -8807,24 +8437,6 @@ const wrapLines = (items, cols) =>
 
 function paragraph(ctx, rows, x, y, lineH = 10) {
   rows.forEach((row, i) => text(ctx, row.text, x, y + i * lineH, P[row.tone] || P.white));
-}
-
-// A blue gradient window with a light frame and cut corners, like a Final Fantasy menu.
-function windowBox(ctx, x, y, w, h, { selected = false, alpha = 1 } = {}) {
-  ctx.globalAlpha = alpha;
-  bands(ctx, x + 1, y + 1, w - 2, h - 2, selected ? P.selTop : P.winTop, selected ? P.selBottom : P.winBottom, 2);
-  ctx.globalAlpha = 1;
-  const edge = selected ? P.gold : P.winEdge;
-  rect(ctx, x + 1, y, w - 2, 1, edge);
-  rect(ctx, x + 1, y + h - 1, w - 2, 1, edge);
-  rect(ctx, x, y + 1, 1, h - 2, edge);
-  rect(ctx, x + w - 1, y + 1, 1, h - 2, edge);
-  rect(ctx, x + 2, y + 1, w - 4, 1, selected ? P.winEdge : P.winShade);
-}
-
-function bar(ctx, x, y, w, h, fraction, fg, bg = '#10142c') {
-  rect(ctx, x, y, w, h, bg);
-  rect(ctx, x, y, Math.round(w * Math.max(0, Math.min(1, fraction))), h, fg);
 }
 
 function triangle(ctx, x, y, dir, color) {
@@ -8856,1199 +8468,9 @@ module.exports = {
   textWidth,
   paragraph,
   wrapLines,
-  windowBox,
-  bar,
   triangle,
   star,
 };
-
-});
-__d("render/year/art/alert", function (module, exports, __r) {
-'use strict';
-
-// The alert of the rescue plan: an alarm lamp that flashes, a zero and a falling arrow. It is not a voice with
-// a mood: it sounds the same whatever the answer was. The lower right corner is flat floor, because the label
-// of the month sits there.
-
-const P = __r("render/palette");
-
-const R = P.ramp;
-const INK = P.ink;
-
-// Rays of light from the lamp, as the end of each line; they only show while the lamp is lit.
-const RAYS = Object.freeze([[58, 12, 58, 3], [48, 14, 40, 7], [68, 14, 76, 7], [46, 20, 36, 21], [70, 20, 80, 21]]);
-
-function lamp(g, lit) {
-  g.box(44, 28, 28, 6, R.metal);
-  g.box(48, 14, 20, 15, lit ? R.tie : [R.asphalt[0], R.tie[0], R.tie[0]]);
-  g.r(50, 16, 3, 9, lit ? R.tie[2] : R.tie[1]);
-  g.box(52, 11, 12, 4, R.metal);
-  if (!lit) return;
-  g.alpha(0.7);
-  RAYS.forEach(([a, b, c, d]) => g.l(a, b, c, d, R.tie[2]));
-  g.alpha(1);
-}
-
-function arrow(g) {
-  g.box(94, 6, 8, 14, R.tie);
-  for (let i = 0; i < 7; i += 1) g.r(90 + i, 20 + i, 16 - 2 * i, 1, R.tie[1]);
-  g.r(90, 19, 16, 1, INK);
-}
-
-const draw = (g, t) => {
-  g.sky(...P.sky.alarm);
-  g.r(0, 34, 116, 8, R.floor[0]);
-  g.r(0, 34, 116, 1, R.floor[1]);
-  lamp(g, Math.floor(t * 3) % 2 === 0);
-  g.t('0', 10, 12, R.tie[1], 3);
-  arrow(g);
-};
-
-module.exports = { draw };
-
-});
-__d("render/year/art/client", function (module, exports, __r) {
-'use strict';
-
-// The client: a man at his desk who talks money, in an office with a window on the city, a chart on the
-// wall and a plant. Drawn from the palette's material ramps (shadow, base, light) with a 1 px outline,
-// light from the top left. After an answer he wears its mood: he smiles and the bubble shows a tick when
-// it was good, he frowns and the bubble shows an alarm when it was bad. The lower right corner is flat
-// floor, because the month label sits there.
-
-const P = __r("render/palette");
-
-const R = P.ramp;
-const INK = P.ink;
-
-// The head, 11x11 from its top left corner: hair, forehead and cheeks. Eyes, brows and mouth are drawn
-// on top, so the mood can change them. o outline, h/H/d hair base/light/shadow, s/L/S skin base/light/shadow.
-const HEAD = [
-  '...ooooo...',
-  '..ohHHhho..',
-  '.ohHhhhhho.',
-  'ohhhhhhhhdo',
-  'ohsssssssdo',
-  'oLsssssssSo',
-  'oLsssssssSo',
-  'oLsssssssSo',
-  '.oLsssssSo.',
-  '..oSsssSo..',
-  '...ooooo...',
-];
-const HEAD_COLORS = Object.freeze({
-  o: INK, h: R.hair[1], H: R.hair[2], d: R.hair[0], s: R.skin[1], L: R.skin[2], S: R.skin[0],
-});
-
-const HEAD_X = 57;
-const HEAD_Y = 8;
-// A blink lasts a tenth of a second, every 3.2 seconds.
-const BLINK_EVERY = 3.2;
-const BLINK_FOR = 0.12;
-
-// Windows panes: [x, y] of the top left of each of the four panes (11 wide, 8 tall).
-const PANES = Object.freeze([[7, 5], [20, 5], [7, 15], [20, 15]]);
-const SKYLINE = Object.freeze([[0, 5], [3, 7], [6, 4], [8, 6]]);
-
-function background(g) {
-  g.sky(R.wall[1], R.wall[0]);
-  g.r(0, 31, 116, 3, R.wall[0]);
-  g.r(0, 31, 116, 1, R.wall[1]);
-  g.r(0, 34, 116, 8, R.floor[1]);
-  g.r(0, 34, 116, 1, R.floor[2]);
-}
-
-function window(g, t) {
-  g.r(5, 3, 27, 22, INK);
-  g.r(6, 4, 25, 20, R.paper[0]);
-  g.r(6, 4, 25, 1, R.paper[2]);
-  PANES.forEach(([x, y], i) => {
-    g.r(x, y, 11, 3, R.glass[2]);
-    g.r(x, y + 3, 11, 3, R.glass[1]);
-    g.r(x, y + 6, 11, 2, R.glass[1]);
-    g.r(x + 1, y + 1, 2, 1, P.white);
-    if (i >= 2) {
-      SKYLINE.forEach(([dx, h], b) => {
-        g.r(x + dx, y + 8 - h, 2 + (b % 2), h, R.city[b % 2 === 0 ? 1 : 0]);
-        const lit = Math.floor(t * 0.7 + b + i) % 3 !== 0;
-        if (lit && h >= 5) g.r(x + dx, y + 8 - h + 1, 1, 1, P.gold);
-      });
-    }
-  });
-  g.r(4, 25, 29, 2, R.paper[0]);
-  g.r(4, 27, 29, 1, R.wall[0]);
-}
-
-function chart(g, t) {
-  g.r(37, 5, 21, 13, INK);
-  g.r(38, 6, 19, 11, R.wood[1]);
-  g.r(38, 6, 19, 1, R.wood[2]);
-  g.r(39, 7, 17, 9, R.paper[1]);
-  g.r(41, 12, 3, 3, R.city[1]);
-  g.r(46, 10, 3, 5, R.city[1]);
-  g.r(51, 8, 3, 7, R.leaf[1]);
-  g.r(41, 12, 3, 1, R.city[2]);
-  g.r(46, 10, 3, 1, R.city[2]);
-  g.r(51, 8, 3, 1, R.leaf[2]);
-  g.l(41, 11, 53, 7, R.tie[1]);
-  if (Math.floor(t * 1.5) % 2 === 0) g.r(53, 6, 2, 2, R.tie[2]);
-}
-
-function desk(g) {
-  g.r(36, 28, 80, 1, INK);
-  g.r(36, 29, 80, 1, R.wood[2]);
-  g.r(36, 30, 80, 2, R.wood[1]);
-  g.r(36, 32, 80, 1, R.wood[0]);
-  g.r(36, 33, 80, 1, INK);
-  g.r(37, 34, 5, 8, INK);
-  g.r(38, 34, 3, 8, R.wood[0]);
-}
-
-function laptop(g, t) {
-  g.r(76, 19, 16, 9, INK);
-  g.r(77, 20, 14, 7, R.metal[1]);
-  g.r(77, 20, 14, 1, R.metal[2]);
-  g.r(77, 26, 14, 1, R.metal[0]);
-  g.r(82, 22, 4, 3, Math.floor(t * 0.8) % 2 === 0 ? R.glass[2] : P.white);
-}
-
-function mug(g, t) {
-  g.r(94, 23, 6, 5, INK);
-  g.r(95, 24, 4, 3, R.paper[1]);
-  g.r(95, 24, 1, 3, R.paper[2]);
-  g.r(100, 24, 1, 3, INK);
-  [0, 1].forEach((k) => {
-    const phase = (t * 0.9 + k * 0.5) % 1;
-    g.alpha(0.85 - phase * 0.85);
-    g.r(95 + k * 3 + Math.round(Math.sin(t * 3 + k * 2)), 21 - Math.round(phase * 6), 1, 2, R.paper[2]);
-  });
-  g.alpha(1);
-}
-
-function plant(g, t) {
-  const sway = Math.round(Math.sin(t * 1.3));
-  g.r(102, 24, 9, 4, INK);
-  g.r(103, 25, 7, 2, R.clay[1]);
-  g.r(103, 25, 7, 1, R.clay[2]);
-  [[100, 18], [106, 17], [111, 19], [103, 21], [109, 22]].forEach(([x, y], k) => {
-    g.l(106, 24, x + (k % 2 === 0 ? sway : 0), y, R.leaf[0]);
-    g.r(x + (k % 2 === 0 ? sway : 0) - 1, y - 1, 3, 2, R.leaf[k % 2 === 0 ? 1 : 2]);
-  });
-}
-
-// The tie, the shirt and the arms on the desk.
-function body(g) {
-  g.r(52, 22, 22, 6, R.suit[1]);
-  g.r(53, 20, 20, 2, R.suit[1]);
-  g.r(55, 19, 16, 1, R.suit[1]);
-  g.r(51, 22, 1, 6, INK);
-  g.r(74, 22, 1, 6, INK);
-  g.r(52, 21, 1, 1, INK);
-  g.r(73, 21, 1, 1, INK);
-  g.r(53, 20, 1, 1, INK);
-  g.r(72, 20, 1, 1, INK);
-  g.r(54, 19, 1, 1, INK);
-  g.r(71, 19, 1, 1, INK);
-  g.r(55, 18, 16, 1, INK);
-  g.r(53, 21, 20, 1, R.suit[2]);
-  g.r(52, 22, 1, 5, R.suit[2]);
-  g.r(72, 22, 2, 6, R.suit[0]);
-  g.r(60, 19, 6, 2, R.shirt[1]);
-  g.r(61, 21, 4, 1, R.shirt[1]);
-  g.r(62, 22, 2, 1, R.shirt[0]);
-  g.r(62, 20, 2, 8, R.tie[1]);
-  g.r(62, 20, 2, 1, R.tie[2]);
-  g.r(62, 27, 2, 1, R.tie[0]);
-  g.r(54, 25, 4, 3, R.skin[1]);
-  g.r(55, 26, 3, 2, R.skin[2]);
-  g.r(67, 25, 4, 3, R.skin[1]);
-  g.r(67, 25, 4, 1, R.skin[2]);
-}
-
-// Eyes, brows and mouth for the mood: neutral, good (smile) or bad (frown, brows down, a bead of sweat).
-function face(g, t, mood, dy) {
-  const x = HEAD_X;
-  const y = HEAD_Y + dy;
-  const blink = t % BLINK_EVERY < BLINK_FOR;
-  const mouth = R.tie[0];
-  [x + 3, x + 7].forEach((ex) => {
-    g.r(ex, y + (blink ? 6 : 5), 1, blink ? 1 : 2, INK);
-  });
-  if (mood === 'bad') {
-    g.r(x + 2, y + 4, 3, 1, R.hair[0]);
-    g.r(x + 6, y + 4, 3, 1, R.hair[0]);
-    g.r(x + 4, y + 8, 3, 1, mouth);
-    g.r(x + 3, y + 9, 1, 1, mouth);
-    g.r(x + 7, y + 9, 1, 1, mouth);
-    const drip = Math.floor((t * 2) % 3);
-    g.r(x + 9, y + 4 + drip, 1, 2, R.glass[2]);
-  } else if (mood === 'good') {
-    g.r(x + 3, y + 8, 1, 1, mouth);
-    g.r(x + 7, y + 8, 1, 1, mouth);
-    g.r(x + 4, y + 9, 3, 1, mouth);
-    g.r(x + 1, y + 8, 2, 1, R.tie[2]);
-    g.r(x + 8, y + 8, 2, 1, R.tie[2]);
-  } else {
-    g.r(x + 4, y + 8, 3, 1, mouth);
-  }
-}
-
-function bubble(g, t, mood) {
-  g.r(73, 2, 36, 1, INK);
-  g.r(73, 15, 36, 1, INK);
-  g.r(72, 3, 1, 12, INK);
-  g.r(109, 3, 1, 12, INK);
-  g.r(73, 3, 36, 12, R.paper[1]);
-  g.r(73, 3, 36, 1, R.paper[2]);
-  g.r(73, 14, 36, 1, R.paper[0]);
-  // The tail is a small arrow on the left edge, pointing at his face.
-  [[71, 10], [70, 11], [69, 12], [70, 13], [71, 14]].forEach(([x, y]) => g.r(x, y, 1, 1, INK));
-  [[72, 11], [72, 12], [72, 13], [71, 11], [71, 12], [71, 13], [70, 12]].forEach(([x, y]) => g.r(x, y, 1, 1, R.paper[1]));
-  if (mood === 'good') {
-    [0, 1].forEach((k) => {
-      g.l(86 + k, 10, 88 + k, 12, R.leaf[1]);
-      g.l(88 + k, 12, 94 + k, 6, R.leaf[1]);
-    });
-    g.l(89, 11, 94, 6, R.leaf[2]);
-  } else if (mood === 'bad') {
-    g.t('!', 88, 5, R.tie[1], 1);
-    g.t('!', 96, 5, Math.floor(t * 3) % 2 === 0 ? R.tie[1] : R.tie[2], 1);
-  } else {
-    g.t('$', 88, 5, Math.floor(t * 2) % 2 === 0 ? R.suit[1] : R.tie[1], 1);
-  }
-}
-
-const draw = (g, t, mood = 'neutral') => {
-  const dy = Math.round(Math.sin(t * 2.4));
-  background(g);
-  window(g, t);
-  chart(g, t);
-  body(g);
-  g.s(HEAD, HEAD_COLORS, HEAD_X, HEAD_Y + dy);
-  face(g, t, mood, dy);
-  desk(g);
-  laptop(g, t);
-  mug(g, t);
-  plant(g, t);
-  bubble(g, t, mood);
-};
-
-module.exports = { draw, HEAD, HEAD_COLORS };
-
-});
-__d("render/year/art/economy", function (module, exports, __r) {
-'use strict';
-
-// Economy: the bars of a market chart that sway, a line through their tops and a spinning coin. After an answer,
-// when it was good the bars climb in green with an arrow up; when it was bad they fall in red with an arrow down.
-// The lower right corner is flat ground, because the month label sits there.
-
-const P = __r("render/palette");
-
-const R = P.ramp;
-const INK = P.ink;
-
-const BASE = Object.freeze([10, 16, 12, 24, 18, 28]);
-const CLIMB = Object.freeze([8, 12, 16, 20, 24, 28]);
-const BAR_X = (k) => 12 + k * 11;
-const FLOOR_Y = 33;
-
-function heights(mood) {
-  if (mood === 'good') return CLIMB;
-  return mood === 'bad' ? [...CLIMB].reverse() : BASE;
-}
-
-const barRamp = (mood, k) => (mood === 'good' ? R.leaf : mood === 'bad' ? R.tie : k % 2 === 0 ? R.leaf : R.tie);
-
-function chart(g, t, mood) {
-  g.r(0, 34, 116, 8, R.floor[1]);
-  g.r(0, 34, 116, 1, R.floor[2]);
-  [8, 16, 24].forEach((y) => { g.alpha(0.2); g.r(7, y, 70, 1, R.paper[0]); });
-  g.alpha(1);
-  g.r(6, 3, 1, 31, R.metal[1]);
-  g.r(6, FLOOR_Y, 72, 1, INK);
-  const tops = heights(mood).map((h, k) => {
-    const sway = Math.round(Math.sin(t * 1.6 + k * 1.1) * 2);
-    const height = Math.max(4, h + sway);
-    g.box(BAR_X(k), FLOOR_Y - height, 8, height, barRamp(mood, k));
-    return [BAR_X(k) + 4, FLOOR_Y - height];
-  });
-  tops.slice(1).forEach(([x, y], k) => g.l(tops[k][0], tops[k][1] - 2, x, y - 2, R.paper[2]));
-  tops.forEach(([x, y]) => g.r(x - 1, y - 3, 3, 3, R.paper[2]));
-}
-
-function coin(g, t) {
-  const spin = Math.max(1, Math.round(Math.abs(Math.cos(t * 2.2)) * 10));
-  g.e(96, 16, spin + 1, 11, INK);
-  g.e(96, 16, spin, 10, R.hazard[1]);
-  g.e(96 - Math.floor(spin / 3), 16 - 2, Math.max(1, Math.floor(spin / 2)), 6, R.hazard[2]);
-  if (spin >= 7) g.t('$', 93, 13, R.hazard[0]);
-}
-
-// An arrow beside the coin: up and green when it went well, down and red when it did not.
-function trend(g, mood) {
-  if (mood === 'neutral') return;
-  const up = mood === 'good';
-  const ramp = up ? R.leaf : R.tie;
-  g.r(107, up ? 11 : 7, 3, 12, ramp[1]);
-  g.r(107, up ? 11 : 7, 1, 12, ramp[2]);
-  for (let i = 0; i < 4; i += 1) {
-    const width = up ? 2 * i + 1 : 7 - 2 * i;
-    g.r(108 - Math.floor(width / 2), up ? 7 + i : 19 + i, width, 1, ramp[1]);
-  }
-}
-
-const draw = (g, t, mood = 'neutral') => {
-  g.sky(...P.sky.market);
-  chart(g, t, mood);
-  coin(g, t);
-  trend(g, mood);
-};
-
-module.exports = { draw };
-
-});
-__d("render/year/art/index", function (module, exports, __r) {
-'use strict';
-
-const { W, H, toolsFor } = __r("render/year/art/tools");
-const client = __r("render/year/art/client");
-const strategy = __r("render/year/art/strategy");
-const economy = __r("render/year/art/economy");
-const rain = __r("render/year/art/rain");
-const snow = __r("render/year/art/snow");
-const water = __r("render/year/art/water");
-const politics = __r("render/year/art/politics");
-const protest = __r("render/year/art/protest");
-const truck = __r("render/year/art/truck");
-const safety = __r("render/year/art/safety");
-const alert = __r("render/year/art/alert");
-const plant = __r("render/year/art/plant");
-
-// The picture on top of each problem: one small pixel scene per theme. A scene wears a mood ('neutral',
-// 'good' or 'bad') once the answer is known; any other value is neutral.
-
-const MOODS = Object.freeze(['neutral', 'good', 'bad']);
-const SCENES = {
-  client: client.draw,
-  plant: plant.draw,
-  strategy: strategy.draw,
-  economy: economy.draw,
-  rain: rain.draw,
-  snow: snow.draw,
-  water: water.draw,
-  politics: politics.draw,
-  protest: protest.draw,
-  truck: truck.draw,
-  safety: safety.draw,
-  alert: alert.draw,
-};
-
-const THEMES = Object.freeze(Object.keys(SCENES));
-
-// Draws the scene of `theme` with its top-left corner at (x, y), clipped to its window.
-function drawArt(ctx, theme, x, y, t = 0, mood = 'neutral') {
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(x, y, W, H);
-  ctx.clip();
-  SCENES[theme](toolsFor(ctx, x, y), t, MOODS.includes(mood) ? mood : 'neutral');
-  ctx.restore();
-}
-
-module.exports = { drawArt, THEMES, ART_W: W, ART_H: H };
-
-});
-__d("render/year/art/plant", function (module, exports, __r) {
-'use strict';
-
-// The plant: a brick factory with sawtooth roofs, a chimney that smokes and a big gear, with a status lamp
-// on the roof. After an answer it wears the mood: when it was good the smoke is white, the windows are lit
-// and the lamp is green; when it was bad the smoke is dark, the windows go out, the gear stutters and the lamp
-// blinks red. The lower right corner is flat ground, because the month label sits there.
-
-const P = __r("render/palette");
-
-const R = P.ramp;
-const INK = P.ink;
-
-const WINDOWS = Object.freeze([12, 28, 44, 60]);
-const GEAR = Object.freeze({ x: 96, y: 20, r: 8 });
-
-function background(g, mood) {
-  g.sky(...(mood === 'bad' ? P.sky.dusk : P.sky.day));
-  g.r(0, 34, 116, 8, R.asphalt[1]);
-  g.r(0, 34, 116, 1, R.asphalt[2]);
-  g.r(0, 33, 116, 1, INK);
-}
-
-// Three sawtooth teeth on the roof: a slope rising to the right and a glass wall that drops straight down.
-function roof(g) {
-  [8, 31, 54].forEach((x0) => {
-    for (let k = 0; k < 20; k += 2) {
-      const h = 2 + Math.floor(k / 3);
-      g.r(x0 + k, 15 - h, 2, h, R.roof[1]);
-      g.r(x0 + k, 15 - h, 2, 1, R.roof[2]);
-      g.r(x0 + k, 14 - h, 2, 1, INK);
-    }
-    g.r(x0 + 20, 7, 3, 9, R.glass[1]);
-    g.r(x0 + 20, 7, 3, 1, R.glass[2]);
-    g.r(x0 + 23, 7, 1, 9, INK);
-  });
-}
-
-function building(g, t, mood) {
-  g.box(6, 15, 72, 19, R.brick);
-  const lit = mood === 'bad' ? [false, false, true, false] : [true, true, true, true];
-  WINDOWS.forEach((x, i) => {
-    g.r(x - 1, 20, 11, 9, INK);
-    const on = lit[i] && !(mood === 'bad' && Math.floor(t * 4) % 2 === 0);
-    g.r(x, 21, 9, 7, on ? P.gold : R.city[0]);
-    if (on) g.r(x, 21, 9, 1, R.hazard[2]);
-    g.r(x + 4, 21, 1, 7, INK);
-  });
-  g.box(38, 26, 5, 8, R.roof);
-}
-
-function chimney(g, t, mood) {
-  g.box(63, 6, 9, 10, R.brick);
-  g.r(62, 5, 11, 2, INK);
-  g.r(63, 5, 9, 1, R.brick[2]);
-  const puffs = mood === 'bad' ? 5 : 3;
-  const tone = mood === 'bad' ? R.asphalt[2] : mood === 'good' ? P.white : R.cloud[2];
-  for (let j = 0; j < puffs; j += 1) {
-    const phase = (t * 0.5 + j / puffs) % 1;
-    g.alpha(0.9 - phase * 0.9);
-    g.d(68 + Math.round(phase * 9 + Math.sin(t * 1.3 + j * 2)), 3 - Math.round(phase), 1 + Math.round(phase), tone);
-  }
-  g.alpha(1);
-}
-
-// A gear whose spoke turns; when things go badly it advances in jerks.
-function gear(g, t, mood) {
-  const angle = mood === 'bad' ? Math.floor(t * 3) * 0.5 : t * 1.2;
-  for (let k = 0; k < 8; k += 1) {
-    const a = angle + (k * Math.PI) / 4;
-    const x = Math.round(GEAR.x + Math.cos(a) * (GEAR.r + 1));
-    const y = Math.round(GEAR.y + Math.sin(a) * (GEAR.r + 1));
-    g.r(x - 2, y - 2, 5, 5, INK);
-    g.r(x - 1, y - 1, 3, 3, R.metal[2]);
-  }
-  g.d(GEAR.x, GEAR.y, GEAR.r, INK);
-  g.d(GEAR.x, GEAR.y, GEAR.r - 1, R.metal[1]);
-  g.d(GEAR.x - 2, GEAR.y - 2, 2, R.metal[2]);
-  g.l(GEAR.x, GEAR.y, Math.round(GEAR.x + Math.cos(angle) * (GEAR.r - 2)), Math.round(GEAR.y + Math.sin(angle) * (GEAR.r - 2)), R.metal[0]);
-  g.d(GEAR.x, GEAR.y, 2, R.metal[0]);
-}
-
-// A lamp on the wall tells the state of the plant; when it goes well two glints twinkle over the roof.
-function lamp(g, t, mood) {
-  g.r(79, 16, 5, 6, INK);
-  const color = mood === 'good' ? R.leaf[2] : mood === 'bad' ? (Math.floor(t * 3) % 2 === 0 ? R.tie[1] : R.tie[0]) : R.hazard[1];
-  g.r(80, 17, 3, 4, color);
-  if (mood !== 'good') return;
-  if (Math.floor(t * 1.5) % 2 === 0) g.glint(86, 8, P.white);
-  if (Math.floor(t * 1.5 + 1) % 2 === 0) g.glint(14, 8, P.white);
-}
-
-const draw = (g, t, mood = 'neutral') => {
-  background(g, mood);
-  gear(g, t, mood);
-  building(g, t, mood);
-  roof(g);
-  chimney(g, t, mood);
-  lamp(g, t, mood);
-};
-
-module.exports = { draw };
-
-});
-__d("render/year/art/politics", function (module, exports, __r) {
-'use strict';
-
-// Politics: a government building with a pediment and columns, a flag that waves and a bubble with a question.
-// After an answer, when it was good the flag flies high and the bubble shows a tick; when it was bad a storm
-// gathers, the flag drops to half mast and the bubble shows an alarm. The lower right corner is flat plaza.
-
-const P = __r("render/palette");
-
-const R = P.ramp;
-const INK = P.ink;
-
-const COLUMNS = Object.freeze([28, 38, 48, 58, 68]);
-
-function building(g) {
-  g.box(22, 30, 62, 4, R.stone);
-  g.box(25, 27, 56, 3, R.stone);
-  COLUMNS.forEach((x) => g.box(x, 15, 6, 12, R.stone));
-  g.box(24, 11, 58, 4, R.stone);
-  for (let i = 0; i < 8; i += 1) {
-    const half = Math.round(i * 3.5);
-    g.r(53 - half - 1, 3 + i, 1, 1, INK);
-    g.r(53 + half + 1, 3 + i, 1, 1, INK);
-    g.r(53 - half, 3 + i, half + 1, 1, R.stone[2]);
-    g.r(54, 3 + i, half, 1, R.stone[1]);
-  }
-  g.d(53, 8, 2, INK);
-  g.d(53, 8, 1, R.hazard[1]);
-  g.r(52, 5, 3, 1, R.stone[0]);
-}
-
-function flag(g, t, mood) {
-  const top = mood === 'bad' ? 15 : 5;
-  g.r(11, 3, 3, 30, INK);
-  g.r(12, 3, 1, 30, R.metal[2]);
-  g.d(12, 2, 1, R.hazard[1]);
-  for (let x = 0; x < 16; x += 1) {
-    const wave = Math.round(Math.sin(t * 3 + x * 0.5) * (mood === 'bad' ? 1 : 2) * (x / 15));
-    g.r(14 + x, top + wave, 1, 4, R.tie[1]);
-    g.r(14 + x, top + 4 + wave, 1, 4, R.paper[2]);
-    g.r(14 + x, top - 1 + wave, 1, 1, INK);
-    g.r(14 + x, top + 8 + wave, 1, 1, INK);
-  }
-}
-
-// The bubble: a question, a tick or an alarm.
-function bubble(g, t, mood) {
-  g.box(92, 4, 18, 12, R.paper);
-  g.r(95, 16, 3, 2, INK);
-  g.r(96, 16, 1, 1, R.paper[1]);
-  if (mood === 'good') {
-    g.l(97, 10, 99, 12, R.leaf[1]);
-    g.l(99, 12, 104, 7, R.leaf[1]);
-    g.l(98, 10, 100, 12, R.leaf[1]);
-    g.l(100, 12, 105, 7, R.leaf[1]);
-  } else if (mood === 'bad') {
-    g.t('!', 99, 6, Math.floor(t * 3) % 2 === 0 ? R.tie[1] : R.tie[2]);
-  } else {
-    g.t('?', 99, 6, Math.floor(t * 2) % 2 === 0 ? R.hazard[0] : R.suit[1]);
-  }
-}
-
-// A storm gathers over the building when it went badly: dark clouds that drift a little.
-const STORM = Object.freeze([[30, 6, 5], [37, 5, 5], [44, 6, 5], [84, 7, 5]]);
-function storm(g, t) {
-  const dx = Math.round(Math.sin(t * 0.5) * 2);
-  STORM.forEach(([x, y, r]) => g.d(x + dx, y + 2, r, R.cloud[0]));
-  STORM.forEach(([x, y, r]) => g.d(x + dx, y, r, R.cloud[0]));
-  STORM.forEach(([x, y, r]) => g.d(x + dx - 1, y - 2, Math.max(2, r - 3), R.cloud[1]));
-}
-
-const draw = (g, t, mood = 'neutral') => {
-  g.sky(...P.sky.dusk);
-  g.r(0, 34, 116, 8, R.stone[0]);
-  g.r(0, 34, 116, 1, R.stone[1]);
-  if (mood === 'bad') storm(g, t);
-  building(g);
-  flag(g, t, mood);
-  bubble(g, t, mood);
-  if (mood === 'good' && Math.floor(t * 2) % 2 === 0) g.glint(53, 7, P.white);
-};
-
-module.exports = { draw };
-
-});
-__d("render/year/art/protest", function (module, exports, __r) {
-'use strict';
-
-// Protest: a street at night with a skyline, a lamp and a crowd with signs that sway. After an answer, when it was
-// good the crowd thins out and the signs show a tick; when it was bad it grows, the signs shout and the horizon
-// glows red. The lower right corner is flat street, because the month label sits there.
-
-const P = __r("render/palette");
-
-const R = P.ramp;
-const INK = P.ink;
-
-const CROWD = Object.freeze({ neutral: [14, 34, 54, 74], good: [24, 52, 80], bad: [10, 26, 42, 58, 74, 90] });
-const COATS = Object.freeze([R.tie, R.suit, R.leaf, R.hazard, R.city, R.clay]);
-const SKYLINE = Object.freeze([[0, 14, 12], [12, 20, 10], [22, 11, 14], [36, 18, 9], [45, 13, 12], [57, 21, 10], [67, 12, 13], [80, 17, 10], [90, 10, 12], [102, 19, 14]]);
-
-function skyline(g, t) {
-  SKYLINE.forEach(([x, top, w], k) => {
-    g.r(x, top, w, 34 - top, R.roof[0]);
-    g.r(x, top, w, 1, R.roof[1]);
-    for (let y = top + 3; y < 30; y += 5) {
-      if ((x + y + Math.floor(t * 0.3 + k)) % 3 === 0) g.r(x + 3, y, 2, 2, P.gold);
-    }
-  });
-}
-
-function lamp(g) {
-  g.r(106, 8, 2, 26, R.metal[0]);
-  g.box(102, 5, 10, 4, R.metal);
-  g.alpha(0.18);
-  g.e(107, 13, 8, 7, P.gold);
-  g.alpha(1);
-  g.r(104, 9, 6, 1, P.gold);
-}
-
-// One person with a sign on a stick, swaying. Calm crowds hold ticks; angry ones hold alarms.
-function person(g, x, t, k, mood) {
-  const sway = Math.round(Math.sin(t * 2 + k));
-  const coat = COATS[k % COATS.length];
-  g.r(x + sway, 10, 1, 12, R.wood[0]);
-  g.box(x - 6 + sway, 2, 13, 9, R.paper);
-  if (mood === 'good') {
-    g.l(x - 3 + sway, 7, x - 1 + sway, 9, R.leaf[1]);
-    g.l(x - 1 + sway, 9, x + 3 + sway, 4, R.leaf[1]);
-  } else {
-    g.t('!', x - 2 + sway, 4, R.tie[1]);
-  }
-  g.d(x, 22, 3, INK);
-  g.d(x, 22, 2, R.skin[1]);
-  g.l(x - 4, 27, x + sway - 1, 21, coat[1]);
-  g.l(x + 4, 27, x + sway + 1, 21, coat[1]);
-  g.box(x - 5, 25, 11, 9, coat);
-}
-
-const draw = (g, t, mood = 'neutral') => {
-  g.sky(...P.sky.street);
-  if (mood === 'bad') {
-    g.alpha(0.3);
-    g.r(0, 20, 116, 14, R.tie[1]);
-    g.alpha(1);
-  }
-  skyline(g, t);
-  lamp(g);
-  (CROWD[mood] || CROWD.neutral).forEach((x, k) => person(g, x, t, k, mood));
-  g.r(0, 34, 116, 8, R.asphalt[0]);
-  g.r(0, 34, 116, 1, R.asphalt[1]);
-};
-
-module.exports = { draw };
-
-});
-__d("render/year/art/rain", function (module, exports, __r) {
-'use strict';
-
-// Rain: storm clouds, streaks of rain that fall, a wet road with puddles. After an answer, when it was good the
-// rain thins out and the sun comes through; when it was bad it pours and lightning strikes. The lower right
-// corner is flat road, because the month label sits there.
-
-const P = __r("render/palette");
-
-const R = P.ramp;
-const INK = P.ink;
-
-// Cloud puffs as [x, y, radius]: three overlapping discs make one cloud.
-const CLOUDS = Object.freeze([[[30, 9, 6], [38, 7, 7], [46, 10, 6]], [[64, 8, 5], [72, 6, 6], [80, 9, 5]]]);
-const DROPS = Object.freeze({ neutral: 16, good: 7, bad: 26 });
-
-function cloud(g, t, parts, drift, tone) {
-  const dx = Math.round(Math.sin(t * 0.4 + drift) * 3);
-  parts.forEach(([x, y, r]) => g.d(x + dx, y + 2, r, tone[0]));
-  parts.forEach(([x, y, r]) => g.d(x + dx, y, r, tone[1]));
-  parts.forEach(([x, y, r]) => g.d(x + dx - 1, y - 2, Math.max(2, r - 3), tone[2]));
-}
-
-// The sun comes through the gap when it went well, with turning rays.
-function sun(g, t) {
-  g.d(98, 10, 7, INK);
-  g.d(98, 10, 6, R.hazard[1]);
-  g.d(96, 8, 2, R.hazard[2]);
-  for (let k = 0; k < 8; k += 1) {
-    const a = t * 0.5 + (k * Math.PI) / 4;
-    g.l(98 + Math.round(Math.cos(a) * 8), 10 + Math.round(Math.sin(a) * 8), 98 + Math.round(Math.cos(a) * 10), 10 + Math.round(Math.sin(a) * 10), R.hazard[1]);
-  }
-}
-
-function road(g, t) {
-  g.r(0, 27, 116, 7, R.asphalt[1]);
-  g.r(0, 27, 116, 1, R.asphalt[2]);
-  g.r(0, 34, 116, 8, R.asphalt[0]);
-  g.r(0, 34, 116, 1, R.asphalt[1]);
-  [[18, 30, 9], [36, 31, 7]].forEach(([x, y, rx], k) => {
-    g.e(x, y, rx, 2, R.water[1]);
-    g.e(x - 2, y - 1, Math.max(2, rx - 4), 1, R.water[2]);
-    const ripple = (t * 1.2 + k * 0.5) % 1;
-    g.alpha(0.8 - ripple * 0.8);
-    g.e(x, y, 2 + Math.round(ripple * (rx - 3)), 1 + Math.round(ripple), R.paper[2]);
-  });
-  g.alpha(1);
-}
-
-function rain(g, t, mood) {
-  const color = mood === 'bad' ? R.glass[2] : R.glass[1];
-  for (let k = 0; k < DROPS[mood]; k += 1) {
-    const x = 2 + ((k * 9 + t * 8) % 112);
-    const y = 15 + ((k * 7 + t * 36) % 12);
-    g.l(Math.round(x), Math.round(y), Math.round(x) - 2, Math.round(y) + 4, color);
-  }
-}
-
-// A bolt for a tenth of a second every three seconds.
-function lightning(g, t) {
-  if (t % 3.1 > 0.12) return;
-  [[30, 12, 25, 19], [25, 19, 30, 21], [30, 21, 23, 30]].forEach(([a, b, c, d]) => {
-    g.l(a, b, c, d, R.hazard[2]);
-    g.l(a + 1, b, c + 1, d, R.hazard[1]);
-  });
-}
-
-const draw = (g, t, mood = 'neutral') => {
-  g.sky(...(mood === 'good' ? P.sky.dusk : P.sky.storm));
-  if (mood === 'good') sun(g, t);
-  const tone = mood === 'bad' ? [R.cloud[0], R.cloud[0], R.cloud[1]] : [R.cloud[0], R.cloud[1], R.cloud[2]];
-  CLOUDS.forEach((parts, k) => cloud(g, t, parts, k * 2, tone));
-  road(g, t);
-  rain(g, t, DROPS[mood] ? mood : 'neutral');
-  if (mood === 'bad') lightning(g, t);
-};
-
-module.exports = { draw };
-
-});
-__d("render/year/art/safety", function (module, exports, __r) {
-'use strict';
-
-// Safety: a hazard sign that flashes over a factory floor and a worker in a hard hat and vest. After an answer,
-// when it was good the sign turns green with a tick and the worker gives a thumbs up; when it was bad it blinks
-// red, sparks fly and the worker clutches his head. The lower right corner is flat floor, because the month
-// label sits there.
-
-const P = __r("render/palette");
-
-const R = P.ramp;
-const INK = P.ink;
-
-const SIGN = Object.freeze({ x: 76, top: 3, height: 25 });
-
-function floor(g, t) {
-  g.r(0, 29, 116, 5, INK);
-  const run = Math.floor(t * 8) % 12;
-  for (let x = -12; x < 116; x += 12) {
-    const left = Math.max(0, x + run);
-    const right = Math.min(116, x + run + 6);
-    if (right > left) g.r(left, 30, right - left, 3, R.hazard[1]);
-  }
-  g.r(0, 34, 116, 8, R.asphalt[1]);
-  g.r(0, 34, 116, 1, R.asphalt[2]);
-}
-
-// A warning triangle: black outline, a coloured field and a mark in the middle.
-function sign(g, t, mood) {
-  const ramp = mood === 'good' ? R.leaf : mood === 'bad' ? R.tie : R.hazard;
-  const rate = mood === 'bad' ? 2 : 1.25;
-  const lit = Math.floor(t * rate) % 2 === 0;
-  for (let i = 0; i < SIGN.height; i += 1) {
-    const half = Math.round(i * 0.8);
-    const y = SIGN.top + i;
-    g.r(SIGN.x - half - 1, y, 2 * half + 3, 1, INK);
-    g.r(SIGN.x - half + 1, y, Math.max(0, 2 * half - 1), 1, lit ? ramp[2] : ramp[1]);
-  }
-  g.r(SIGN.x - 20, SIGN.top + SIGN.height, 41, 1, INK);
-  if (mood === 'good') {
-    g.l(SIGN.x - 6, 19, SIGN.x - 2, 23, INK);
-    g.l(SIGN.x - 2, 23, SIGN.x + 6, 13, INK);
-    g.l(SIGN.x - 5, 19, SIGN.x - 1, 23, INK);
-    g.l(SIGN.x - 1, 23, SIGN.x + 7, 13, INK);
-  } else {
-    g.t('!', SIGN.x - 2, 13, INK, 2);
-  }
-}
-
-// The worker, from the left: hard hat, face, a vest with a reflective band, trousers.
-function worker(g, t, mood) {
-  const shake = mood === 'bad' ? Math.round(Math.sin(t * 25)) : 0;
-  g.box(8, 18, 16, 11, R.hazard);
-  g.r(9, 22, 14, 2, R.paper[2]);
-  g.box(10, 28, 5, 5, R.suit);
-  g.box(17, 28, 5, 5, R.suit);
-  g.d(16 + shake, 11, 6, INK);
-  g.d(16 + shake, 11, 5, R.hazard[1]);
-  g.d(14 + shake, 9, 2, R.hazard[2]);
-  g.d(16 + shake, 15, 4, INK);
-  g.d(16 + shake, 15, 3, R.skin[1]);
-  g.r(10 + shake, 12, 13, 1, INK);
-  g.r(11 + shake, 13, 11, 1, R.hazard[0]);
-  g.r(14 + shake, 14, 1, 2, INK);
-  g.r(18 + shake, 14, 1, 2, INK);
-  g.r(14 + shake, 17, 5, 1, mood === 'bad' ? INK : R.tie[0]);
-  if (mood === 'good') {
-    g.box(25, 17, 4, 7, R.skin);
-    g.r(26, 14, 2, 4, R.skin[1]);
-  }
-  if (mood === 'bad') {
-    g.box(24 + shake, 6, 4, 6, R.skin);
-    if (Math.floor(t * 6) % 2 === 0) g.glint(32, 10, R.hazard[2]);
-    if (Math.floor(t * 6 + 1) % 2 === 0) g.glint(4, 8, R.hazard[2]);
-  }
-}
-
-const draw = (g, t, mood = 'neutral') => {
-  g.sky(...P.sky.dark);
-  floor(g, t);
-  sign(g, t, mood);
-  worker(g, t, mood);
-};
-
-module.exports = { draw };
-
-});
-__d("render/year/art/snow", function (module, exports, __r) {
-'use strict';
-
-// Snow: two snowy peaks with pines, flakes that fall and drifts on the ground. After an answer, when it was good
-// the sun comes up behind the peaks and the snow glints; when it was bad the blizzard thickens and the wind
-// blows. The lower right corner is flat snow, because the month label sits there.
-
-const P = __r("render/palette");
-
-const R = P.ramp;
-const INK = P.ink;
-
-const FLAKES = Object.freeze({ neutral: 18, good: 9, bad: 36 });
-
-// A peak: its left face in the light, its right face in shadow, a snow cap, a 1 px outline.
-function mountain(g, cx, base, height, cap) {
-  for (let i = 0; i < height; i += 1) {
-    const half = Math.round(i * 0.9);
-    const y = base - height + 1 + i;
-    const snowy = i < cap + (i % 3 === 0 ? 1 : 0);
-    g.r(cx - half - 1, y, 1, 1, INK);
-    g.r(cx + half + 1, y, 1, 1, INK);
-    g.r(cx - half, y, half + 1, 1, snowy ? R.snow[2] : R.rock[2]);
-    g.r(cx + 1, y, half, 1, snowy ? R.snow[0] : R.rock[0]);
-    if (!snowy) g.r(cx - half, y, Math.max(0, half - 1), 1, R.rock[1]);
-  }
-  g.r(cx - Math.round(height * 0.9) - 1, base, Math.round(height * 1.8) + 3, 1, INK);
-}
-
-function pine(g, x, base, size) {
-  g.r(x, base - 2, 2, 2, R.wood[0]);
-  for (let i = 0; i < 3; i += 1) {
-    const half = size - i;
-    g.r(x + 1 - half - 1, base - 3 - i * 3, 2 * half + 2, 1, INK);
-    g.r(x + 1 - half, base - 4 - i * 3, 2 * half, 3, i % 2 === 0 ? R.leaf[0] : R.leaf[1]);
-  }
-  g.r(x, base - 12, 2, 1, R.snow[2]);
-}
-
-function ground(g) {
-  g.r(0, 30, 116, 4, R.snow[2]);
-  g.r(0, 34, 116, 8, R.snow[1]);
-  g.r(0, 34, 116, 1, R.snow[2]);
-  [[14, 30], [40, 31], [70, 30], [92, 31]].forEach(([x, y]) => g.r(x, y, 9, 1, R.snow[0]));
-}
-
-function flakes(g, t, mood) {
-  for (let k = 0; k < FLAKES[mood]; k += 1) {
-    const wind = mood === 'bad' ? t * 6 : 0;
-    const x = (((k * 13 + Math.sin(t * 1.5 + k) * 3 + wind) % 112) + 112) % 112;
-    const y = (k * 5 + t * (mood === 'bad' ? 20 : 12)) % 30;
-    g.r(Math.round(x), Math.round(y), 2, 2, P.white);
-  }
-}
-
-const draw = (g, t, mood = 'neutral') => {
-  g.sky(...(mood === 'bad' ? P.sky.dusk : P.sky.cold));
-  if (mood === 'good') {
-    g.d(14, 26, 8, R.hazard[1]);
-    g.d(14, 26, 5, R.hazard[2]);
-  }
-  mountain(g, 34, 33, 25, 9);
-  mountain(g, 80, 33, 20, 7);
-  pine(g, 10, 33, 3);
-  pine(g, 17, 33, 2);
-  pine(g, 102, 33, 3);
-  ground(g);
-  flakes(g, t, FLAKES[mood] ? mood : 'neutral');
-  if (mood === 'good' && Math.floor(t * 2) % 2 === 0) g.glint(34, 12, P.white);
-  if (mood === 'good' && Math.floor(t * 2 + 1) % 2 === 0) g.glint(80, 17, P.white);
-};
-
-module.exports = { draw };
-
-});
-__d("render/year/art/strategy", function (module, exports, __r) {
-'use strict';
-
-// Strategy: a dartboard under a night sky and an arrow that flies in, sticks and shivers. After an answer, when
-// it was good the arrow lands in the bullseye and a glint shines; when it was bad it misses the board and a red
-// cross marks the spot. The lower right corner is flat ground, because the month label sits there.
-
-const P = __r("render/palette");
-
-const R = P.ramp;
-const INK = P.ink;
-
-const BOARD = Object.freeze({ x: 40, y: 17 });
-const RINGS = Object.freeze([[14, R.tie[1]], [11, P.white], [8, R.tie[1]], [5, P.white], [2, R.hazard[1]]]);
-const START = Object.freeze({ x: 88, y: 12 });
-const MISS = Object.freeze({ x: 60, y: 11 });
-// The arrow's tail is this far from its tip.
-const TAIL = Object.freeze({ dx: 20, dy: -6 });
-const CYCLE = 2.6;
-const FLIGHT = 1.2;
-const STARS = Object.freeze([[8, 6], [18, 23], [28, 4], [78, 27], [104, 6], [110, 20]]);
-
-// The board: a glow when it went well, dimmed when it did not, so the mood shows at any moment of the flight.
-function board(g, mood) {
-  g.r(39, 31, 3, 3, R.wood[1]);
-  if (mood === 'good') {
-    g.alpha(0.3);
-    g.d(BOARD.x, BOARD.y, 17, R.hazard[2]);
-    g.alpha(1);
-  }
-  g.d(BOARD.x, BOARD.y, 15, INK);
-  RINGS.forEach(([radius, color]) => g.d(BOARD.x, BOARD.y, radius, color));
-  g.d(BOARD.x - 5, BOARD.y - 6, 1, P.white);
-  if (mood === 'bad') {
-    g.alpha(0.45);
-    g.d(BOARD.x, BOARD.y, 15, INK);
-    g.alpha(1);
-  }
-}
-
-function stars(g, t) {
-  STARS.forEach(([x, y], k) => {
-    if (Math.floor(t * 0.8 + k * 0.37) % 3 !== 0) g.r(x, y, 1, 1, R.paper[2]);
-    else g.glint(x, y, R.glass[2]);
-  });
-}
-
-// The arrow flies in, sticks for a moment shivering, stays, and fades before it comes again.
-function arrow(g, t, mood) {
-  const target = mood === 'bad' ? MISS : BOARD;
-  const cycle = t % CYCLE;
-  const flight = Math.min(1, cycle / FLIGHT);
-  const eased = 1 - (1 - flight) ** 2;
-  const shiver = flight >= 1 && cycle < FLIGHT + 0.3 ? Math.round(Math.sin(cycle * 40)) : 0;
-  const x = Math.round(START.x + (target.x - START.x) * eased);
-  const y = Math.round(START.y + (target.y - START.y) * eased) + shiver;
-  g.alpha(cycle > CYCLE - 0.4 ? Math.max(0, (CYCLE - cycle) / 0.4) : 1);
-  g.l(x, y, x + TAIL.dx, y + TAIL.dy, R.wood[2]);
-  g.l(x, y + 1, x + TAIL.dx, y + TAIL.dy + 1, R.wood[1]);
-  g.r(x - 1, y - 1, 3, 3, R.metal[2]);
-  g.l(x + TAIL.dx - 3, y + TAIL.dy, x + TAIL.dx + 1, y + TAIL.dy - 3, R.tie[1]);
-  g.l(x + TAIL.dx - 3, y + TAIL.dy + 1, x + TAIL.dx + 1, y + TAIL.dy + 4, R.tie[1]);
-  g.alpha(1);
-  return flight >= 1;
-}
-
-const draw = (g, t, mood = 'neutral') => {
-  g.sky(...P.sky.night);
-  g.r(0, 34, 116, 8, R.floor[1]);
-  g.r(0, 34, 116, 1, R.floor[2]);
-  stars(g, t);
-  board(g, mood);
-  const landed = arrow(g, t, mood);
-  if (!landed) return;
-  if (mood === 'good') g.glint(BOARD.x + 4, BOARD.y - 4, Math.floor(t * 3) % 2 === 0 ? P.white : R.hazard[2]);
-  if (mood === 'bad') {
-    g.l(MISS.x - 3, MISS.y - 3, MISS.x + 3, MISS.y + 3, R.tie[1]);
-    g.l(MISS.x + 3, MISS.y - 3, MISS.x - 3, MISS.y + 3, R.tie[1]);
-  }
-};
-
-module.exports = { draw };
-
-});
-__d("render/year/art/tools", function (module, exports, __r) {
-'use strict';
-
-const { rect, disc, ellipse, line, bands, sprite } = __r("render/draw");
-const { text } = __r("render/ui");
-const P = __r("render/palette");
-
-// Every scene is 116x42 and paints its own sky and ground; the lower right corner stays calm because
-// the month label sits there.
-const W = 116;
-const H = 42;
-
-// Local helpers so every scene can use coordinates from its own top-left corner. `s` draws a sprite
-// given as rows of letters ('.' is transparent) with a map from letter to colour.
-const toolsFor = (ctx, ox, oy) => ({
-  r: (x, y, w, h, c) => rect(ctx, ox + x, oy + y, w, h, c),
-  d: (x, y, radius, c) => disc(ctx, ox + x, oy + y, radius, c),
-  e: (x, y, rx, ry, c) => ellipse(ctx, ox + x, oy + y, rx, ry, c),
-  l: (x0, y0, x1, y1, c) => line(ctx, ox + x0, oy + y0, ox + x1, oy + y1, c),
-  s: (rows, colors, x, y) => sprite(ctx, rows, colors, ox + x, oy + y),
-  // A rectangle with a 1 px outline, its base tone inside, the light tone along its top and left edges and
-  // the shadow tone along its bottom and right edges (light falls from the top left).
-  box: (x, y, w, h, ramp) => {
-    rect(ctx, ox + x, oy + y, w, h, P.ink);
-    rect(ctx, ox + x + 1, oy + y + 1, w - 2, h - 2, ramp[1]);
-    rect(ctx, ox + x + 1, oy + y + 1, w - 2, 1, ramp[2]);
-    rect(ctx, ox + x + 1, oy + y + 1, 1, h - 2, ramp[2]);
-    rect(ctx, ox + x + 1, oy + y + h - 2, w - 2, 1, ramp[0]);
-    rect(ctx, ox + x + w - 2, oy + y + 1, 1, h - 2, ramp[0]);
-  },
-  // A small cross of light, for a glint.
-  glint: (x, y, color) => {
-    rect(ctx, ox + x - 1, oy + y, 3, 1, color);
-    rect(ctx, ox + x, oy + y - 1, 1, 3, color);
-  },
-  sky: (top, bottom) => bands(ctx, ox, oy, W, H, top, bottom, 2),
-  t: (str, x, y, c, scale = 1) => text(ctx, str, ox + x, oy + y, c, { scale }),
-  alpha: (a) => { ctx.globalAlpha = a; },
-});
-
-// A triangle pointing up, base on row `base`, `height` rows tall.
-const peak = (g, cx, base, height, color) => {
-  for (let i = 0; i < height; i += 1) g.r(cx - Math.round(i * 0.9), base - i, Math.round(i * 1.8) + 1, 1, color);
-};
-
-module.exports = { W, H, toolsFor, peak };
-
-});
-__d("render/year/art/truck", function (module, exports, __r) {
-'use strict';
-
-// The truck: a delivery truck on a road, wheels turning, lane marks sliding by and exhaust puffing. After an
-// answer, when it was good a green tick shines on its side and the exhaust is clean; when it was bad the hood
-// smokes dark and a red lamp blinks on the cab. The lower right corner is flat verge, because the month label sits there.
-
-const P = __r("render/palette");
-
-const R = P.ramp;
-const INK = P.ink;
-
-const WHEELS = Object.freeze([22, 58]);
-const ROAD_Y = 27;
-
-function road(g, t) {
-  g.r(0, ROAD_Y, 116, 7, R.asphalt[1]);
-  g.r(0, ROAD_Y, 116, 1, R.asphalt[2]);
-  for (let k = 0; k < 6; k += 1) {
-    const x = Math.round(((k * 22 - t * 30) % 132 + 132) % 132) - 14;
-    g.r(Math.max(0, x), 30, Math.min(10, Math.max(0, 116 - Math.max(0, x)), x < 0 ? 10 + x : 10), 1, R.hazard[2]);
-  }
-  g.r(0, 34, 116, 8, R.asphalt[0]);
-  g.r(0, 34, 116, 1, R.asphalt[1]);
-}
-
-function wheel(g, x, t) {
-  g.d(x, 27, 5, INK);
-  g.d(x, 27, 4, R.asphalt[2]);
-  g.d(x, 27, 2, R.metal[1]);
-  const a = t * 6;
-  g.l(x - Math.round(Math.cos(a) * 3), 27 - Math.round(Math.sin(a) * 3), x + Math.round(Math.cos(a) * 3), 27 + Math.round(Math.sin(a) * 3), R.metal[0]);
-}
-
-function body(g, mood) {
-  g.box(10, 9, 38, 17, R.paper);
-  g.r(11, 17, 36, 3, R.city[1]);
-  g.box(48, 13, 18, 13, R.tie);
-  g.r(56, 15, 8, 6, INK);
-  g.r(57, 16, 6, 4, R.glass[1]);
-  g.r(57, 16, 6, 1, R.glass[2]);
-  g.r(10, 25, 56, 2, INK);
-  if (mood === 'good') {
-    g.l(24, 12, 26, 14, R.leaf[1]);
-    g.l(26, 14, 32, 8, R.leaf[1]);
-    g.l(25, 12, 27, 14, R.leaf[1]);
-    g.l(27, 14, 33, 8, R.leaf[1]);
-  }
-}
-
-function exhaust(g, t, mood) {
-  const puffs = mood === 'bad' ? 5 : 3;
-  const tone = mood === 'bad' ? R.asphalt[2] : mood === 'good' ? P.white : R.cloud[1];
-  g.r(53, 9, 3, 5, R.metal[0]);
-  for (let j = 0; j < puffs; j += 1) {
-    const phase = (t * 0.8 + j / puffs) % 1;
-    g.alpha(0.85 - phase * 0.85);
-    g.d(54 - Math.round(phase * 5), 8 - Math.round(phase * 4), 1 + Math.round(phase * 2), tone);
-  }
-  g.alpha(1);
-}
-
-const draw = (g, t, mood = 'neutral') => {
-  g.sky(...P.sky.day);
-  g.r(0, 22, 116, 5, R.rock[1]);
-  road(g, t);
-  WHEELS.forEach((x) => wheel(g, x, t));
-  body(g, mood);
-  exhaust(g, t, mood);
-  if (mood === 'bad') {
-    g.box(53, 10, 4, 3, Math.floor(t * 3) % 2 === 0 ? R.tie : R.hazard);
-  }
-};
-
-module.exports = { draw };
-
-});
-__d("render/year/art/water", function (module, exports, __r) {
-'use strict';
-
-// Water: a dry riverbed under a hard sun, a stranded boat, a drop that falls and ripples. After an answer, when
-// it was good the river fills and the boat floats; when it was bad the earth cracks further and a tumbleweed
-// rolls by. The lower right corner is flat earth, because the month label sits there.
-
-const P = __r("render/palette");
-
-const R = P.ramp;
-const INK = P.ink;
-
-const CRACKS = Object.freeze([[8, 28, 16, 31], [16, 31, 12, 33], [44, 27, 52, 29], [52, 29, 50, 33], [96, 28, 104, 30], [104, 30, 100, 33]]);
-const MORE_CRACKS = Object.freeze([[28, 29, 36, 31], [36, 31, 34, 33], [76, 27, 84, 30], [84, 30, 82, 33], [108, 27, 112, 33]]);
-
-function sun(g) {
-  g.alpha(0.25);
-  g.d(98, 10, 10, R.hazard[2]);
-  g.alpha(1);
-  g.d(98, 10, 7, INK);
-  g.d(98, 10, 6, R.hazard[1]);
-  g.d(96, 8, 2, R.hazard[2]);
-}
-
-function earth(g, mood) {
-  g.r(0, 26, 116, 8, R.sand[1]);
-  g.r(0, 26, 116, 1, R.sand[2]);
-  g.r(0, 34, 116, 8, R.sand[0]);
-  g.r(0, 34, 116, 1, R.sand[1]);
-  if (mood === 'good') return;
-  [...CRACKS, ...(mood === 'bad' ? MORE_CRACKS : [])].forEach(([a, b, c, d]) => g.l(a, b, c, d, R.sand[0]));
-}
-
-// When it went well the river is back, with moving waves.
-function river(g, t) {
-  g.r(0, 27, 116, 7, R.water[1]);
-  g.r(0, 27, 116, 1, R.water[2]);
-  for (let k = 0; k < 6; k += 1) g.r(Math.round((k * 20 + t * 10) % 108), 29 + (k % 2) * 2, 8, 1, R.water[2]);
-  g.r(0, 33, 116, 1, R.water[0]);
-}
-
-function boat(g, t, mood) {
-  const dy = mood === 'good' ? Math.round(Math.sin(t * 2)) : 0;
-  g.r(73, 11 + dy, 1, 14, INK);
-  for (let i = 0; i < 10; i += 1) g.r(74, 13 + dy + i, Math.round(i * 1.2) + 1, 1, R.paper[1]);
-  g.box(60, 25 + dy, 28, 6, R.wood);
-}
-
-// The drop falls from the sky and ripples where it lands; the ripple stays left of the month label.
-function drop(g, t) {
-  const y = 3 + ((t * 26) % 22);
-  g.box(23, Math.round(y), 3, 4, R.water);
-  if (y > 18) {
-    const ripple = (y - 18) / 4;
-    g.alpha(0.9 - ripple * 0.6);
-    g.e(24, 29, 2 + Math.round(ripple * 8), 1, R.water[2]);
-    g.alpha(1);
-  }
-}
-
-function tumbleweed(g, t) {
-  const x = 8 + ((t * 12) % 100);
-  const y = 29 + Math.round(Math.sin(t * 8));
-  g.d(Math.round(x), y, 3, INK);
-  g.d(Math.round(x), y, 2, R.sand[2]);
-  g.l(Math.round(x) - 2, y - 1, Math.round(x) + 2, y + 1, R.sand[0]);
-}
-
-const draw = (g, t, mood = 'neutral') => {
-  g.sky(...P.sky.hot);
-  sun(g);
-  earth(g, mood);
-  if (mood === 'good') river(g, t);
-  boat(g, t, mood);
-  if (mood !== 'good') drop(g, t);
-  if (mood === 'bad') tumbleweed(g, t);
-};
-
-module.exports = { draw };
 
 });
 __d("render/year/close", function (module, exports, __r) {
@@ -10074,7 +8496,7 @@ const ui = __r("render/ui");
 const panel = __r("render/hd/panel");
 const scene = __r("render/hd/scene");
 const surface = __r("render/hd/surface");
-const wings = __r("render/hd/wings");
+const ambient = __r("render/hd/ambient");
 const frame = __r("render/year/frame");
 const wide = __r("render/year/wide");
 
@@ -10170,7 +8592,7 @@ function fitRows(rows, max) {
 
 function drawClose(ctx, app) {
   const run = app.year;
-  wings.draw(ctx, app);
+  ambient.draw(ctx, app);
   wide.drawStatementPanel(ctx, app, { pl: run.pl, before: run.lastClose.plBefore });
   drawChart(ctx, app);
   const plan = screenFx.closePlan(app);
@@ -10221,28 +8643,22 @@ module.exports = { drawClose, drawRescue, drawShock, TEXT_ROWS, TEXT_WRAP, RESCU
 __d("render/year/frame", function (module, exports, __r) {
 'use strict';
 
-// The furniture shared by the year screens: the background, the voice plate, the picture
-// window, the reviewer badge and the OI / meter gauges.
+// What the year screens share: the colours of the kinds of answer, of the voices and of the meters, and the OI / meter gauges.
 
 const anim = __r("ui/anim");
 const fx = __r("ui/fx");
-const layout = __r("ui/layout");
 const { operatingMargin } = __r("model");
 const { tierFor } = __r("tiers");
-const screenFx = __r("ui/screen-fx");
 const rules = __r("year/rules");
 const { tx } = __r("ui/tx");
 const P = __r("render/palette");
-const { rect, bands } = __r("render/draw");
+const { rect } = __r("render/draw");
 const ui = __r("render/ui");
 const { TIER_COLOR } = __r("render/scenes/hud");
-const { drawArt, ART_W, ART_H } = __r("render/year/art/index");
 
 // The four kinds of answer have one colour each, wherever they are shown.
 const DECISION_COLOR = Object.freeze({ smart: P.green, temp: P.orange, plac: P.cyan, ign: P.red });
 const VOICE_AREA = Object.freeze({ cliente: 'sales', planta: 'ops', entorno: 'procurement', estrategia: 'mgmt' });
-// The gauges window: four bars one under the other, then up to two rows of notes.
-const GAUGES = Object.freeze({ top: 6, pitch: 10, bar: Object.freeze({ x: 26, y: 1, w: 84, h: 5 }), notes: Object.freeze([46, 55]) });
 const OI_SCALE = 25;
 // After an answer a gauge drains (or fills) over GAUGE_SECONDS and leaves a pale ghost of what it lost for GHOST_SECONDS.
 const GAUGE_DELAY = 0.15;
@@ -10257,63 +8673,7 @@ const meterColor = (value) => {
   return P.red;
 };
 
-function drawBackdrop(ctx, top = '#1c2658', bottom = '#080c24') {
-  bands(ctx, 0, 0, layout.W, layout.PLAY_H, top, bottom, 4);
-}
-
-// A coloured stamp with the voice that raises the problem (client, plant, environment...).
-function drawPlate(ctx, label, color) {
-  const { x, y, w, h } = layout.PLATE;
-  ui.windowBox(ctx, x, y, w, h, { alpha: 0.95 });
-  rect(ctx, x + 4, y + 3, ui.textWidth(label) + 6, 9, color);
-  ui.text(ctx, label, x + 7, y + 4, P.white);
-}
-
 const voiceColor = (voice) => P.area[VOICE_AREA[voice]];
-
-function drawArtWindow(ctx, app, theme, mood = screenFx.sceneMood(app)) {
-  const { x, y, w, h } = layout.ART;
-  ui.windowBox(ctx, x, y, w, h);
-  drawArt(ctx, theme, x + Math.floor((w - ART_W) / 2), y + Math.floor((h - ART_H) / 2), app.t, mood);
-}
-
-// "Month 3 - 2/4" in the corner of the picture.
-function drawStage(ctx, app) {
-  const { monthIdx, problemIdx } = app.year;
-  const label = tx(app, 'year.stage', { m: monthIdx + 1, p: problemIdx + 1 });
-  ui.textRight(ctx, label, layout.ART.x + layout.ART.w - 5, layout.ART.y + 35, P.white, { shadow: P.ink });
-}
-
-// The segment the problem is about (hotels, hospitals, food, industry), in the top left corner of the picture, on a dark
-// chip so it reads over a pale sky or the snow too.
-const SEGMENT_CHIP_ALPHA = 0.78;
-function drawSegmentTag(ctx, app, problem) {
-  const { x, y } = layout.ART;
-  const label = tx(app, `year.seg.${problem.segment}`);
-  ctx.globalAlpha = SEGMENT_CHIP_ALPHA;
-  rect(ctx, x + 3, y + 3, ui.textWidth(label) + 4, 9, P.ink);
-  ctx.globalAlpha = 1;
-  ui.text(ctx, label, x + 5, y + 4, P.white);
-}
-
-// Reviewer mode: a badge and the exact meter values over the picture, on the right so the segment keeps the left corner.
-function drawReviewBadge(ctx, app) {
-  if (!app.review) return;
-  const { x, y, w } = layout.ART;
-  ui.textRight(ctx, tx(app, 'year.review.on'), x + w - 5, y + 4, P.red, { shadow: P.ink });
-  const { C, P: plant, E } = app.year.meters;
-  const values = [['C', C], ['P', plant], ['E', E]].map(([key, value]) => `${tx(app, `year.meterTag.${key}`)[0]}${Math.round(value)}`).join(' ');
-  ui.textRight(ctx, values, x + w - 5, y + 14, P.white, { shadow: P.ink });
-}
-
-// The legacy gauges window: a panel at layout.DASH with plain bars. A screen with another look passes its own geometry.
-const LEGACY_GAUGES = Object.freeze({
-  at: layout.DASH,
-  gauges: GAUGES,
-  label: 6,
-  panel: (ctx, box) => ui.windowBox(ctx, box.x, box.y, box.w, box.h, { alpha: 0.95 }),
-  bar: ui.bar,
-});
 
 function drawGauge(ctx, geo, row, label, fraction, color, marks, blink = false, ghost = null) {
   const { x, y } = geo.at;
@@ -10340,7 +8700,7 @@ function drawNotes(ctx, geo, notes) {
 // OI against the plan (and the rescue goal once rescued) plus the three meters, with ticks
 // where the meters start to cost OI (42) and where the crisis begins (32). `atStake` is the
 // meter the current problem is about; it blinks when it is in crisis.
-function drawMeters(ctx, app, { notes = [], atStake = null, geo = LEGACY_GAUGES } = {}) {
+function drawMeters(ctx, app, { notes = [], atStake = null, geo }) {
   const run = app.year;
   geo.panel(ctx, geo.at);
   // On the result of an answer the gauges go from their old value to the new one (calm mode shows the new one).
@@ -10366,18 +8726,7 @@ function drawMeters(ctx, app, { notes = [], atStake = null, geo = LEGACY_GAUGES 
   drawNotes(ctx, geo, notes);
 }
 
-module.exports = {
-  drawBackdrop,
-  drawPlate,
-  drawArtWindow,
-  drawStage,
-  drawSegmentTag,
-  drawReviewBadge,
-  drawMeters,
-  voiceColor,
-  meterColor,
-  DECISION_COLOR,
-};
+module.exports = { drawMeters, voiceColor, meterColor, DECISION_COLOR };
 
 });
 __d("render/year/index", function (module, exports, __r) {
@@ -10385,16 +8734,17 @@ __d("render/year/index", function (module, exports, __r) {
 
 // Routes the year-mode scenes (and their overlays) to the modules that draw them.
 
-const { drawProblem, drawResult } = __r("render/year/problem");
+const wide = __r("render/year/wide");
 const { drawClose, drawRescue, drawShock } = __r("render/year/close");
 const { drawVerdict, drawOver } = __r("render/year/verdict");
 const menus = __r("render/year/menus");
 const overlays = __r("render/year/overlays");
 const workshop = __r("render/year/workshop");
+const rank = __r("render/year/rank");
 
 const PHASES = Object.freeze({
-  problem: drawProblem,
-  result: drawResult,
+  problem: wide.drawScreen,
+  result: wide.drawScreen,
   monthClose: drawClose,
   shock: drawShock,
   rescue: drawRescue,
@@ -10411,7 +8761,7 @@ const SCENES = Object.freeze({
   year: drawYear,
   workshop: workshop.drawWorkshopMenu,
   setup: workshop.drawSetup,
-  rank: workshop.drawRank,
+  rank: rank.drawRank,
 });
 
 const OVERLAYS = Object.freeze({ rules: overlays.drawRules, quit: overlays.drawQuit, note: overlays.drawNote });
@@ -10624,168 +8974,192 @@ function drawNote(ctx, app) {
 module.exports = { drawRules, drawQuit, drawNote, planRules, RULES, GRADES, QUIT, NOTE };
 
 });
-__d("render/year/problem", function (module, exports, __r) {
+__d("render/year/rank", function (module, exports, __r) {
 'use strict';
 
-// The three screens of one problem: its brief (who is asking and why now), the question with its four answers, and
-// what happened after answering. They share the P&L statement, the voice plate, the picture and the gauges.
+// The facilitator's ranking: a strip with the title, a dot for each view and the game of the ranking, a body with the view (a table of the
+// teams with the OI of each of them month by month, the problems where they split, or the decision map of the selected team) and, under it,
+// the last notice and what is being typed. Each team keeps the colour it was given for the whole session.
 
-const layout = __r("ui/layout");
-const engine = __r("year/engine");
-const rules = __r("year/rules");
+const L = __r("ui/layout-rank");
 const view = __r("ui/year-view");
-const anim = __r("ui/anim");
-const screenFx = __r("ui/screen-fx");
-const { tx, signed } = __r("ui/tx");
+const { rankedTeams, noticeText } = __r("ui/rank-view");
+const { tx, num } = __r("ui/tx");
+const { formatCode } = __r("rng");
+const rules = __r("year/rules");
+const { splits } = __r("year/standings");
 const P = __r("render/palette");
-const { rect } = __r("render/draw");
-const fxDraw = __r("render/fx");
+const { tint } = __r("render/draw");
 const ui = __r("render/ui");
-const { drawStatement } = __r("render/scenes/statement");
-const frame = __r("render/year/frame");
+const hud = __r("render/scenes/hud");
+const panel = __r("render/hd/panel");
+const ambient = __r("render/hd/ambient");
+const { DECISION_COLOR } = __r("render/year/frame");
 
-const WRAP = 40;
-// The brief: up to five rows of text, a rule and three facts under it.
-const BRIEF = Object.freeze({ rows: view.BRIEF_ROWS, ruleY: 59, factsY: 63 });
-const RESULT_WRAP = 38;
-const MAX_RESULT_ROWS = 8;
-const ROW_H = 9;
-const NEGLIGIBLE = 0.05;
-const TONE = frame.DECISION_COLOR;
-const SELECTED_ROW = 'rgba(248,208,72,0.22)';
+const TEAM_COLORS = P.team;
+const VOICES = Object.freeze(['cliente', 'planta', 'entorno', 'estrategia']);
+const TYPES = Object.freeze(['smart', 'temp', 'plac', 'ign']);
+const SELECTED_ROW_ALPHA = 0.22;
+const EMPTY_Y = 110;
 
-// What the gauges window says under its bars: what the highlighted answer does (reviewer) or
-// that the meter at stake is in crisis.
-function gaugeNotes(app) {
-  if (app.review) {
-    const review = view.cardReview(app, app.cursor);
-    return review.lines.map((text) => ({ text, color: TONE[review.a] }));
-  }
-  return view.crisisLines(app).map((text) => ({ text, color: P.orange }));
+const teamColor = (team) => TEAM_COLORS[team.color % TEAM_COLORS.length];
+const caret = (app) => (Math.floor(app.t * 2) % 2 === 0 ? '_' : ' ');
+const outcomeColor = (outcome) => hud.TIER_COLOR[view.OUTCOME_TIER[outcome]];
+const fillBox = (ctx, color, x, y, w, h) => {
+  ctx.fillStyle = color;
+  ctx.fillRect(x, y, w, h);
+};
+
+// The strip with the title, a dot per view (the current one is lit) and the game of the ranking, and the body under it.
+function drawFrame(ctx, app) {
+  const { rank } = app;
+  const h = L.HEAD;
+  ambient.draw(ctx, app);
+  panel.glass(ctx, h);
+  ui.text(ctx, tx(app, 'rank.title'), h.titleX, h.y + h.titleY, P.gold);
+  for (let i = 0; i < h.views; i += 1) fillBox(ctx, i === rank.view ? P.gold : P.dim, h.dots.x + i * h.dots.gap, h.y + h.dots.y, h.dots.size, h.dots.size);
+  if (rank.code !== null) ui.textRight(ctx, tx(app, 'rank.code', { code: formatCode(rank.code) }), h.codeRight, h.y + h.titleY, P.gray);
+  panel.glass(ctx, L.BODY);
 }
 
-// Backdrop, P&L statement, voice plate, picture and gauges. Returns the current problem.
-function drawTop(ctx, app, { before = null, focus = null, notes = [], delta = null, growth = null } = {}) {
-  const run = app.year;
-  const problem = engine.currentProblem(run);
-  frame.drawBackdrop(ctx);
-  drawStatement(ctx, app, { pl: run.pl, before, focus, delta, growth, progress: anim.rollProgress(app.phaseT) });
-  frame.drawPlate(ctx, tx(app, `year.voice.${problem.voice}`), frame.voiceColor(problem.voice));
-  frame.drawArtWindow(ctx, app, problem.theme);
-  frame.drawStage(ctx, app);
-  frame.drawSegmentTag(ctx, app, problem);
-  frame.drawReviewBadge(ctx, app);
-  frame.drawMeters(ctx, app, { notes, atStake: view.crisisMeter(app) });
-  return problem;
+// The line under the body: the latest notice, and what is being typed (its last letters, if it is longer than the line).
+function drawEntry(ctx, app) {
+  const { rank } = app;
+  const { notice } = rank;
+  const e = L.ENTRY;
+  if (notice) ui.text(ctx, noticeText(app, notice), e.x, e.noticeY, notice.kind === 'ok' ? P.green : P.orange);
+  else ui.text(ctx, tx(app, 'rank.hint'), e.x, e.noticeY, P.dim);
+  ui.text(ctx, tx(app, 'rank.entry'), e.x, e.promptY, P.gray);
+  const x = e.x + 6 * (tx(app, 'rank.entry').length + 1);
+  const room = Math.floor((L.HEAD.x + L.HEAD.w - 6 - x) / 6) - 1;
+  if (rank.entry === '') ui.text(ctx, tx(app, 'rank.entry.empty'), x, e.promptY, P.dim);
+  else ui.text(ctx, `${rank.entry.slice(-room)}${caret(app)}`, x, e.promptY, P.white);
 }
 
-const drawRule = (ctx, d, y) => rect(ctx, d.x + 4, d.y + y, d.w - 8, 1, P.winShade);
-
-// The title of the problem and, once the unit has been rescued, how far it is from the goal.
-function drawHeading(ctx, app, title) {
-  const d = layout.DIALOGUE;
-  ui.text(ctx, title, d.x + 6, d.y + d.titleY, P.gold);
-  if (app.year.rescued) {
-    const reached = engine.oiOf(app.year) >= rules.RESCUE_GOAL;
-    ui.textRight(ctx, tx(app, 'year.goal', { n: rules.RESCUE_GOAL }), d.x + d.w - 6, d.y + d.titleY, reached ? P.green : P.orange);
-  }
-}
-
-// The title of the problem and the situation in two rows (the brief already told it in full).
-function drawSituation(ctx, app, problem) {
-  const d = layout.DIALOGUE;
-  drawHeading(ctx, app, tx(app, `year.${problem.id}.title`));
-  ui.paragraph(ctx, ui.wrapLines([{ text: tx(app, `year.${problem.id}.scene`) }], WRAP), d.x + 6, d.y + d.sceneY, ROW_H);
-  drawRule(ctx, d, d.firstRule);
-}
-
-// The P&L line an answer moves; never which way it goes nor the effect on the meters.
-const drawChip = (ctx, app, chip, right, y) => ui.textRight(ctx, tx(app, chip.key), right, y, P.gray);
-
-function drawAnswer(ctx, app, card, i) {
-  const r = layout.answerRect(i);
-  const selected = i === app.cursor;
-  if (selected) {
-    rect(ctx, r.x, r.y, r.w, r.h, SELECTED_ROW);
-    if (Math.floor(app.t * 3) % 2 === 0) ui.text(ctx, '>', r.x + 3, r.y + 1, P.gold);
-  }
-  ui.text(ctx, tx(app, card.nameKey), r.x + 12, r.y + 1, selected ? P.white : P.gray);
-  if (app.review) ui.textRight(ctx, tx(app, card.tagKey), r.x + r.w - 4, r.y + 1, TONE[card.a]);
-  else drawChip(ctx, app, card.chip, r.x + r.w - 4, r.y + 1);
-}
-
-// The highlighted answer in full.
-function drawDetail(ctx, app, cards) {
-  const d = layout.DIALOGUE;
-  drawRule(ctx, d, d.secondRule);
-  ui.paragraph(ctx, ui.wrapLines([{ text: tx(app, cards[app.cursor].descKey) }], WRAP), d.x + 6, d.y + d.detailY, ROW_H);
-}
-
-// The facts of the brief, one row each: the label in gray and the value in white.
-function drawFacts(ctx, facts, d) {
-  facts.forEach((fact, i) => {
-    const y = d.y + BRIEF.factsY + i * ROW_H;
-    const label = `${fact.label}:`;
-    ui.text(ctx, label, d.x + 6, y, P.gray);
-    ui.text(ctx, fact.value, d.x + 6 + ui.textWidth(label) + 4, y, P.white);
-  });
-}
-
-// Before the answers: who is asking and why now, typed in, and three facts to weigh it by.
-function drawBrief(ctx, app) {
-  drawTop(ctx, app, { notes: view.crisisLines(app).map((text) => ({ text, color: P.orange })) });
-  const d = layout.DIALOGUE;
-  const brief = view.briefOf(app);
-  ui.windowBox(ctx, d.x, d.y, d.w, d.h);
-  drawHeading(ctx, app, brief.title);
-  const rows = ui.wrapLines([{ text: brief.text }], view.BRIEF_COLS).slice(0, BRIEF.rows);
-  ui.paragraph(ctx, anim.revealRows(rows, anim.typedChars(app.phaseT)), d.x + 6, d.y + d.sceneY, ROW_H);
-  drawRule(ctx, d, BRIEF.ruleY);
-  drawFacts(ctx, brief.facts, d);
-}
-
-function drawProblem(ctx, app) {
-  if (view.briefing(app)) return drawBrief(ctx, app);
-  const cards = view.yearCards(app);
-  const problem = drawTop(ctx, app, { focus: cards[app.cursor].line, notes: gaugeNotes(app) });
-  const d = layout.DIALOGUE;
-  ui.windowBox(ctx, d.x, d.y, d.w, d.h);
-  drawSituation(ctx, app, problem);
-  cards.forEach((card, i) => drawAnswer(ctx, app, card, i));
-  drawDetail(ctx, app, cards);
-}
-
-// How each meter moved after the answer, e.g. "CLI +3,5".
-function drawDeltaStrip(ctx, app, x, y) {
-  view.meterDeltas(app.year.last).forEach(({ key, delta }, i) => {
-    const cx = x + i * 76;
-    const tag = tx(app, `year.meterTag.${key}`);
-    const value = signed(app, delta);
-    const color = delta > NEGLIGIBLE ? P.green : delta < -NEGLIGIBLE ? P.red : P.white;
-    ui.text(ctx, tag, cx, y, P.gray);
-    ui.text(ctx, value, cx + ui.textWidth(tag) + 4, y, color);
-    if (Math.abs(delta) >= NEGLIGIBLE) {
-      ui.triangle(ctx, cx + ui.textWidth(tag) + ui.textWidth(value) + 7, y + 1, delta > 0 ? 1 : -1, color);
+function drawTableRows(ctx, app, all, ranked) {
+  const t = L.TABLE;
+  const { cols } = t;
+  ui.text(ctx, tx(app, 'rank.col.team'), cols.name, t.headerY, P.gray);
+  ui.text(ctx, tx(app, 'rank.col.result'), cols.result, t.headerY, P.gray);
+  ui.textRight(ctx, tx(app, 'rank.col.oi'), cols.oiRight, t.headerY, P.gray);
+  ui.text(ctx, tx(app, 'rank.col.weak'), cols.weak, t.headerY, P.gray);
+  panel.rule(ctx, t.bandX + 2, t.ruleY, t.bandW - 4);
+  all.slice(0, t.rows).forEach((team, i) => {
+    const y = t.top + i * t.pitch;
+    const listed = ranked.includes(team);
+    if (i === app.rank.selected) fillBox(ctx, tint(P.gold, SELECTED_ROW_ALPHA), t.bandX, y - 2, t.bandW, t.pitch - 1);
+    ui.text(ctx, listed ? String(i + 1) : '-', cols.rank, y, P.dim);
+    ui.text(ctx, team.name, cols.name, y, listed ? teamColor(team) : P.dim);
+    if (!listed) {
+      ui.text(ctx, tx(app, 'rank.other'), cols.result, y, P.orange);
+      return;
     }
+    ui.text(ctx, tx(app, `rank.res.${team.outcome}`), cols.result, y, outcomeColor(team.outcome));
+    ui.textRight(ctx, `${num(app, team.margin)}%`, cols.oiRight, y, P.white);
+    const weakKey = rules.weakest(team.meters);
+    ui.text(ctx, `${tx(app, `year.meterTag.${weakKey}`)} ${Math.round(team.meters[weakKey])}`, cols.weak, y, P.gray);
   });
 }
 
-// The sparks or smoke rise from the foot of the picture, inside its window.
-const burstOrigin = () => ({ x: layout.ART.x + Math.floor(layout.ART.w / 2), y: layout.ART.y + layout.ART.h - 10 });
-
-function drawResult(ctx, app) {
-  drawTop(ctx, app, { before: app.year.last.plBefore, delta: app.year.last.delta.oi, growth: view.resultGrowth(app) });
-  const plan = screenFx.resultPlan(app);
-  if (plan) fxDraw.drawFlash(ctx, plan, app.phaseT);
-  const d = layout.DIALOGUE;
-  ui.windowBox(ctx, d.x, d.y, d.w, d.h);
-  const rows = ui.wrapLines(view.resultLines(app), RESULT_WRAP).slice(0, MAX_RESULT_ROWS);
-  ui.paragraph(ctx, rows, d.x + 8, d.y + 6, ROW_H);
-  drawDeltaStrip(ctx, app, d.x + 8, d.y + d.h - 12);
-  if (plan) fxDraw.drawBurst(ctx, plan, app.phaseT, burstOrigin(), layout.ART);
+// The axes of the chart, the plan as a dotted line and the scale and the months in grey.
+function drawChartFrame(ctx, app) {
+  const { plot } = L.CHART;
+  ui.text(ctx, tx(app, 'rank.chart'), L.CHART.titleX, L.CHART.titleY, P.gray);
+  fillBox(ctx, tint(P.hd.glassEdge, 0.3), plot.left, plot.bottom, plot.right - plot.left, 0.5);
+  fillBox(ctx, tint(P.hd.glassEdge, 0.3), plot.left, plot.top, 0.5, plot.bottom - plot.top);
+  for (let x = plot.left; x < plot.right; x += 5) fillBox(ctx, tint(P.hd.glassSelect, 0.8), x, L.chartY(rules.PLAN_OI), 3, 0.75);
+  [[0, '0'], [rules.PLAN_OI, '15'], [plot.max, '30']].forEach(([value, label]) => ui.textRight(ctx, label, plot.left - 3, L.chartY(value) - 3, P.dim));
+  [0, 5, 11].forEach((month) => ui.text(ctx, String(month + 1), L.chartX(month) - 2, plot.bottom + 4, P.dim));
 }
 
-module.exports = { drawProblem, drawResult, drawTop, gaugeNotes, WRAP, RESULT_WRAP, MAX_RESULT_ROWS };
+// OI margin month by month for every ranked team; the selected one is drawn last and a little thicker.
+function drawChart(ctx, app, ranked) {
+  const chosen = ranked[app.rank.selected];
+  drawChartFrame(ctx, app);
+  const order = [...ranked].sort((a, b) => (a === chosen ? 1 : 0) - (b === chosen ? 1 : 0));
+  order.forEach((team) => {
+    ctx.strokeStyle = teamColor(team);
+    ctx.lineWidth = team === chosen ? 1.6 : 0.9;
+    ctx.beginPath();
+    team.series.forEach((value, month) => (month === 0 ? ctx.moveTo(L.chartX(month), L.chartY(value)) : ctx.lineTo(L.chartX(month), L.chartY(value))));
+    ctx.stroke();
+    team.series.forEach((value, month) => fillBox(ctx, teamColor(team), L.chartX(month) - 1, L.chartY(value) - 1, 2, 2));
+  });
+}
+
+function drawEmpty(ctx, app, key) {
+  ui.textCenter(ctx, tx(app, key), L.BODY.x + L.BODY.w / 2, EMPTY_Y, P.gray);
+}
+
+function drawRankTable(ctx, app) {
+  const { ranked, all } = rankedTeams(app.rank);
+  if (all.length === 0) return drawEmpty(ctx, app, 'rank.empty');
+  drawTableRows(ctx, app, all, ranked);
+  return drawChart(ctx, app, ranked);
+}
+
+// Where the teams chose differently: each problem with one coloured square per ranked team, in the order of the ranking.
+function drawRankSplit(ctx, app) {
+  const s = L.SPLIT;
+  const { ranked } = rankedTeams(app.rank);
+  ui.text(ctx, tx(app, 'rank.split.title'), s.nameX, s.titleY, P.gold);
+  TYPES.reduce((x, a) => {
+    ui.text(ctx, tx(app, `year.tag.${a}`), x, s.legendY, DECISION_COLOR[a]);
+    return x + 6 * (tx(app, `year.tag.${a}`).length + 1);
+  }, s.nameX);
+  const found = splits(ranked, s.rows);
+  if (found.length === 0) return drawEmpty(ctx, app, 'rank.split.none');
+  ranked.forEach((_, i) => ui.text(ctx, String(i + 1), s.squaresX + i * s.step + 5, s.headerY, P.dim));
+  return found.forEach((item, row) => {
+    const y = s.top + row * s.pitch;
+    ui.text(ctx, tx(app, `year.${item.problemId}.title`), s.nameX, y + 1, P.white);
+    item.byTeam.forEach((a, i) => {
+      if (a !== null) fillBox(ctx, DECISION_COLOR[a], s.squaresX + i * s.step, y, s.w, s.h);
+    });
+  });
+}
+
+// The numbers of the team beside its grid: its result, its margin, how many answers of each kind, its rescue or ruin and its OI by month.
+function drawMapSide(ctx, app, team) {
+  const { side } = L.MAP;
+  ui.text(ctx, tx(app, `rank.res.${team.outcome}`), side.x, side.resultY, outcomeColor(team.outcome));
+  ui.text(ctx, `${num(app, team.margin)}%`, side.x, side.marginY, P.white);
+  TYPES.forEach((a, i) => {
+    const y = side.typesTop + i * side.typePitch;
+    fillBox(ctx, DECISION_COLOR[a], side.x, y, 8, 8);
+    ui.text(ctx, `${tx(app, `year.tag.${a}`)} ${team.counts[a]}`, side.x + 12, y + 1, P.gray);
+  });
+  if (team.rescued) ui.text(ctx, tx(app, 'rank.map.rescued', { m: team.rescueMonth }), side.x, side.notesY, P.orange);
+  if (team.bankruptMonth) ui.text(ctx, tx(app, 'rank.map.bankrupt', { m: team.bankruptMonth }), side.x, side.notesY + 10, P.red);
+  team.series.forEach((value, month) => {
+    const height = Math.max(1, Math.round((Math.max(0, value) * side.bars.h) / L.CHART.plot.max));
+    const color = value >= rules.PLAN_OI ? P.green : value >= rules.RESCUE_GOAL ? P.orange : P.red;
+    fillBox(ctx, color, side.bars.x + month * side.bars.pitch, side.bars.bottom - height, side.bars.w, height);
+  });
+}
+
+// The year of one team as a grid: a row per month, a column per voice, coloured by the kind of answer chosen, next to its numbers.
+function drawRankMap(ctx, app) {
+  const m = L.MAP;
+  const { all } = rankedTeams(app.rank);
+  const team = all[app.rank.selected];
+  if (!team) return drawEmpty(ctx, app, 'rank.empty');
+  ui.text(ctx, tx(app, 'rank.map.title', { name: team.name }), m.gridX, m.titleY, teamColor(team));
+  VOICES.forEach((voice, c) => ui.textCenter(ctx, tx(app, `rank.voice.${voice}`), m.gridX + c * m.colW + m.cellW / 2, m.headerY, P.gray));
+  for (let month = 0; month < L.MONTHS; month += 1) ui.textRight(ctx, String(month + 1), m.monthX, m.top + month * m.pitch + 1, P.dim);
+  team.decisions.forEach((d) => fillBox(ctx, DECISION_COLOR[d.a], m.gridX + VOICES.indexOf(d.voice) * m.colW, m.top + d.monthIdx * m.pitch, m.cellW, m.cellH));
+  return drawMapSide(ctx, app, team);
+}
+
+const RANK_VIEWS = Object.freeze([drawRankTable, drawRankSplit, drawRankMap]);
+
+function drawRank(ctx, app) {
+  drawFrame(ctx, app);
+  RANK_VIEWS[app.rank.view](ctx, app);
+  drawEntry(ctx, app);
+}
+
+module.exports = { drawRank, TEAM_COLORS };
 
 });
 __d("render/year/report", function (module, exports, __r) {
@@ -10796,38 +9170,29 @@ __d("render/year/report", function (module, exports, __r) {
 // and between brackets when it hurts). It is the page to screenshot and take to a meeting.
 
 const statement = __r("ui/statement");
+const V = __r("ui/layout-verdict");
 const { tx } = __r("ui/tx");
 const P = __r("render/palette");
-const { rect } = __r("render/draw");
+const { tint, rect } = __r("render/draw");
 const ui = __r("render/ui");
+const panel = __r("render/hd/panel");
 
-const WINDOW = Object.freeze({ x: 4, y: 30, w: 248, h: 208 });
-// Vertical positions, from the top of the window.
-const ROWS = Object.freeze({ titleY: 6, ruleY: 17, headerY: 21, top: 36, pitch: 9 });
-// The right edge of each number column, from the left of the window.
-const COLUMNS = Object.freeze([
-  Object.freeze({ key: 'plan', right: 130, label: 'stmt.col.plan' }),
-  Object.freeze({ key: 'real', right: 182, label: 'stmt.col.real' }),
-  Object.freeze({ key: 'variance', right: 238, label: 'stmt.col.var' }),
-]);
-const LABEL_X = 8;
-const RATIO_INDENT = 6;
+const WINDOW = V.REPORT;
+const { columns: COLUMNS, labelX: LABEL_X, ratioIndent: RATIO_INDENT, noteCols: NOTE_COLS } = WINDOW;
 // Positive numbers leave the width of a closing bracket free, so the decimals line up.
 const BRACKET = 6;
-const HEADER_W = 44;
-const TOTAL_BAND = 'rgba(255,255,255,0.09)';
-// 38 columns from the label edge leave a margin before the border of the window.
-const NOTE_COLS = 38;
+const TOTAL_BAND_ALPHA = 0.09;
+const NOTE_PITCH = 10;
 
 const VARIANCE_COLOR = Object.freeze({ '-1': P.red, 0: P.gray, 1: P.green });
 
 // "US$ M" at the left and one blue cell over each column, like the report this is modelled on.
 function drawHeader(ctx, app, box) {
-  ui.text(ctx, tx(app, 'stmt.unit'), box.x + LABEL_X, box.y + ROWS.headerY + 1, P.dim);
+  ui.text(ctx, tx(app, 'stmt.unit'), box.x + LABEL_X, box.y + WINDOW.headerY + 1, P.dim);
   COLUMNS.forEach(({ right, label }) => {
-    const left = box.x + right - HEADER_W + 5;
-    rect(ctx, left, box.y + ROWS.headerY - 1, HEADER_W, 9, P.header);
-    ui.textCenter(ctx, tx(app, label), left + HEADER_W / 2, box.y + ROWS.headerY, P.white);
+    const left = box.x + right - WINDOW.headerW + 5;
+    rect(ctx, left, box.y + WINDOW.headerY - 1, WINDOW.headerW, 9, P.header);
+    ui.textCenter(ctx, tx(app, label), left + WINDOW.headerW / 2, box.y + WINDOW.headerY, P.white);
   });
 }
 
@@ -10837,7 +9202,10 @@ const drawNumber = (ctx, text, negative, right, y, color, slant) =>
 function drawRow(ctx, app, row, y, box) {
   const ratio = row.kind === 'ratio';
   const total = row.kind === 'total';
-  if (total) rect(ctx, box.x + 3, y - 1, box.w - 6, ROWS.pitch, TOTAL_BAND);
+  if (total) {
+    ctx.fillStyle = tint(P.white, TOTAL_BAND_ALPHA);
+    ctx.fillRect(box.x + 4, y - 1, box.w - 8, WINDOW.pitch);
+  }
   const label = ratio ? tx(app, 'stmt.ratio') : tx(app, `line.short.${row.id}`);
   const labelColor = ratio ? P.ratioLabel : total ? P.white : P.gray;
   ui.text(ctx, label, box.x + LABEL_X + (ratio ? RATIO_INDENT : 0), y, labelColor, { bold: total, slant: ratio });
@@ -10850,26 +9218,28 @@ function drawRow(ctx, app, row, y, box) {
 
 function drawReport(ctx, app, v) {
   const box = WINDOW;
-  ui.windowBox(ctx, box.x, box.y, box.w, box.h);
-  ui.text(ctx, tx(app, 'year.report.title'), box.x + LABEL_X, box.y + ROWS.titleY, P.gold);
-  rect(ctx, box.x + 8, box.y + ROWS.ruleY, box.w - 16, 1, P.winShade);
+  panel.glass(ctx, box);
+  ui.text(ctx, tx(app, 'year.report.title'), box.x + LABEL_X, box.y + WINDOW.titleY, P.gold);
+  panel.rule(ctx, box.x + 8, box.y + WINDOW.ruleY, box.w - 16);
   drawHeader(ctx, app, box);
-  v.report.forEach((row, i) => drawRow(ctx, app, row, box.y + ROWS.top + i * ROWS.pitch, box));
-  const noteY = box.y + ROWS.top + v.report.length * ROWS.pitch + 5;
-  ui.paragraph(ctx, ui.wrapLines([{ text: tx(app, 'year.report.note'), tone: 'dim' }], NOTE_COLS), box.x + LABEL_X, noteY, 9);
+  v.report.forEach((row, i) => drawRow(ctx, app, row, box.y + WINDOW.top + i * WINDOW.pitch, box));
+  const noteY = box.y + WINDOW.top + v.report.length * WINDOW.pitch + 5;
+  ui.paragraph(ctx, ui.wrapLines([{ text: tx(app, 'year.report.note'), tone: 'dim' }], NOTE_COLS), box.x + LABEL_X, noteY, NOTE_PITCH);
 }
 
-module.exports = { drawReport, WINDOW, ROWS, COLUMNS, LABEL_X, RATIO_INDENT, BRACKET, NOTE_COLS };
+module.exports = { drawReport, WINDOW, COLUMNS, LABEL_X, RATIO_INDENT, BRACKET, NOTE_COLS };
 
 });
 __d("render/year/verdict", function (module, exports, __r) {
 'use strict';
 
-// The end of the year: the verdict (page 1: the factory, the numbers and the OI bridge;
-// page 2: what happened and what to try next) and the GAME OVER screen that restarts the game.
+// The end of the year: the verdict (page 1: the factory of the ending, the numbers and the OI bridge; page 2: the report of the P&L
+// against the plan; page 3: what happened and what to try next; page 4, for a workshop team: its result code) and the GAME OVER screen
+// that restarts the game. The factory stands in the state the year ended in behind every page.
 
 const anim = __r("ui/anim");
-const layout = __r("ui/layout");
+const L = __r("ui/layout-hd");
+const V = __r("ui/layout-verdict");
 const screenFx = __r("ui/screen-fx");
 const rules = __r("year/rules");
 const view = __r("ui/year-view");
@@ -10877,108 +9247,110 @@ const { OVER_SECONDS } = __r("ui/year-app");
 const { tx } = __r("ui/tx");
 const { formatCode } = __r("rng");
 const P = __r("render/palette");
-const { rect } = __r("render/draw");
 const fxDraw = __r("render/fx");
 const ui = __r("render/ui");
 const hud = __r("render/scenes/hud");
-const { drawSky, drawFactory } = __r("render/factory");
+const panel = __r("render/hd/panel");
+const pill = __r("render/hd/pill");
+const factory = __r("render/hd/factory");
+const surface = __r("render/hd/surface");
 const frame = __r("render/year/frame");
 const report = __r("render/year/report");
 
-const SKY_H = 94;
-const TITLE_SKY_H = 26;
-const TITLE_Y = 8;
-const FEEDBACK_WRAP = 38;
-const FEEDBACK_ROWS = 15;
-const GAUGE = Object.freeze({ x: 136, bar: 24, barW: 62, valueRight: 248, rowStep: 11 });
-const BRIDGE = Object.freeze({ x: 4, y: 98, w: 248, h: 128, axisX: 138, axisW: 100, axisMax: 35 });
-const BRIDGE_ROW = 10;
 // The bridge builds up one bar after another, each growing for BRIDGE_SECONDS (the figures are written from the start).
 const BRIDGE_DELAY = 0.25;
 const BRIDGE_STEP = 0.12;
 const BRIDGE_SECONDS = 0.3;
-// The factory of the first page: where the weather of the ending falls.
-const FACTORY_BOX = Object.freeze({ x: 4, y: 26, w: 120, h: 64 });
-const TITLE_BAND = 'rgba(12,12,28,0.62)';
+const COPIED_SECONDS = 2;
+const BAR_H = 5;
+// The line of the plan across the bridge is drawn this much stronger than the rule between two panes.
+const PLAN_LINE_STRENGTH = 2;
 
 const tierColor = (v) => hud.TIER_COLOR[v.tier];
+const copiedRecently = (app) => app.t - app.copiedAt < COPIED_SECONDS;
+const drawFactory = (ctx, app, tier, at) => factory.draw(ctx, tier, app.t, { calm: app.calm, quality: surface.quality(), at });
 
-// The code of the game in the corner of a page, so two screenshots can be told to be the same year. Where the foot of the
-// window is taken (the report's notes) it goes short on the title row instead.
+// The code of the game in the corner of a page, so two screenshots can be told to be the same year: in full at the foot of the bridge, short
+// on the title row of the report (whose foot is taken by its notes).
 function drawCodeTag(ctx, app, box, onTitle = false) {
   if (app.year.seed === null) return;
   const code = tx(app, onTitle ? 'year.intro.code.short' : 'year.intro.code', { code: formatCode(app.year.seed) });
-  ui.textRight(ctx, code, box.x + box.w - 8, onTitle ? box.y + 6 : box.y + box.h - 12, P.dim);
+  ui.textRight(ctx, code, box.x + box.w - 10, onTitle ? box.y + 8 : box.y + V.BRIDGE.footY, P.dim);
 }
 
-function drawTitle(ctx, app, v) {
-  rect(ctx, 0, TITLE_Y - 4, layout.W, 22, TITLE_BAND);
-  ui.textCenter(ctx, tx(app, v.titleKey), 128, TITLE_Y, tierColor(v), { scale: 2, shadow: P.ink });
+// The verdict on a glass pill at the top, in the colour of the state of the factory.
+const drawTitle = (ctx, app, v) => pill.draw(ctx, tx(app, v.titleKey), tierColor(v), V.TITLE);
+
+// A tick on a meter bar where it starts to cost OI (orange) and where the crisis begins (red).
+function drawMeterTicks(ctx, x, w, top) {
+  [[rules.CRISIS, P.red], [rules.DRAG_BELOW, P.orange]].forEach(([at, color]) => {
+    ctx.fillStyle = color;
+    ctx.fillRect(x + Math.round((w * at) / 100), top - 1, 1, BAR_H + 3);
+  });
 }
 
-// OI against the plan (in % and in money), the growth of the sales and the three meters at the end of the year.
+// OI against the plan (in % and in money), the play time, the growth of the sales and the three meters at the end of the year.
 function drawNumbers(ctx, app, v) {
-  const { x, y, w, h } = { x: 130, y: 26, w: 122, h: 66 };
-  ui.windowBox(ctx, x, y, w, h);
-  ui.text(ctx, v.oiText, GAUGE.x, y + 5, tierColor(v));
-  ui.textRight(ctx, v.moneyText, GAUGE.valueRight, y + 5, P.white);
-  ui.text(ctx, v.planText, GAUGE.x, y + 14, P.gray);
-  if (v.timeText) ui.textRight(ctx, v.timeText, GAUGE.valueRight, y + 14, P.gray);
-  ui.text(ctx, v.growthText, GAUGE.x, y + 23, P[v.growthTone]);
+  const n = V.NUMBERS;
+  const left = n.x + n.pad;
+  const rightEdge = n.x + n.w - n.pad;
+  panel.glass(ctx, n);
+  ui.text(ctx, v.oiText, left, n.y + n.oiY, tierColor(v));
+  ui.textRight(ctx, v.moneyText, rightEdge, n.y + n.oiY, P.white);
+  ui.text(ctx, v.planText, left, n.y + n.planY, P.gray);
+  if (v.timeText) ui.textRight(ctx, v.timeText, rightEdge, n.y + n.planY, P.gray);
+  ui.text(ctx, v.growthText, left, n.y + n.growthY, P[v.growthTone]);
   rules.METER_KEYS.forEach((key, i) => {
-    const top = y + 35 + i * GAUGE.rowStep;
+    const top = n.y + n.metersTop + i * n.meterPitch;
     const value = v.meters[key];
     const color = frame.meterColor(value);
-    ui.text(ctx, tx(app, `year.meterTag.${key}`), GAUGE.x, top, P.gray);
-    ui.bar(ctx, GAUGE.x + GAUGE.bar, top + 1, GAUGE.barW, 5, value / 100, color);
-    [[rules.CRISIS, '#f05858'], [rules.DRAG_BELOW, '#f89848']].forEach(([at, tick]) => {
-      rect(ctx, GAUGE.x + GAUGE.bar + Math.round((GAUGE.barW * at) / 100), top, 1, 7, tick);
-    });
-    ui.textRight(ctx, String(Math.round(value)), GAUGE.valueRight, top, color);
+    ui.text(ctx, tx(app, `year.meterTag.${key}`), left, top, P.gray);
+    panel.bar(ctx, n.x + n.bar.x, top + 1, n.bar.w, BAR_H, value / 100, color);
+    drawMeterTicks(ctx, n.x + n.bar.x, n.bar.w, top + 1);
+    ui.textRight(ctx, String(Math.round(value)), rightEdge, top, color);
   });
 }
 
 // `grown` (0 to 1) is how much of its bar is drawn: it grows from the value it starts at towards the value it ends at.
 function drawBridgeRow(ctx, row, y, last, color, grown = 1) {
-  const scale = BRIDGE.axisW / BRIDGE.axisMax;
+  const b = V.BRIDGE;
+  const scale = b.axisW / b.axisMax;
   const lo = Math.max(0, Math.min(row.from, row.to));
-  const hi = Math.min(BRIDGE.axisMax, Math.max(0, Math.max(row.from, row.to)));
-  const x0 = BRIDGE.x + BRIDGE.axisX + Math.round(lo * scale);
-  const x1 = BRIDGE.x + BRIDGE.axisX + Math.round(hi * scale);
-  ui.text(ctx, row.label, BRIDGE.x + 8, y, last ? P.white : P.gray);
-  ui.textRight(ctx, row.text, BRIDGE.x + 132, y, color);
+  const hi = Math.min(b.axisMax, Math.max(0, Math.max(row.from, row.to)));
+  const x0 = b.x + b.axisX + Math.round(lo * scale);
+  const x1 = b.x + b.axisX + Math.round(hi * scale);
+  ui.text(ctx, row.label, b.x + b.labelX, y, last ? P.white : P.gray);
+  ui.textRight(ctx, row.text, b.x + b.valueRight, y, color);
   const width = Math.max(1, Math.round((x1 - x0) * grown));
-  rect(ctx, row.to >= row.from ? x0 : x1 - width, y + 1, width, 5, color);
+  ctx.fillStyle = color;
+  ctx.fillRect(row.to >= row.from ? x0 : x1 - width, y + 1, width, BAR_H);
 }
 
 // Plan to real as floating bars: every P&L line that moved OI, in the order of the ladder.
 function drawBridge(ctx, app, v) {
-  const { x, y, w, h } = BRIDGE;
-  ui.windowBox(ctx, x, y, w, h);
-  ui.text(ctx, tx(app, 'year.walk.title'), x + 8, y + 6, P.gold);
+  const b = V.BRIDGE;
+  panel.glass(ctx, b);
+  ui.text(ctx, tx(app, 'year.walk.title'), b.x + b.labelX, b.y + b.titleY, P.gold);
   const rows = view.walkRows(app, v.walk);
-  const top = y + 20;
-  const planX = x + BRIDGE.axisX + Math.round((rules.PLAN_OI * BRIDGE.axisW) / BRIDGE.axisMax);
-  rect(ctx, planX, top - 2, 1, rows.length * BRIDGE_ROW, P.winShade);
+  const top = b.y + b.rowsTop;
+  const planX = b.x + b.axisX + Math.round((rules.PLAN_OI * b.axisW) / b.axisMax);
+  panel.vrule(ctx, planX, top - 2, rows.length * b.rowH, PLAN_LINE_STRENGTH);
   rows.forEach((row, i) => {
     const last = i === rows.length - 1;
     const color = last ? tierColor(v) : P[row.tone];
     const grown = app.calm ? 1 : anim.grow(app.phaseT, BRIDGE_DELAY + i * BRIDGE_STEP, BRIDGE_SECONDS);
-    drawBridgeRow(ctx, row, top + i * BRIDGE_ROW, last, color, grown);
+    drawBridgeRow(ctx, row, top + i * b.rowH, last, color, grown);
   });
-  // Above the game code, which keeps the foot of the window to itself.
-  if (v.tagKey) ui.text(ctx, tx(app, v.tagKey), x + 8, y + h - 24, P.orange);
-  drawCodeTag(ctx, app, BRIDGE);
+  if (v.tagKey) ui.text(ctx, tx(app, v.tagKey), b.x + b.labelX, b.y + b.footY, P.orange);
+  drawCodeTag(ctx, app, b);
 }
 
 function drawNumbersPage(ctx, app, v) {
-  frame.drawBackdrop(ctx);
-  drawSky(ctx, 0, 0, layout.W, SKY_H, v.tier, app.t);
-  drawFactory(ctx, v.tier, 4, 26, app.t, 1);
+  drawFactory(ctx, app, v.tier, 'left');
   const plan = screenFx.verdictPlan(app);
   if (plan) {
-    fxDraw.drawAmbient(ctx, plan, app.t, FACTORY_BOX);
-    fxDraw.drawFlash(ctx, plan, app.phaseT, FACTORY_BOX);
+    fxDraw.drawAmbient(ctx, plan, app.t, V.FACTORY_BOX);
+    fxDraw.drawFlash(ctx, plan, app.phaseT, V.FACTORY_BOX);
   }
   drawTitle(ctx, app, v);
   drawNumbers(ctx, app, v);
@@ -10987,8 +9359,7 @@ function drawNumbersPage(ctx, app, v) {
 
 // The P&L of the year against the plan: money, ratios and variances.
 function drawReportPage(ctx, app, v) {
-  frame.drawBackdrop(ctx);
-  drawSky(ctx, 0, 0, layout.W, TITLE_SKY_H, v.tier, app.t);
+  drawFactory(ctx, app, v.tier, 'center');
   drawTitle(ctx, app, v);
   report.drawReport(ctx, app, v);
   drawCodeTag(ctx, app, report.WINDOW, true);
@@ -10996,40 +9367,35 @@ function drawReportPage(ctx, app, v) {
 
 // What happened, in the player's own terms, separated by blank rows.
 function drawFeedbackPage(ctx, app, v) {
-  frame.drawBackdrop(ctx);
-  drawSky(ctx, 0, 0, layout.W, TITLE_SKY_H, v.tier, app.t);
+  const f = V.FEEDBACK;
+  const box = V.PANEL;
+  drawFactory(ctx, app, v.tier, 'center');
   drawTitle(ctx, app, v);
-  const x = 4;
-  const y = 30;
-  ui.windowBox(ctx, x, y, 248, 196);
-  ui.text(ctx, tx(app, 'year.fb.title'), x + 8, y + 8, P.gold);
-  rect(ctx, x + 8, y + 19, 232, 1, P.winShade);
+  panel.glass(ctx, box);
+  ui.text(ctx, tx(app, 'year.fb.title'), box.x + f.left, box.y + f.titleY, P.gold);
+  panel.rule(ctx, box.x + f.left, box.y + f.ruleY, box.w - 2 * f.left);
   const items = v.lines.flatMap((text, i) => [
     ...(i > 0 ? [{ text: ' ' }] : []),
     { text, tone: i === 0 ? 'white' : 'gray' },
   ]);
-  ui.paragraph(ctx, ui.wrapLines(items, FEEDBACK_WRAP).slice(0, FEEDBACK_ROWS), x + 8, y + 26);
+  ui.paragraph(ctx, ui.wrapLines(items, f.wrap).slice(0, f.rows), box.x + f.left, box.y + f.top, f.pitch);
 }
-
-const COPIED_SECONDS = 2;
-const copiedRecently = (app) => app.t - app.copiedAt < COPIED_SECONDS;
 
 // A workshop team's last page: the whole year in one line, ready to copy and send.
 function drawCodePage(ctx, app, v) {
-  frame.drawBackdrop(ctx);
-  drawSky(ctx, 0, 0, layout.W, TITLE_SKY_H, v.tier, app.t);
-  drawTitle(ctx, app, v);
-  const x = 4;
-  const y = 30;
+  const c = V.CODE;
+  const box = V.PANEL;
   const { team, code, result } = app.workshop;
-  ui.windowBox(ctx, x, y, 248, 196);
-  ui.text(ctx, tx(app, 'ws.result.title'), x + 8, y + 8, P.gold);
-  rect(ctx, x + 8, y + 19, 232, 1, P.winShade);
-  ui.text(ctx, tx(app, 'ws.result.team', { name: team, code: formatCode(code) }), x + 8, y + 30, P.white);
-  view.codeLines(result).forEach((row, i) => ui.text(ctx, row, x + 8, y + 50 + i * 10, P.cyan));
-  ui.text(ctx, tx(app, 'ws.result.body'), x + 8, y + 100, P.gray);
-  ui.text(ctx, tx(app, 'ws.result.copy'), x + 8, y + 116, P.gold);
-  if (copiedRecently(app)) ui.text(ctx, tx(app, 'ws.result.copied'), x + 8, y + 132, P.green);
+  drawFactory(ctx, app, v.tier, 'center');
+  drawTitle(ctx, app, v);
+  panel.glass(ctx, box);
+  ui.text(ctx, tx(app, 'ws.result.title'), box.x + c.left, box.y + c.titleY, P.gold);
+  panel.rule(ctx, box.x + c.left, box.y + c.ruleY, box.w - 2 * c.left);
+  ui.text(ctx, tx(app, 'ws.result.team', { name: team, code: formatCode(code) }), box.x + c.left, box.y + c.teamY, P.white);
+  view.codeLines(result).forEach((row, i) => ui.text(ctx, row, box.x + c.left, box.y + c.linesY + i * c.pitch, P.cyan));
+  ui.text(ctx, tx(app, 'ws.result.body'), box.x + c.left, box.y + c.bodyY, P.gray);
+  ui.text(ctx, tx(app, 'ws.result.copy'), box.x + c.left, box.y + c.copyY, P.gold);
+  if (copiedRecently(app)) ui.text(ctx, tx(app, 'ws.result.copied'), box.x + c.left, box.y + c.copiedY, P.green);
 }
 
 const PAGES = Object.freeze([drawNumbersPage, drawReportPage, drawFeedbackPage, drawCodePage]);
@@ -11040,29 +9406,32 @@ function drawVerdict(ctx, app) {
 
 // The workshop's GAME OVER keeps the code on screen: nobody leaves it by itself.
 function drawWorkshopOver(ctx, app) {
+  const w = V.OVER.workshop;
+  const cx = L.W / 2;
   const { team, code, result } = app.workshop;
-  ui.textCenter(ctx, tx(app, 'ws.result.team', { name: team, code: formatCode(code) }), 128, 142, P.white);
-  view.codeLines(result).forEach((row, i) => ui.textCenter(ctx, row, 128, 154 + i * 10, P.cyan));
-  ui.textCenter(ctx, tx(app, 'ws.result.copy'), 128, 180, P.gold);
-  if (copiedRecently(app)) ui.textCenter(ctx, tx(app, 'ws.result.copied'), 128, 192, P.green);
+  ui.textCenter(ctx, tx(app, 'ws.result.team', { name: team, code: formatCode(code) }), cx, w.teamY, P.white, { shadow: P.ink });
+  view.codeLines(result).forEach((row, i) => ui.textCenter(ctx, row, cx, w.linesY + i * w.pitch, P.cyan, { shadow: P.ink }));
+  ui.textCenter(ctx, tx(app, 'ws.result.copy'), cx, w.copyY, P.gold, { shadow: P.ink });
+  if (copiedRecently(app)) ui.textCenter(ctx, tx(app, 'ws.result.copied'), cx, w.copiedY, P.green, { shadow: P.ink });
 }
 
 function drawOver(ctx, app) {
+  const o = V.OVER;
+  const cx = L.W / 2;
   const tier = view.OUTCOME_TIER[app.year.outcome];
-  frame.drawBackdrop(ctx, '#2a0c14', '#08040a');
-  drawSky(ctx, 0, 0, layout.W, 80, tier, app.t);
-  drawFactory(ctx, tier, 68, 8, app.t, 1);
-  ui.textCenter(ctx, tx(app, 'ui.gameOver'), 128, 92, P.red, { scale: 3, shadow: P.ink });
-  ui.textCenter(ctx, tx(app, `year.verdict.${app.year.outcome}`), 128, 122, hud.TIER_COLOR[tier], { shadow: P.ink });
+  drawFactory(ctx, app, tier, 'low');
+  panel.glass(ctx, o.panel);
+  ui.textCenter(ctx, tx(app, 'ui.gameOver'), cx, o.titleY, P.red, { scale: 4, shadow: P.ink });
+  ui.textCenter(ctx, tx(app, `year.verdict.${app.year.outcome}`), cx, o.verdictY, hud.TIER_COLOR[tier], { shadow: P.ink });
   if (app.workshop) {
     drawWorkshopOver(ctx, app);
     return;
   }
-  if (app.year.seed !== null) ui.textCenter(ctx, tx(app, 'year.intro.code', { code: formatCode(app.year.seed) }), 128, 192, P.dim);
-  ui.textCenter(ctx, tx(app, 'year.over.restart'), 128, 142, P.white);
+  ui.textCenter(ctx, tx(app, 'year.over.restart'), cx, o.restartY, P.white, { shadow: P.ink });
   const left = Math.max(0, Math.ceil(OVER_SECONDS - app.phaseT));
-  ui.textCenter(ctx, tx(app, 'year.over.count', { n: left }), 128, 156, P.gold);
-  ui.bar(ctx, 68, 172, 120, 6, 1 - app.phaseT / OVER_SECONDS, P.gold);
+  ui.textCenter(ctx, tx(app, 'year.over.count', { n: left }), cx, o.countY, P.gold, { shadow: P.ink });
+  panel.bar(ctx, cx - o.barW / 2, o.barY, o.barW, BAR_H + 1, 1 - app.phaseT / OVER_SECONDS, P.gold);
+  if (app.year.seed !== null) ui.textCenter(ctx, tx(app, 'year.intro.code', { code: formatCode(app.year.seed) }), cx, o.codeY, P.dim, { shadow: P.ink });
 }
 
 module.exports = { drawVerdict, drawOver };
@@ -11095,9 +9464,12 @@ const panel = __r("render/hd/panel");
 const scene = __r("render/hd/scene");
 const surface = __r("render/hd/surface");
 const frame = __r("render/year/frame");
-const legacy = __r("render/year/problem");
 
 const ROW_H = 9;
+// The situation of a problem and what happened after an answer wrap to these columns, and the result keeps this many rows.
+const SCENE_WRAP = 40;
+const RESULT_WRAP = 38;
+const MAX_RESULT_ROWS = 8;
 const PANE_COLS = 29;
 const PANE_ROWS = 7;
 const NEGLIGIBLE = 0.05;
@@ -11111,6 +9483,15 @@ const GAUGES = Object.freeze({ at: L.DASH, gauges: L.GAUGES, label: L.GAUGES.lab
 
 const columnX = () => L.DIALOGUE.x + L.DIALOGUE.left.x;
 const paneX = () => L.DIALOGUE.x + L.DIALOGUE.pane.x;
+
+// What the gauges panel says under its bars: what the highlighted answer does (reviewer) or that the meter at stake is in crisis.
+function gaugeNotes(app) {
+  if (app.review) {
+    const review = view.cardReview(app, app.cursor);
+    return review.lines.map((text) => ({ text, color: TONE[review.a] }));
+  }
+  return view.crisisLines(app).map((text) => ({ text, color: P.orange }));
+}
 
 // The chips of the voice and of the segment, over the scene, and the month label on a chip under the gauges.
 function drawChips(ctx, app, problem) {
@@ -11208,11 +9589,11 @@ function drawAnswer(ctx, app, card, i) {
 
 function drawQuestion(ctx, app) {
   const cards = view.yearCards(app);
-  const problem = drawTop(ctx, app, { focus: cards[app.cursor].line, notes: legacy.gaugeNotes(app) });
+  const problem = drawTop(ctx, app, { focus: cards[app.cursor].line, notes: gaugeNotes(app) });
   const d = L.DIALOGUE;
   panel.glass(ctx, d);
   drawHeading(ctx, app, tx(app, `year.${problem.id}.title`));
-  ui.paragraph(ctx, ui.wrapLines([{ text: tx(app, `year.${problem.id}.scene`) }], legacy.WRAP), columnX(), d.y + d.sceneY, ROW_H);
+  ui.paragraph(ctx, ui.wrapLines([{ text: tx(app, `year.${problem.id}.scene`) }], SCENE_WRAP), columnX(), d.y + d.sceneY, ROW_H);
   drawColumnRule(ctx, d.firstRule);
   cards.forEach((card, i) => drawAnswer(ctx, app, card, i));
   drawDivider(ctx);
@@ -11266,7 +9647,7 @@ function drawResult(ctx, app) {
   if (plan) fxDraw.drawFlash(ctx, plan, app.phaseT, L.FOCUS);
   const d = L.DIALOGUE;
   panel.glass(ctx, d);
-  const rows = ui.wrapLines(view.resultLines(app), legacy.RESULT_WRAP).slice(0, legacy.MAX_RESULT_ROWS);
+  const rows = ui.wrapLines(view.resultLines(app), RESULT_WRAP).slice(0, MAX_RESULT_ROWS);
   ui.paragraph(ctx, rows, columnX(), d.y + 8, ROW_H);
   drawDivider(ctx);
   drawDeltas(ctx, app);
@@ -11286,45 +9667,26 @@ function drawStrip(ctx, f, width) {
 
 const drawFooter = (ctx, app) => hud.drawFooter(ctx, app, { footer: L.FOOTER, width: L.W, strip: drawStrip });
 
-module.exports = { drawScreen, drawFooter, drawStatementPanel, drawTitleChip, drawReviewBadge, glassPanel, GAUGES, PANE_COLS, PANE_ROWS };
+module.exports = { drawScreen, drawFooter, drawStatementPanel, drawTitleChip, drawReviewBadge, glassPanel, GAUGES, PANE_COLS, PANE_ROWS, RESULT_WRAP, MAX_RESULT_ROWS };
 
 });
 __d("render/year/workshop", function (module, exports, __r) {
 'use strict';
 
-// The workshop screens: its small menu, the team setup and the facilitator's ranking (a table with
-// the OI margin of every team month by month, the problems where they split, and the decision
-// map of the selected team).
+// The workshop screens: its small menu and the team setup (the facilitator's ranking is in rank.js).
 
-const layout = __r("ui/layout");
 const menu = __r("ui/layout-menu");
-const view = __r("ui/year-view");
 const { WORKSHOP_ITEMS } = __r("ui/workshop-app");
-const { rankedTeams, noticeText } = __r("ui/rank-view");
-const { tx, num } = __r("ui/tx");
-const { formatCode } = __r("rng");
-const rules = __r("year/rules");
-const { splits } = __r("year/standings");
+const { noticeText } = __r("ui/rank-view");
+const { tx } = __r("ui/tx");
 const P = __r("render/palette");
-const { rect, line } = __r("render/draw");
 const ui = __r("render/ui");
-const hud = __r("render/scenes/hud");
 const panel = __r("render/hd/panel");
-const { DECISION_COLOR } = __r("render/year/frame");
 const menus = __r("render/year/menus");
 
-const TEAM_COLORS = Object.freeze([P.green, P.cyan, P.gold, P.orange, '#c8a0f8', '#f898c8', P.red, P.white]);
-const VOICES = Object.freeze(['cliente', 'planta', 'entorno', 'estrategia']);
-const TYPES = Object.freeze(['smart', 'temp', 'plac', 'ign']);
-const BODY = Object.freeze({ x: 4, y: 21, w: 248, h: 166 });
-const TABLE = Object.freeze({ top: 37, step: 10, rows: 8 });
-const PLOT = Object.freeze({ left: 30, right: 238, top: 134, bottom: 174, max: 30 });
-const SELECTED_ROW = 'rgba(248,208,72,0.22)';
 const SETUP_HINT_WRAP = 40;
 
-const teamColor = (team) => TEAM_COLORS[team.color % TEAM_COLORS.length];
 const caret = (app) => (Math.floor(app.t * 2) % 2 === 0 ? '_' : ' ');
-const outcomeColor = (outcome) => hud.TIER_COLOR[view.OUTCOME_TIER[outcome]];
 
 // ---------------------------------------------------------------- menu and setup
 
@@ -11362,151 +9724,7 @@ function drawSetup(ctx, app) {
   });
 }
 
-// ---------------------------------------------------------------- the ranking
-
-const RANK_VIEWS = Object.freeze([drawRankTable, drawRankSplit, drawRankMap]);
-
-// The strip with the title, a dot per view (the current one is lit) and the game of the ranking.
-function drawRankFrame(ctx, app) {
-  rect(ctx, 0, 0, layout.W, layout.PLAY_H, '#0a0e26');
-  ui.windowBox(ctx, 4, 3, 248, 16);
-  ui.text(ctx, tx(app, 'rank.title'), 10, 8, P.gold);
-  const { rank } = app;
-  RANK_VIEWS.forEach((_, i) => rect(ctx, 130 + i * 8, 9, 5, 5, i === rank.view ? P.gold : P.dim));
-  if (rank.code !== null) ui.textRight(ctx, tx(app, 'rank.code', { code: formatCode(rank.code) }), 246, 8, P.gray);
-  ui.windowBox(ctx, BODY.x, BODY.y, BODY.w, BODY.h);
-}
-
-// The line under the body: the latest notice, and what is being typed.
-function drawEntry(ctx, app) {
-  const { rank } = app;
-  const notice = rank.notice;
-  if (notice) ui.text(ctx, noticeText(app, notice), 8, 191, notice.kind === 'ok' ? P.green : P.orange);
-  else ui.text(ctx, tx(app, 'rank.hint'), 8, 191, P.dim);
-  ui.text(ctx, tx(app, 'rank.entry'), 8, 201, P.gray);
-  const x = 8 + 6 * (tx(app, 'rank.entry').length + 1);
-  const room = Math.floor((246 - x) / 6) - 1;
-  if (rank.entry === '') ui.text(ctx, tx(app, 'rank.entry.empty'), x, 201, P.dim);
-  else ui.text(ctx, `${rank.entry.slice(-room)}${caret(app)}`, x, 201, P.white);
-}
-
-function drawTableRows(ctx, app, all, ranked) {
-  const header = [[tx(app, 'rank.col.team'), 22], [tx(app, 'rank.col.result'), 98]];
-  header.forEach(([label, x]) => ui.text(ctx, label, x, 25, P.gray));
-  ui.textRight(ctx, tx(app, 'rank.col.oi'), 200, 25, P.gray);
-  ui.text(ctx, tx(app, 'rank.col.weak'), 212, 25, P.gray);
-  rect(ctx, 10, 34, 232, 1, P.winShade);
-  all.slice(0, TABLE.rows).forEach((team, i) => {
-    const y = TABLE.top + i * TABLE.step;
-    const listed = ranked.includes(team);
-    if (i === app.rank.selected) rect(ctx, 7, y - 2, 238, 10, SELECTED_ROW);
-    ui.text(ctx, listed ? String(i + 1) : '-', 10, y, P.dim);
-    ui.text(ctx, team.name, 22, y, listed ? teamColor(team) : P.dim);
-    if (!listed) {
-      ui.text(ctx, tx(app, 'rank.other'), 98, y, P.orange);
-      return;
-    }
-    ui.text(ctx, tx(app, `rank.res.${team.outcome}`), 98, y, outcomeColor(team.outcome));
-    ui.textRight(ctx, `${num(app, team.margin)}%`, 200, y, P.white);
-    const weakKey = rules.weakest(team.meters);
-    ui.text(ctx, `${tx(app, `year.meterTag.${weakKey}`)} ${Math.round(team.meters[weakKey])}`, 212, y, P.gray);
-  });
-}
-
-// OI margin month by month for every ranked team, with the plan as a dashed line.
-function drawChart(ctx, app, ranked) {
-  const { left, right, top, bottom, max } = PLOT;
-  ui.text(ctx, tx(app, 'rank.chart'), left + 6, 124, P.gray);
-  rect(ctx, left, bottom, right - left, 1, P.winShade);
-  rect(ctx, left, top, 1, bottom - top, P.winShade);
-  const y = (value) => bottom - Math.round((Math.max(0, Math.min(max, value)) * (bottom - top)) / max);
-  const x = (month) => left + Math.round((month * (right - left)) / 11);
-  for (let px = left; px < right; px += 4) rect(ctx, px, y(rules.PLAN_OI), 2, 1, P.gold);
-  [[0, '0'], [rules.PLAN_OI, '15'], [max, '30']].forEach(([value, label]) => {
-    ui.textRight(ctx, label, left - 3, y(value) - 3, P.dim);
-  });
-  [0, 5, 11].forEach((month) => ui.text(ctx, String(month + 1), x(month) - 2, bottom + 3, P.dim));
-  const order = [...ranked].sort((a, b) => (a === ranked[app.rank.selected] ? 1 : 0) - (b === ranked[app.rank.selected] ? 1 : 0));
-  order.forEach((team) => {
-    const color = teamColor(team);
-    team.series.forEach((value, month) => {
-      if (month > 0) line(ctx, x(month - 1), y(team.series[month - 1]), x(month), y(value), color);
-      rect(ctx, x(month) - 1, y(value) - 1, 2, 2, color);
-    });
-  });
-}
-
-function drawRankTable(ctx, app) {
-  const { ranked, all } = rankedTeams(app.rank);
-  if (all.length === 0) {
-    ui.textCenter(ctx, tx(app, 'rank.empty'), 128, 95, P.gray);
-    return;
-  }
-  drawTableRows(ctx, app, all, ranked);
-  drawChart(ctx, app, ranked);
-}
-
-// Where the teams chose differently: each problem with one coloured square per ranked team, in
-// the order of the ranking.
-function drawRankSplit(ctx, app) {
-  const { ranked } = rankedTeams(app.rank);
-  ui.text(ctx, tx(app, 'rank.split.title'), 10, 25, P.gold);
-  TYPES.reduce((x, a) => {
-    ui.text(ctx, tx(app, `year.tag.${a}`), x, 35, DECISION_COLOR[a]);
-    return x + 6 * (tx(app, `year.tag.${a}`).length + 1);
-  }, 10);
-  const found = splits(ranked, 6);
-  if (found.length === 0) {
-    ui.textCenter(ctx, tx(app, 'rank.split.none'), 128, 100, P.gray);
-    return;
-  }
-  ranked.forEach((_, i) => ui.text(ctx, String(i + 1), 12 + i * 16, 46, P.dim));
-  found.forEach((item, row) => {
-    const top = 56 + row * 22;
-    ui.text(ctx, tx(app, `year.${item.problemId}.title`), 10, top, P.white);
-    item.byTeam.forEach((a, i) => {
-      if (a !== null) rect(ctx, 10 + i * 16, top + 10, 13, 8, DECISION_COLOR[a]);
-    });
-  });
-}
-
-// The year of one team as a grid: a row per month, a column per voice, coloured by the kind of
-// answer chosen, next to its numbers.
-function drawRankMap(ctx, app) {
-  const { all } = rankedTeams(app.rank);
-  const team = all[app.rank.selected];
-  if (!team) {
-    ui.textCenter(ctx, tx(app, 'rank.empty'), 128, 95, P.gray);
-    return;
-  }
-  ui.text(ctx, tx(app, 'rank.map.title', { name: team.name }), 10, 25, teamColor(team));
-  VOICES.forEach((voice, c) => ui.text(ctx, tx(app, `rank.voice.${voice}`), 40 + c * 30, 36, P.gray));
-  for (let month = 0; month < 12; month += 1) ui.textRight(ctx, String(month + 1), 28, 47 + month * 11, P.dim);
-  team.decisions.forEach((d) => {
-    rect(ctx, 36 + VOICES.indexOf(d.voice) * 30, 46 + d.monthIdx * 11, 26, 8, DECISION_COLOR[d.a]);
-  });
-  const x = 164;
-  ui.text(ctx, tx(app, `rank.res.${team.outcome}`), x, 36, outcomeColor(team.outcome));
-  ui.text(ctx, `${num(app, team.margin)}%`, x, 46, P.white);
-  TYPES.forEach((a, i) => {
-    rect(ctx, x, 62 + i * 11, 8, 8, DECISION_COLOR[a]);
-    ui.text(ctx, `${tx(app, `year.tag.${a}`)} ${team.counts[a]}`, x + 12, 63 + i * 11, P.gray);
-  });
-  if (team.rescued) ui.text(ctx, tx(app, 'rank.map.rescued', { m: team.rescueMonth }), x - 20, 112, P.orange);
-  if (team.bankruptMonth) ui.text(ctx, tx(app, 'rank.map.bankrupt', { m: team.bankruptMonth }), x - 20, 124, P.red);
-  team.series.forEach((value, month) => {
-    const h = Math.max(1, Math.round((Math.max(0, value) * 40) / PLOT.max));
-    rect(ctx, x + month * 7, 178 - h, 5, h, value >= rules.PLAN_OI ? P.green : value >= rules.RESCUE_GOAL ? P.orange : P.red);
-  });
-}
-
-function drawRank(ctx, app) {
-  drawRankFrame(ctx, app);
-  RANK_VIEWS[app.rank.view](ctx, app);
-  drawEntry(ctx, app);
-}
-
-module.exports = { drawWorkshopMenu, drawSetup, drawRank, TEAM_COLORS };
+module.exports = { drawWorkshopMenu, drawSetup };
 
 });
 __d("rng", function (module, exports, __r) {
@@ -11785,9 +10003,7 @@ __d("ui/app", function (module, exports, __r) {
 // workshop-app); this file routes to the right one and owns what they share: mute, language,
 // the overlays, the reviewer switch and the two kinds of text input (typing and pasting).
 
-const layout = __r("ui/layout");
-const layoutHd = __r("ui/layout-hd");
-const { isWide } = __r("ui/screen-space");
+const layout = __r("ui/layout-hd");
 const demo = __r("ui/demo-app");
 const menu = __r("ui/menu-app");
 const year = __r("ui/year-app");
@@ -11895,7 +10111,7 @@ function onKey(app, pressed) {
 
 // A stray tap must never confirm leaving the game: on the quit question it counts as "no".
 function onTap(app, x, y) {
-  const button = (isWide(app) ? layoutHd : layout).hitFooter(x, y);
+  const button = layout.hitFooter(x, y);
   if (button) return onKey(app, button);
   if (app.overlay) return onKey(app, app.overlay === 'quit' ? 'back' : 'confirm');
   return HANDLERS[app.scene].tap(app, x, y);
@@ -11946,7 +10162,7 @@ __d("ui/demo-app", function (module, exports, __r) {
 const engine = __r("engine");
 const { tierFor } = __r("tiers");
 const { nextGameCode } = __r("rng");
-const layout = __r("ui/layout");
+const layout = __r("ui/layout-hd");
 const { sfx, music, result, moved, isArrow, listMove, selectIndex, leaveTo } = __r("ui/shared");
 
 // Effects that follow a change of run phase (arriving at the final screen or dying).
@@ -12346,6 +10562,87 @@ const keyToAction = (key) =>
 module.exports = { keyToAction };
 
 });
+__d("ui/layout-battle", function (module, exports, __r) {
+'use strict';
+
+// Geometry of the tutorial of five floors in Demo 7, in logical pixels of the 480 by 270 surface. It uses the frame of the decision screens
+// (ui/layout-hd.js: the P&L at the left, the dialogue console along the bottom, the factory in the state of the OI behind) and adds the boss
+// of the floor on a glass card in the clear zone and the OI panel at the right; the room, the final result and the autopsy are one panel each.
+// Positions marked "relative" are measured from the top left of the panel or console they belong to.
+
+const L = __r("ui/layout-hd");
+const menu = __r("ui/layout-menu");
+
+// The boss at twice its size, around (cx, cy), with its name under it. Absolute.
+const BOSS = Object.freeze({ x: 182, y: 26, w: 140, h: 134, scale: 2, cx: 252, cy: 82, nameY: 146 });
+
+// The OI panel (where the year mode has its gauges): the OI as a big number, a bar with the two marks of the tutorial and the state of the factory.
+const OI = Object.freeze({
+  ...L.DASH,
+  pad: 8,
+  labelY: 9,
+  valueY: 6,
+  scale: 2,
+  barY: 26,
+  barH: 6,
+  marksY: 36,
+  tierY: 50,
+  tierWrap: 20,
+});
+const OI_SCALE = 25;
+
+// The text of the floor intro, the result of a card and the outro: rows across the whole console. Relative to it.
+const TEXT = Object.freeze({ x: L.DIALOGUE.x + L.DIALOGUE.left.x, y: 8, pitch: 9, wrap: 74, rows: 7 });
+
+// A turn: the situation and the cards use the column and the pane of a problem; the area of the highlighted card tops the pane.
+const TURN = Object.freeze({
+  sceneWrap: 43,
+  detailWrap: 29,
+  detailRows: 7,
+  tagX: L.DIALOGUE.x + L.DIALOGUE.pane.x,
+  pitch: 9,
+});
+
+// The control room: its title, a rule, what the room is about and a note that the game was saved. Relative to the console.
+const ROOM = Object.freeze({ titleY: 8, ruleY: 20, bodyY: 26, pitch: 9, rows: 4, savedY: 66 });
+
+// The result of the tutorial: a pill with the title over the factory at the left, the stars and the reasons at the right and the lessons across the foot.
+const FINAL = Object.freeze({
+  titleY: 6,
+  panel: Object.freeze({ x: 236, y: 44, w: 238, h: 88 }),
+  pad: 12,
+  starsY: 8,
+  starStep: 22,
+  summaryY: 24,
+  criteriaTop: 40,
+  criteriaPitch: 11,
+  lessons: Object.freeze({ x: 6, y: 138, w: 468, h: 116 }),
+  lessonsLeft: 10,
+  lessonsTop: 10,
+  lessonsPitch: 10,
+  lessonsWrap: 74,
+  lessonsRows: 9,
+});
+
+// The autopsy of a run that died: GAME OVER and what killed it, on a panel over the collapsed factory.
+const DEAD = Object.freeze({
+  panel: Object.freeze({ x: 40, y: 4, w: 400, h: 144 }),
+  titleY: 8,
+  autopsyY: 40,
+  linesTop: 54,
+  pitch: 10,
+  left: 12,
+  wrap: 62,
+  rows: 8,
+});
+
+// The introduction: two paragraphs on a panel as wide as the one of the year introduction, and only as tall as they need.
+const INTRO_WRAP = 44;
+const INTRO_BOX = Object.freeze({ ...menu.INTRO_PANEL, h: 130 });
+
+module.exports = { BOSS, OI, OI_SCALE, TEXT, TURN, ROOM, FINAL, DEAD, INTRO_WRAP, INTRO_BOX };
+
+});
 __d("ui/layout-close", function (module, exports, __r) {
 'use strict';
 
@@ -12392,8 +10689,7 @@ __d("ui/layout-hd", function (module, exports, __r) {
 'use strict';
 
 // Screen geometry of Demo 7, in logical pixels: a 480 by 270 surface (16:9). Shared by the renderer and the reducer so a tap
-// lands on exactly what the player sees. The screens that have not been recomposed yet keep their 256 by 256 geometry
-// (ui/layout.js) and sit in the middle of the surface.
+// lands on exactly what the player sees. The screens before play have their own files (layout-menu.js and the ones next to it).
 //
 // The wide decision screen: the scene fills the surface; over it the P&L at the left, the gauges at the right, the dialogue
 // console along the bottom (a text column and a pane at its right) and the footer. Between the P&L and the gauges is a clear
@@ -12401,8 +10697,6 @@ __d("ui/layout-hd", function (module, exports, __r) {
 
 const W = 480;
 const H = 270;
-
-const LEGACY = Object.freeze({ w: 256, h: 256, x: (W - 256) / 2, y: (H - 256) / 2 });
 
 const STATEMENT = Object.freeze({ x: 6, y: 6, w: 158, h: 160 });
 const STATEMENT_ROWS = Object.freeze({ top: 15, pitch: 9, header: Object.freeze({ y: 3, h: 9 }) });
@@ -12466,7 +10760,7 @@ function hitFooter(x, y) {
   return zone ? zone[0] : null;
 }
 
-module.exports = { W, H, LEGACY, STATEMENT, STATEMENT_ROWS, DASH, GAUGES, TREND, CHIPS, STAGE, FOCUS, DIALOGUE, FOOTER, answerRect, hitAnswer, hitFooter, inside };
+module.exports = { W, H, STATEMENT, STATEMENT_ROWS, DASH, GAUGES, TREND, CHIPS, STAGE, FOCUS, DIALOGUE, FOOTER, answerRect, hitAnswer, hitFooter, inside };
 
 });
 __d("ui/layout-menu", function (module, exports, __r) {
@@ -12568,129 +10862,142 @@ const NOTE = Object.freeze({ x: 76, y: 44, w: 328, h: 164, textX: 90, titleY: 54
 module.exports = { RULES, GRADES, QUIT, NOTE };
 
 });
-__d("ui/layout", function (module, exports, __r) {
+__d("ui/layout-rank", function (module, exports, __r) {
 'use strict';
 
-// Screen geometry in logical pixels (the game draws at 256x240, like a PAL SNES). Shared by the
-// renderer and by the reducer so a tap lands on exactly what the player sees.
+// Geometry of the facilitator's ranking in Demo 7, in logical pixels of the 480 by 270 surface: a strip with the title, one dot for each of
+// the three views and the game of the ranking; a body for the view (the table of the teams with a chart of their OI month by month, the
+// problems where they chose differently, or the decision map of the selected team); and under the body the last notice and the line being typed.
 
-const W = 256;
-const H = 256;
-// Everything above the footer strip.
-const PLAY_H = 244;
+const HEAD = Object.freeze({ x: 6, y: 6, w: 468, h: 18, views: 3, titleX: 12, titleY: 5, dots: Object.freeze({ x: 228, y: 6, size: 5, gap: 9 }), codeRight: 462 });
+const BODY = Object.freeze({ x: 6, y: 28, w: 468, h: 190 });
+const ENTRY = Object.freeze({ x: 12, noticeY: 224, promptY: 238 });
 
-// Where the tutorial's boss stands, in the picture column.
-const BOSS_CENTER = Object.freeze({ x: 193, y: 41 });
+// View 0: the table (left edges of the columns, except the right edge of the OI) and the chart of the OI of every ranked team.
+const TABLE = Object.freeze({
+  headerY: 36,
+  ruleY: 47,
+  top: 52,
+  pitch: 12,
+  rows: 8,
+  bandX: 8,
+  bandW: 276,
+  cols: Object.freeze({ rank: 12, name: 24, result: 110, oiRight: 226, weak: 236 }),
+});
+const CHART = Object.freeze({
+  x: 290,
+  y: 32,
+  w: 180,
+  h: 182,
+  titleX: 296,
+  titleY: 36,
+  plot: Object.freeze({ left: 312, right: 462, top: 60, bottom: 196, max: 30 }),
+});
+const MONTHS = 12;
 
-// Four labels side by side. The slots are sized for the longest label of either language
-// (an action of 15 letters, then "N reglas", "M sonido" and "L ES/EN"), and the tap zones match.
-const FOOTER = Object.freeze({
-  y: PLAY_H,
-  h: H - PLAY_H,
-  labelX: Object.freeze([3, 99, 152, 205]),
-  zones: [
-    ['confirm', 0, 96],
-    ['note', 96, 150],
-    ['mute', 150, 203],
-    ['lang', 203, 256],
-  ],
+// Where the month `month` (0 to 11) and an OI fall on the plot: a loss stays on the axis and an OI over the scale at the top.
+const chartX = (month) => CHART.plot.left + Math.round((month * (CHART.plot.right - CHART.plot.left)) / (MONTHS - 1));
+const chartY = (oi) => CHART.plot.bottom - Math.round((Math.max(0, Math.min(CHART.plot.max, oi)) * (CHART.plot.bottom - CHART.plot.top)) / CHART.plot.max);
+
+// View 1: the problems where the teams split, each with a coloured square for every team, in the order of the ranking.
+const SPLIT = Object.freeze({ titleY: 36, legendY: 48, headerY: 62, top: 76, pitch: 16, rows: 6, nameX: 12, squaresX: 250, step: 20, w: 16, h: 10 });
+
+// View 2: the year of one team as a grid (a row for each month, a column for each voice, coloured by the kind of answer chosen) next to its numbers.
+const MAP = Object.freeze({
+  titleY: 36,
+  headerY: 50,
+  monthX: 38,
+  gridX: 44,
+  colW: 48,
+  cellW: 44,
+  cellH: 10,
+  top: 62,
+  pitch: 12,
+  side: Object.freeze({
+    x: 262,
+    resultY: 50,
+    marginY: 62,
+    typesTop: 78,
+    typePitch: 12,
+    notesY: 132,
+    bars: Object.freeze({ x: 262, bottom: 208, w: 10, pitch: 16, h: 52 }),
+  }),
 });
 
-// The decision screens of both modes. The P&L is a tall column at the left, like a report, with
-// the picture and the gauges in a column at the right; one dialogue window below holds the
-// situation, the answers as a list and the detail of the highlighted answer.
-const STATEMENT = Object.freeze({ x: 4, y: 3, w: 124, h: 142 });
-const STATEMENT_ROWS = Object.freeze({ top: 13, pitch: 8, header: Object.freeze({ y: 3, h: 9 }) });
-const PLATE = Object.freeze({ x: 134, y: 3, w: 118, h: 14 });
-const ART = Object.freeze({ x: 134, y: 19, w: 118, h: 44 });
-const DASH = Object.freeze({ x: 134, y: 65, w: 118, h: 80 });
-// The picture and the gauges as one tall window, for screens that have a chart instead.
-const SIDE = Object.freeze({ x: 134, y: 19, w: 118, h: 126 });
-const DIALOGUE = Object.freeze({
-  x: 4, y: 147, w: 248, h: 95, titleY: 4, sceneY: 13, firstRule: 32, answersY: 35, answerPitch: 9, secondRule: 72, detailY: 75,
+module.exports = { HEAD, BODY, ENTRY, TABLE, CHART, SPLIT, MAP, MONTHS, chartX, chartY };
+
+});
+__d("ui/layout-verdict", function (module, exports, __r) {
+'use strict';
+
+// Geometry of the end of the year in Demo 7, in logical pixels of the 480 by 270 surface: the verdict (page 1: the title on a pill, the factory
+// of the ending at the left, the numbers at the right and the bridge of the OI across the foot; the other pages are one centred panel: the
+// report of the P&L, what happened and, for a workshop team, its result code) and GAME OVER. Positions inside a panel are relative to it.
+
+const L = __r("ui/layout-hd");
+
+// The title of the verdict on a glass pill: its text at TITLE.scale, the pill wider than it by TITLE.padX at each side.
+const TITLE = Object.freeze({ y: 6, h: 30, scale: 3, padX: 18 });
+
+// OI against the plan (in % and in money), the play time, the growth of the sales and the three meters with their bars.
+const NUMBERS = Object.freeze({
+  x: 296, y: 44, w: 178, h: 88, pad: 10, oiY: 8, planY: 19, growthY: 30, metersTop: 46, meterPitch: 13, bar: Object.freeze({ x: 38, w: 92 }),
 });
 
-// Mode menu: tall rows (name + description) and, on the endings screen, a list of one-line play
-// styles. The fewer the modes the taller the rows: two, three, four (the endings of a creator
-// without the half year) or the five of a creator.
-const MENU = Object.freeze({
-  panel: Object.freeze({ x: 4, y: 84, w: 248, h: 140 }),
-  row: Object.freeze({ x: 8, y: 104, w: 240, h: 26, step: 29 }),
-  rowFew: Object.freeze({ x: 8, y: 116, w: 240, h: 34, step: 42 }),
-  rowThree: Object.freeze({ x: 8, y: 104, w: 240, h: 30, step: 34 }),
-  rowFive: Object.freeze({ x: 8, y: 102, w: 240, h: 22, step: 23 }),
-  profile: Object.freeze({ x: 8, y: 105, w: 240, h: 11, step: 11 }),
+// Plan to real as floating bars: a row for every P&L line that moved OI. `footY` is the row of the label of the year and of its game code.
+const BRIDGE = Object.freeze({
+  x: 6, y: 138, w: 468, h: 116, titleY: 7, rowsTop: 20, rowH: 10, rows: 8, labelX: 10, valueRight: 176, axisX: 190, axisW: 252, axisMax: 35, footY: 104,
 });
 
-// Workshop setup: the team name, the game code and the start button.
-const SETUP = Object.freeze({
-  name: Object.freeze({ x: 122, y: 100, w: 124, h: 15 }),
-  code: Object.freeze({ x: 122, y: 122, w: 50, h: 15 }),
-  start: Object.freeze({ x: 66, y: 146, w: 124, h: 17 }),
+// Where the weather of the ending (confetti, embers) falls and the flash of a ruin hits: around the building.
+const FACTORY_BOX = Object.freeze({ x: 92, y: 42, w: 140, h: 94 });
+
+// One centred panel for the pages that are text and tables.
+const PANEL = Object.freeze({ x: 60, y: 40, w: 360, h: 216 });
+
+// The year-end report: the title, a header of three blue cells, a row for every line of the statement and a note under them.
+const REPORT = Object.freeze({
+  ...PANEL,
+  titleY: 8,
+  ruleY: 20,
+  headerY: 25,
+  top: 40,
+  pitch: 9,
+  labelX: 10,
+  ratioIndent: 6,
+  headerW: 50,
+  noteCols: 54,
+  // The right edge of each number column, from the left of the panel.
+  columns: Object.freeze([
+    Object.freeze({ key: 'plan', right: 198, label: 'stmt.col.plan' }),
+    Object.freeze({ key: 'real', right: 266, label: 'stmt.col.real' }),
+    Object.freeze({ key: 'variance', right: 344, label: 'stmt.col.var' }),
+  ]),
 });
 
-const inside = (rect, x, y) => x >= rect.x && x < rect.x + rect.w && y >= rect.y && y < rect.y + rect.h;
+// What happened, in the player's own terms, separated by blank rows.
+const FEEDBACK = Object.freeze({ titleY: 8, ruleY: 20, left: 10, top: 28, pitch: 10, wrap: 54, rows: 16 });
 
-const FEW_ROWS = 2;
-const menuRowRect = (i, count = 4) => {
-  const row = count <= FEW_ROWS ? MENU.rowFew : count === 3 ? MENU.rowThree : count >= 5 ? MENU.rowFive : MENU.row;
-  return { x: row.x, y: row.y + i * row.step, w: row.w, h: row.h };
-};
+// The result code of a workshop team: its whole year in one line, ready to copy.
+const CODE = Object.freeze({ titleY: 8, ruleY: 20, left: 10, teamY: 30, linesY: 46, pitch: 10, bodyY: 82, copyY: 98, copiedY: 114 });
 
-const profileRowRect = (i) => ({
-  x: MENU.profile.x,
-  y: MENU.profile.y + i * MENU.profile.step,
-  w: MENU.profile.w,
-  h: MENU.profile.h,
+// GAME OVER: the title, the verdict, the restart countdown and the code of the game, on a glass panel over the factory that stands low (a
+// bright sky would swallow the letters); a workshop team's version keeps its result code on screen instead of the countdown.
+const OVER = Object.freeze({
+  panel: Object.freeze({ x: 60, y: 4, w: 360, h: 128 }),
+  titleY: 10,
+  verdictY: 48,
+  restartY: 64,
+  countY: 78,
+  barY: 94,
+  barW: 160,
+  codeY: 112,
+  workshop: Object.freeze({ teamY: 64, linesY: 76, pitch: 10, copyY: 100, copiedY: 112 }),
 });
 
-const hitIndex = (rectOf, count, x, y) => {
-  for (let i = 0; i < count; i += 1) if (inside(rectOf(i), x, y)) return i;
-  return -1;
-};
+const inside = L.inside;
 
-const answerRect = (i) => ({
-  x: DIALOGUE.x + 4,
-  y: DIALOGUE.y + DIALOGUE.answersY - 1 + i * DIALOGUE.answerPitch,
-  w: DIALOGUE.w - 8,
-  h: DIALOGUE.answerPitch,
-});
-const hitAnswer = (x, y, count = 4) => hitIndex(answerRect, count, x, y);
-const hitMenuRow = (x, y, count = 4) => hitIndex((i) => menuRowRect(i, count), count, x, y);
-const hitSetup = (x, y) => ['name', 'code', 'start'].findIndex((key) => inside(SETUP[key], x, y));
-const hitProfileRow = (x, y, count = 8) => hitIndex(profileRowRect, count, x, y);
-
-function hitFooter(x, y) {
-  if (y < FOOTER.y || y >= FOOTER.y + FOOTER.h) return null;
-  const zone = FOOTER.zones.find(([, from, to]) => x >= from && x < to);
-  return zone ? zone[0] : null;
-}
-
-module.exports = {
-  W,
-  H,
-  PLAY_H,
-  STATEMENT,
-  STATEMENT_ROWS,
-  PLATE,
-  ART,
-  DASH,
-  SIDE,
-  DIALOGUE,
-  answerRect,
-  hitAnswer,
-  BOSS_CENTER,
-  MENU,
-  SETUP,
-  FOOTER,
-  menuRowRect,
-  profileRowRect,
-  hitMenuRow,
-  hitProfileRow,
-  hitSetup,
-  hitFooter,
-  inside,
-};
+module.exports = { TITLE, NUMBERS, BRIDGE, FACTORY_BOX, PANEL, REPORT, FEEDBACK, CODE, OVER, inside };
 
 });
 __d("ui/menu-app", function (module, exports, __r) {
@@ -12894,31 +11201,6 @@ function screenShake(app) {
 }
 
 module.exports = { resultPlan, closePlan, rescuePlan, shockPlan, verdictPlan, screenShake, sceneMood };
-
-});
-__d("ui/screen-space", function (module, exports, __r) {
-'use strict';
-
-// Which screens are drawn for the whole 480 by 270 surface ("wide") and which are still the 256 by 256 composition in the middle
-// of it ("legacy"). The renderer and the pointer both ask, so a tap lands on what the player sees.
-
-const layout = __r("ui/layout-hd");
-
-// The two phases of a problem have a composition of their own (the scene, the P&L, the gauges and the dialogue console).
-const DECISION_PHASES = Object.freeze(['problem', 'result']);
-// The month close, the blow of a meter and the restructuring plan share the frame of the decision screens.
-const FLOW_PHASES = Object.freeze(['monthClose', 'shock', 'rescue']);
-// The screens before play: the title, the menus, the introduction of the year and the team setup.
-const WIDE_SCENES = Object.freeze(['title', 'menu', 'endings', 'yearIntro', 'workshop', 'setup']);
-
-const isDecision = (app) => app.scene === 'year' && app.year !== null && DECISION_PHASES.includes(app.year.phase);
-const isFlow = (app) => app.scene === 'year' && app.year !== null && FLOW_PHASES.includes(app.year.phase);
-const isWide = (app) => isDecision(app) || isFlow(app) || WIDE_SCENES.includes(app.scene);
-
-// A pointer position on the surface, in the coordinates of the screen that is showing.
-const toScreen = (app, point) => (isWide(app) ? point : { x: point.x - layout.LEGACY.x, y: point.y - layout.LEGACY.y });
-
-module.exports = { isWide, isDecision, isFlow, toScreen };
 
 });
 __d("ui/shared", function (module, exports, __r) {
