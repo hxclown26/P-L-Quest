@@ -3,8 +3,8 @@
 A 16-bit style game, in one HTML file, that teaches two things: who controls each line of
 the P&L, and how a decision ends up in OI. All data is fictional. Spanish and English.
 
-**Play it online:** https://hxclown26.github.io/P-L-Quest/ (the link opens Demo 6, the published build;
-Demo 5 stays at https://hxclown26.github.io/P-L-Quest/pl-quest-demo5.html, Demo 4 at
+**Play it online:** https://hxclown26.github.io/P-L-Quest/ (the link opens version 1, the published build;
+Demo 6 stays at https://hxclown26.github.io/P-L-Quest/pl-quest-demo6.html, Demo 5 at https://hxclown26.github.io/P-L-Quest/pl-quest-demo5.html, Demo 4 at
 https://hxclown26.github.io/P-L-Quest/pl-quest-demo4.html and Demo 3 at
 https://hxclown26.github.io/P-L-Quest/pl-quest-demo3.html). In creator mode:
 https://hxclown26.github.io/P-L-Quest/?creator
@@ -16,11 +16,12 @@ https://hxclown26.github.io/P-L-Quest/?creator
 | `pl-quest-demo3.html` | Demo 3, frozen (the build that was published first): a P&L that reads like a finance report, a year-end report against the plan, a game code, and a menu with only the two ways to play. |
 | `pl-quest-demo4.html` | Demo 4, frozen: the build the review and pilot kits were written against. Net sales and separate Freight and Direct Chg lines in the P&L, honest model assumptions, 48 rewritten problems whose answers do not give themselves away, and the kits to review and measure it (see "Domain review and pilot"). Game codes and result codes of earlier demos do not work in it. |
 | `pl-quest-demo5.html` | Demo 5, frozen: Demo 4 with a visual pass and nothing else. Same rules, numbers, problems and game codes; new type, art, effects and a calm mode (see "Look and feel"). The fallback of the pilot. |
-| `pl-quest-demo6.html` | **Demo 6, the current one**: the model, the problems and the way a year ends, reworked after a CFO read of Demo 5 (see "What Demo 6 changes"). A game code still gives the same order of problems, but the numbers and the endings differ: codes and results of earlier demos do not carry over. |
+| `pl-quest-demo6.html` | Demo 6, frozen: the model, the problems and the way a year ends, reworked after a CFO read of Demo 5 (see "What Demo 6 changes"). A game code still gives the same order of problems, but the numbers and the endings differ: codes and results of earlier demos do not carry over. |
+| `pl-quest-v1.html` | **Version 1, the current one**: Demo 6 with the screen of a 16:9 stage (see "What version 1 changes"), every situation played in five units of business drawn from the game code, water treated and reused in industrial processes instead of sold, and mining with its chemical inputs. Codes and results of earlier demos do not carry over. |
 
 ## Play
 
-Open the link above, or `pl-quest-demo6.html` (double click, no internet needed). Pick **Año completo** (the full
+Open the link above, or `pl-quest-v1.html` (double click, no internet needed). Pick **Año completo** (the full
 year, about 50 minutes), **Medio año** (six months at double pace, about 25 minutes) or **Tutorial**
 (5 floors, about 10 minutes). The times are estimates from the amount of text a year has; the game
 measures the real one and shows it at the end of every game. To compare players, send the link (or
@@ -72,6 +73,24 @@ At the end of the year the **second page of the verdict** is the same statement 
 **Plan | Real | Var.**, with the variance read the way a report reads it (green when it helps the
 business, red and between brackets when it hurts; ratios in points). That page, with the game code
 in its corner, is the one to screenshot.
+
+## What version 1 changes
+
+Version 1 is Demo 6 with five corrections and additions:
+
+- **A 16:9 stage.** The game is drawn on a 480 by 270 surface at 4 times its size, with vector type, twelve scenes and a factory that goes from shining to ruins
+  with the OI. Every screen (title, menus, problem, month close, verdict, ranking, tutorial) was recomposed for it.
+- **Five units of business.** Each of the 48 situations is written for hotels, hospitals, food, industry and mining, with another client, other figures and its own
+  story; the dilemma, the four answers and what each does to the P&L are the same. The game code draws the unit of each situation: a full year brings 9 or 10 cases of
+  each unit (2 or 3 of each voice) and a half year 4 or 5, and the chip over the scene names the unit. Mining is a unit the situations are played in, not one they were
+  written for, so the pinned endings do not move.
+- **The water is treated and reused, never sold.** The unit sells hygiene, chemical inputs and programs to reuse industrial water (boilers, cooling towers, process
+  water). The introduction says so, the three situations about water (a reuse program, a water rule and a drought) talk about the systems where it is reused,
+  and the drought is answered with an emergency reuse at a high cost instead of tankers.
+- **Mining and its chemical inputs.** 48 cases for a mine or its concentrator that buys flotation reagents, flocculants, antiscalants and technical service with dosing
+  systems on loan; the water of mining is the water recovered from thickeners and tailings. Mining words are allowed in the mining unit only.
+- **The same honesty rules.** The audits that keep the answers from giving themselves away now run on five sets of cases, one block of a voice and a unit each
+  (`tests/content-tells.test.js`, `tests/helpers/cases.js`).
 
 ## What Demo 6 changes
 
@@ -200,7 +219,7 @@ game restarts at the menu.
 
 The endings list, the group workshop and the reviewer are tools for whoever runs the session, so a
 player who is handed the file never sees them. They open when the address of the page ends in
-`?creator`, e.g. `file:///.../pl-quest-demo6.html?creator`:
+`?creator`, e.g. `file:///.../pl-quest-v1.html?creator`:
 
 - **Ver los 6 finales** plays a pinned simulated year for each of the 8 play styles, so you can read
   every result screen in a minute (the pleaser shows *Crece sin margen*, the half-shortcut player
@@ -275,7 +294,7 @@ problems, `tools/authoring/` has the helpers (see its README).
 
 ```bash
 npm test        # unit, UI-flow, render and smoke tests (node:test, no dependencies)
-npm run build   # bundles src/ into pl-quest-demo6.html (the earlier demos are never touched)
+npm run build   # bundles src/ into pl-quest-v1.html (the earlier demos are never touched)
 ```
 
 Where things live:
